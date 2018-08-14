@@ -129,10 +129,8 @@ paths:
         200:
           description: "successful operation"
           schema:
-            type: "object"
-            additionalProperties:
-              type: "integer"
-              format: "int32"
+            type: "integer"
+            format: "int32"
         400:
           description: "Invalid ID supplied"
         404:
