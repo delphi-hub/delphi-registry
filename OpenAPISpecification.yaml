@@ -3,8 +3,12 @@ info:
   description: "This is a sample client side  for Delphi Instance Registry."
   version: "1.0.0"
   title: "Delphi Instance Registry"
-host: "Localhost:8080"
-basePath: "/v2"
+host: "localhost:8085"
+consumes:
+  - "application/json"
+produces:
+  - "application/json"
+basePath: "/"
 tags:
 - name: "instance"
   description: "Anything about Instances"
@@ -19,22 +23,16 @@ paths:
       summary: "Register New Instance"
       description: "Register New Instances"
       operationId: "addInstance"
-      consumes:
-      - "application/json"
-      - "application/xml"
-      produces:
-      - "application/xml"
-      - "application/json"
       parameters:
       - in: "body"
         name: "Registering"
-        description: "Registering Instance"
+        description: "Data to Register Instance"
         required: true
         schema:
           $ref: "#/definitions/Instance"
       responses:
         200:
-          description: "Registeration Successfull"
+          description: "Registeration Successful"
         405:
           description: "Invalid input"
   /deregister:
@@ -43,23 +41,17 @@ paths:
       - "instance"
       summary: "Deregister"
       description: "Delete an Instance"
-      operationId: "DeleteInstance"
-      consumes:
-      - "application/json"
-      - "application/xml"
-      produces:
-      - "application/xml"
-      - "application/json"
+      operationId: "deleteInstance"
       parameters:
       - in: "body"
         name: "Instance"
         description: "Details of Instance to be deleted"
         required: true
         schema:
-          $ref: "#/definitions/Instance"
+          $ref: "#/definitions/InstanceID"
       responses:
         200:
-          description: "Sucessfully Registered"
+          description: "Sucessfully Deregistered"
         400:
           description: "Invalid Status Value"
         404:
@@ -73,9 +65,6 @@ paths:
       - "instance"
       summary: " Get Matching Instances"
       operationId: "matchInstance"
-      produces:
-      - "application/xml"
-      - "application/json"
       parameters:
       - name: "ComponentType"
         in: "query"
@@ -98,10 +87,7 @@ paths:
       - "instance"
       summary: "Fetch Instances"
       description: "Fetch Specific Instance"
-      operationId: "fetchinstance"
-      produces:
-      - "application/xml"
-      - "application/json"
+      operationId: "fetchInstance"
       parameters:
       - name: "ComponentType"
         in: "query"
@@ -116,10 +102,9 @@ paths:
         200:
           description: "successful operation"
           schema:
-            type: "object"
-            additionalProperties:
-              type: "integer"
-              format: "int32"
+            type: "array"
+            items:
+              $ref: "#/definitions/Instance"
         400:
           description: "Invalid value"
   /numberOfInstances:
@@ -129,9 +114,7 @@ paths:
       summary: "Find number of running instances"
       description: "How many instances per type are running"
       operationId: "getInstanceNumber"
-      produces:
-      - "application/xml"
-      - "application/json"
+      
       parameters:
       - name: "ComponentType"
         in: "query"
@@ -161,9 +144,6 @@ paths:
       summary: "Find the matching instance"
       description: "Match the instance"
       operationId: "getMatchingInstance"
-      produces:
-      - "application/xml"
-      - "application/json"
       parameters:
       - name: "MatchingSuccessful"
         in: "query"
@@ -187,6 +167,9 @@ definitions:
   Instance:
     type: "object"
     properties:
+      ID:
+        type: "integer"
+        format: "int64"
       IP:
         type: "string"
       portnumber:
@@ -202,5 +185,9 @@ definitions:
         - "WebApi"
         - "WebApp"
         - "DelphiManagement"
-    xml:
-      name: "Instance"
+  InstanceID:
+    type: "object"
+    properties:
+      ID:
+        type: "integer"
+        format: "int64"
