@@ -3,9 +3,16 @@ package de.upb.cs.swt.delphi.instanceregistry
 import java.util.concurrent.TimeUnit
 
 import akka.actor.ActorSystem
+import akka.http.scaladsl.model.{HttpResponse, StatusCodes}
 import akka.http.scaladsl.server.HttpApp
+import akka.http.scaladsl.unmarshalling.Unmarshal
+import akka.stream.ActorMaterializer
 import akka.util.Timeout
-import model.{Instance, InstanceID}
+import io.swagger.client.model.{Instance, JsonSupport}
+
+import scala.concurrent.Await
+import scala.concurrent.duration.Duration
+import scala.util.{Failure, Success}
 
 
 /**
@@ -14,24 +21,31 @@ import model.{Instance, InstanceID}
 object Server extends HttpApp with JsonSupport with AppLogging {
 
   private val configuration = new Configuration()
-  private val system = ActorSystem("delphi-InstnaceRegistry-API")
+  implicit val system = ActorSystem("delphi-registry")
+  implicit val materializer = ActorMaterializer()
+  implicit val ec = system.dispatcher
   implicit val timeout = Timeout(5, TimeUnit.SECONDS)
 
   override def routes =
-    path("register") { addInstance(Instance) } ~
-      path("deregister") { deleteInstance(InstanceID) } ~
+    path("register") {entity(as[String]) { jsonString => addInstance(jsonString) }} ~
+      path("deregister") { deleteInstance(Long) } ~
       path("instances" ) { fetchInstance("Crawler") } ~
       path("numberOfInstances" ) { numberOfInstances("Crawler") } ~
       path("matchingInstance" ) { getMatchingInstance(Instance)} ~
       path("matchingResult" ) {matchInstance}
 
 
-   def addInstance(Instance: Object) = {
+   def addInstance(Instance: String) = {
     post
     {
-      complete {"Get Instance Implementation Post Request"}
-
-
+      Await.result(Unmarshal(Instance).to[Instance] map {instance =>
+        val instancename = instance.name
+        log.info(s"Instance with name $instancename registered.")
+        complete {"Get Instance Implementation Post Request"}
+      } recover {case ex =>
+        log.warning(s"Failed to read registering instance, exception: $ex")
+        complete(HttpResponse(StatusCodes.InternalServerError, entity = "Failed to unmarshal parameter."))
+      }, Duration.Inf)
     }
   }
 
@@ -51,7 +65,7 @@ object Server extends HttpApp with JsonSupport with AppLogging {
   }
 
   def getMatchingInstance(Instance: Object) = {
-    post {
+    get {
         complete{"Search for a Specific Instance and Return that Instance"}
 
     }
