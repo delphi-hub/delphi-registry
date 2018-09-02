@@ -1,11 +1,13 @@
 package de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model
 
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
-import spray.json._
+import spray.json.{DefaultJsonProtocol, JsonFormat,JsString, JsValue}
 
 trait JsonSupport extends SprayJsonSupport with DefaultJsonProtocol {
-  implicit val componentTypeFormat = new JsonFormat[InstanceEnums.ComponentType] {
-    def write(compType : InstanceEnums.ComponentType) = JsString(compType.toString())
+
+  implicit val componentTypeFormat  = new JsonFormat[InstanceEnums.ComponentType] {
+
+    def write(compType : InstanceEnums.ComponentType) = JsString(compType.toString)
 
     def read(value: JsValue) : InstanceEnums.ComponentType = value match {
       case JsString(s) => s match {
@@ -18,9 +20,8 @@ trait JsonSupport extends SprayJsonSupport with DefaultJsonProtocol {
       }
       case y => throw new RuntimeException(s"Unexpected type $y while deserializing component type.")
     }
-
   }
-  implicit val instanceFormat = jsonFormat5(Instance)
+  implicit val instanceFormat  = jsonFormat5(Instance)
 }
 
 final case class Instance (
@@ -36,11 +37,11 @@ object InstanceEnums {
 
   type ComponentType = ComponentType.Value
   object ComponentType extends Enumeration {
-    val Crawler = Value("Crawler")
-    val WebApi = Value("WebApi")
-    val WebApp = Value("WebApp")
-    val DelphiManagement = Value("DelphiManagement")
-    val ElasticSearch = Value("ElasticSearch")
+    val Crawler  : Value = Value("Crawler")
+    val WebApi : Value = Value("WebApi")
+    val WebApp : Value = Value("WebApp")
+    val DelphiManagement : Value = Value("DelphiManagement")
+    val ElasticSearch : Value = Value("ElasticSearch")
   }
 
 }
