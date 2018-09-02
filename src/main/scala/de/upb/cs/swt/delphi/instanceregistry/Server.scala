@@ -18,7 +18,7 @@ import scala.concurrent.duration.Duration
 
 
 /**
-  * Web server configuration for Instance Resgistry API.
+  * Web server configuration for Instance Registry API.
   */
 object Server extends HttpApp with JsonSupport with AppLogging {
 
@@ -32,11 +32,11 @@ object Server extends HttpApp with JsonSupport with AppLogging {
 
   override def routes : server.Route =
       path("register") {entity(as[String]) { jsonString => addInstance(jsonString) }} ~
-      path("deregister") { deleteInstance(Long) } ~
+      path("deregister") { deleteInstance() } ~
       path("instances" ) { fetchInstancesOfType() } ~
       path("numberOfInstances" ) { numberOfInstances() } ~
       path("matchingInstance" ) { getMatchingInstance()} ~
-      path("matchingResult" ) {matchInstance}
+      path("matchingResult" ) {matchInstance()}
 
 
    def addInstance(InstanceString: String) : server.Route = {
@@ -67,7 +67,7 @@ object Server extends HttpApp with JsonSupport with AppLogging {
     }
   }
 
-   def deleteInstance(InstanceID: Object) : server.Route = parameters('Id.as[Long]){ Id =>
+   def deleteInstance() : server.Route = parameters('Id.as[Long]){ Id =>
     post {
       log.debug(s"POST /deregister?Id=$Id has been called")
 
@@ -122,10 +122,17 @@ object Server extends HttpApp with JsonSupport with AppLogging {
     }
   }
 
-  def matchInstance : server.Route = {
+  def matchInstance() : server.Route = parameters('Id.as[Long], 'MatchingSuccessful.as[Boolean]){ (Id, MatchingResult) =>
     post {
-      complete {"Match Instance and Return Boolean if matched"
+      //TODO: Need to keep track of matching, maybe remove instances if not reachable!
+      log.debug(s"POST /matchingResult?Id=$Id&MatchingSuccessful=$MatchingResult has been called")
+      if(MatchingResult){
+        log.info(s"Instance with Id $Id was successfully matched.")
       }
+      else{
+        log.warning(s"A client was not able to reach matched instance with Id $Id !")
+      }
+      complete {s"Matching result $MatchingResult processed."}
     }
   }
 
