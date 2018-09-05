@@ -177,6 +177,7 @@ definitions:
         type: "integer"
         format: "int64"
       name:
+
         type: "string"
       ComponentType:
         type: "string"
