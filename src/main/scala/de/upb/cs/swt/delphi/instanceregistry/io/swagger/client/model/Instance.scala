@@ -26,11 +26,11 @@ trait JsonSupport extends SprayJsonSupport with DefaultJsonProtocol {
 
 final case class Instance (
      iD: Option[Long],
-    iP: Option[String],
-    portnumber: Option[Long],
-    name: Option[String],
+     host: String,
+    portnumber: Long,
+    name: String,
     /* Component Type */
-    componentType: Option[InstanceEnums.ComponentType]
+    componentType: InstanceEnums.ComponentType
 )
 
 object InstanceEnums {

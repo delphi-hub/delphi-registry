@@ -23,7 +23,7 @@ import scala.concurrent.duration.Duration
 object Server extends HttpApp with JsonSupport with AppLogging {
 
   //Default ES instance for testing
-  private val instances = mutable.HashSet (Instance(Some(0), Some("elasticsearch://localhost"), Some(9200), Some("Default ElasticSearch Instance"), Some(ComponentType.ElasticSearch)))
+  private val instances = mutable.HashSet (Instance(Some(0), "elasticsearch://localhost", 9200, "Default ElasticSearch Instance", ComponentType.ElasticSearch))
 
   implicit val system : ActorSystem = ActorSystem("delphi-registry")
   implicit val materializer : ActorMaterializer = ActorMaterializer()
@@ -44,7 +44,7 @@ object Server extends HttpApp with JsonSupport with AppLogging {
     {
       log.debug(s"POST /register has been called, parameter is: $InstanceString")
       Await.result(Unmarshal(InstanceString).to[Instance] map {paramInstance =>
-        val name = paramInstance.name.getOrElse("None")
+        val name = paramInstance.name
         val newID : Long = {
           if(instances.isEmpty){
               0L
@@ -54,7 +54,7 @@ object Server extends HttpApp with JsonSupport with AppLogging {
           }
         }
 
-        val instanceToRegister = Instance(iD = Some(newID), iP = paramInstance.iP, portnumber = paramInstance.portnumber, name = paramInstance.name, componentType = paramInstance.componentType)
+        val instanceToRegister = Instance(iD = Some(newID), host = paramInstance.host, portnumber = paramInstance.portnumber, name = paramInstance.name, componentType = paramInstance.componentType)
 
         instances += instanceToRegister
         log.info(s"Instance with name $name registered, ID $newID assigned.")
@@ -87,7 +87,7 @@ object Server extends HttpApp with JsonSupport with AppLogging {
   def fetchInstancesOfType () : server.Route = parameters('ComponentType.as[String]) { compTypeString =>
     get {
       log.debug(s"GET /instances?ComponentType=$compTypeString has been called")
-      val compType : Option[ComponentType] = ComponentType.values.find(v => v.toString == compTypeString).map(v => Some(v)).getOrElse(None)
+      val compType : ComponentType = ComponentType.values.find(v => v.toString == compTypeString).orNull
       val matchingInstancesList = List() ++ instances filter {instance => instance.componentType == compType}
 
       complete {matchingInstancesList}
@@ -97,7 +97,7 @@ object Server extends HttpApp with JsonSupport with AppLogging {
   def numberOfInstances() : server.Route = parameters('ComponentType.as[String]) { compTypeString =>
     get {
       log.debug(s"GET /numberOfInstances?ComponentType=$compTypeString has been called")
-      val compType : Option[ComponentType] = ComponentType.values.find(v => v.toString == compTypeString).map(v => Some(v)).getOrElse(None)
+      val compType : ComponentType = ComponentType.values.find(v => v.toString == compTypeString).orNull
       val count : Int = instances count {instance => instance.componentType == compType}
       complete{count.toString()}
     }
@@ -106,8 +106,8 @@ object Server extends HttpApp with JsonSupport with AppLogging {
   def getMatchingInstance() : server.Route = parameters('ComponentType.as[String]){ compTypeString =>
     get{
       log.debug(s"GET /matchingInstance?ComponentType=$compTypeString has been called")
-      val compType : Option[ComponentType] = ComponentType.values.find(v => v.toString == compTypeString).map(v => Some(v)).getOrElse(None)
-      log.info(s"Looking for instance of type ${compType.getOrElse("None")} ...")
+      val compType : ComponentType = ComponentType.values.find(v => v.toString == compTypeString).orNull
+      log.info(s"Looking for instance of type $compType ...")
       val matchingInstances = instances filter {instance => instance.componentType == compType}
       if(matchingInstances.isEmpty){
         log.warning(s"Could not find matching instance for type $compType .")
