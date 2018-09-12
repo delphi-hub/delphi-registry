@@ -111,7 +111,7 @@ object Server extends HttpApp with JsonSupport with AppLogging {
       val matchingInstances = instances filter {instance => instance.componentType == compType}
       if(matchingInstances.isEmpty){
         log.warning(s"Could not find matching instance for type $compType .")
-        complete(HttpResponse(StatusCodes.BadRequest, entity = s"Could not find matching instance for type $compType"))
+        complete(HttpResponse(StatusCodes.NotFound, entity = s"Could not find matching instance for type $compType"))
       }
       else {
         val matchedInstance = matchingInstances.iterator.next()
