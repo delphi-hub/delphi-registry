@@ -3,11 +3,11 @@ info:
   description: "This is a sample client side  for Delphi Instance Registry."
   version: "1.0.0"
   title: "Delphi Instance Registry"
-host: "localhost:8085"
+host: "localhost:8087"
 consumes:
-  - "application/json"
+- "application/json"
 produces:
-  - "application/json"
+- "application/json"
 basePath: "/"
 tags:
 - name: "instance"
@@ -32,7 +32,10 @@ paths:
           $ref: "#/definitions/Instance"
       responses:
         200:
-          description: "Registeration Successful"
+          description: "Successfully Registered"
+          schema:
+            type: "integer"
+            format: "int64"
         405:
           description: "Invalid input"
   /deregister:
@@ -48,7 +51,7 @@ paths:
         description: "Details of Instance to be deleted"
         required: true
         schema:
-          $ref: "#/definitions/InstanceID"
+          $ref: "#/definitions/Instance"
       responses:
         200:
           description: "Sucessfully Deregistered"
@@ -58,13 +61,13 @@ paths:
           description: "Instance not found"
         405:
           description: "Validation exception"
-      
+
   /matchingInstance:
     get:
       tags:
       - "instance"
       summary: " Get Matching Instances"
-      operationId: "matchInstance"
+      operationId: "getMatchingInstance"
       parameters:
       - name: "ComponentType"
         in: "query"
@@ -87,7 +90,7 @@ paths:
       - "instance"
       summary: "Fetch Instances"
       description: "Fetch Specific Instance"
-      operationId: "fetchInstance"
+      operationId: "fetchInstanceOfType"
       parameters:
       - name: "ComponentType"
         in: "query"
@@ -113,8 +116,8 @@ paths:
       - "instance"
       summary: "Find number of running instances"
       description: "How many instances per type are running"
-      operationId: "getInstanceNumber"
-      
+      operationId: "numberOfInstances"
+
       parameters:
       - name: "ComponentType"
         in: "query"
@@ -141,7 +144,7 @@ paths:
       - "instance"
       summary: "Find the matching instance"
       description: "Match the instance"
-      operationId: "getMatchingInstance"
+      operationId: "matchInstance"
       parameters:
       - name: "MatchingSuccessful"
         in: "query"
@@ -174,6 +177,7 @@ definitions:
         type: "integer"
         format: "int64"
       name:
+
         type: "string"
       ComponentType:
         type: "string"
@@ -183,9 +187,4 @@ definitions:
         - "WebApi"
         - "WebApp"
         - "DelphiManagement"
-  InstanceID:
-    type: "object"
-    properties:
-      ID:
-        type: "integer"
-        format: "int64"
+        - "ElasticSearch"
