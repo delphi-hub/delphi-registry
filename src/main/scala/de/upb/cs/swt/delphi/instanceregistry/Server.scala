@@ -50,11 +50,11 @@ object Server extends HttpApp with JsonSupport with AppLogging {
               0L
           }
           else{
-            (instances map( instance => instance.iD.get) max) + 1L
+            (instances map( instance => instance.id.get) max) + 1L
           }
         }
 
-        val instanceToRegister = Instance(iD = Some(newID), host = paramInstance.host, portnumber = paramInstance.portnumber, name = paramInstance.name, componentType = paramInstance.componentType)
+        val instanceToRegister = Instance(id = Some(newID), host = paramInstance.host, portNumber = paramInstance.portNumber, name = paramInstance.name, componentType = paramInstance.componentType)
 
         instances += instanceToRegister
         log.info(s"Instance with name $name registered, ID $newID assigned.")
@@ -71,7 +71,7 @@ object Server extends HttpApp with JsonSupport with AppLogging {
     post {
       log.debug(s"POST /deregister?Id=$Id has been called")
 
-      val instanceToRemove = instances find(instance => instance.iD.get == Id)
+      val instanceToRemove = instances find(instance => instance.id.get == Id)
 
       if(instanceToRemove.isEmpty){
         log.warning(s"Cannot remove instance with id $Id, that id is not present on the server")
