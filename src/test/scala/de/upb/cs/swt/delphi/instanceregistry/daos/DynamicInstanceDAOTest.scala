@@ -3,7 +3,7 @@ package de.upb.cs.swt.delphi.instanceregistry.daos
 import de.upb.cs.swt.delphi.instanceregistry.Configuration
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.Instance
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.ComponentType
-import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, FlatSpec, Matchers}
+import org.scalatest.{BeforeAndAfterEach, FlatSpec, Matchers}
 
 class DynamicInstanceDAOTest extends FlatSpec with Matchers with BeforeAndAfterEach{
 
@@ -81,6 +81,29 @@ class DynamicInstanceDAOTest extends FlatSpec with Matchers with BeforeAndAfterE
     assert(dao.getAllInstances().isEmpty)
   }
 
+  it must "have an empty list of matching results for newly added instances" in {
+    dao.addInstance(buildInstance(4))
+    assert(dao.getMatchingResultsFor(4).isSuccess)
+    assert(dao.getMatchingResultsFor(4).get.isEmpty)
+  }
+
+  it must "keep the correct order of matching results posted" in {
+    assert(dao.addMatchingResult(3, matchingSuccessful = true).isSuccess)
+    assert(dao.addMatchingResult(3, matchingSuccessful = true).isSuccess)
+    assert(dao.addMatchingResult(3, matchingSuccessful = false).isSuccess)
+
+    assert(dao.getMatchingResultsFor(3).isSuccess)
+    assert(dao.getMatchingResultsFor(3).get.head)
+    assert(dao.getMatchingResultsFor(3).get (1))
+    assert(!dao.getMatchingResultsFor(3).get (2))
+
+  }
+
+  it must "remove the matching results when the instance is removed" in {
+    assert(dao.removeInstance(3).isSuccess)
+    assert(dao.getMatchingResultsFor(3).isFailure)
+  }
+
   "The DAO" must "be able to read multiple instances from the recovery file" in {
     dao.dumpToRecoveryFile()
     dao.clearData()
@@ -111,6 +134,8 @@ class DynamicInstanceDAOTest extends FlatSpec with Matchers with BeforeAndAfterE
     assert(instance.isDefined)
     assert(instance.get.id.get == 4)
   }
+
+
 
 
   override protected def afterEach() : Unit = {

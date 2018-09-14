@@ -23,6 +23,7 @@ import scala.io.Source
 class DynamicInstanceDAO (configuration : Configuration) extends InstanceDAO with AppLogging with JsonSupport {
 
   private val instances : mutable.Set[Instance] = new mutable.HashSet[Instance]()
+  private val instanceMatchingResults : mutable.Map[Long, mutable.MutableList[Boolean]] = new mutable.HashMap[Long,mutable.MutableList[Boolean]]()
 
   implicit val system : ActorSystem = Server.system
   implicit val materializer : ActorMaterializer = ActorMaterializer()
@@ -39,6 +40,7 @@ class DynamicInstanceDAO (configuration : Configuration) extends InstanceDAO wit
       //Verify id is not already present in instances!
       if(!hasInstance(instance.id.get)){
         instances.add(instance)
+        instanceMatchingResults.put(instance.id.get, mutable.MutableList())
         dumpToRecoveryFile()
         Success(log.info(s"Added instance ${instance.name} with id ${instance.id} to database."))
       } else {
@@ -59,6 +61,7 @@ class DynamicInstanceDAO (configuration : Configuration) extends InstanceDAO wit
     if(hasInstance(id)){
       //AddInstance verifies that id is always present, hasInstance verifies that find will return an instance
       instances.remove(instances.find(i => i.id.get == id).get)
+      instanceMatchingResults.remove(id)
       dumpToRecoveryFile()
       Success(log.info(s"Successfully removed instance with id $id."))
     } else {
@@ -88,11 +91,38 @@ class DynamicInstanceDAO (configuration : Configuration) extends InstanceDAO wit
 
   override def removeAll() : Unit = {
     instances.clear()
+    instanceMatchingResults.clear()
     dumpToRecoveryFile()
+  }
+
+  override def addMatchingResult(id: Long, matchingSuccessful: Boolean): Try[Unit] = {
+    if(hasInstance(id)){
+      instanceMatchingResults.get(id) match {
+        case Some(resultList) =>
+          resultList += matchingSuccessful
+          Success(log.info(s"Successfully added matching result $matchingSuccessful to instance with id $id."))
+        case None =>
+          log.warning(s"Could not add matching result, list for instance with id $id not present!")
+          Failure(new RuntimeException("No matching result list present"))
+      }
+    } else {
+      log.warning(s"Cannot add matching result, instance with id $id not present.")
+      Failure(new RuntimeException(s"Cannot add matching result, instance with id $id not present."))
+    }
+  }
+
+  override def getMatchingResultsFor(id: Long): Try[List[Boolean]] = {
+    if(hasInstance(id) && instanceMatchingResults.contains(id)){
+      Success(List() ++ instanceMatchingResults(id))
+    } else {
+      log.warning(s"Cannot get matching results, id $id not present!")
+      Failure(new RuntimeException(s"Cannot get matching results, id $id not present!"))
+    }
   }
 
   private[daos] def clearData() : Unit = {
     instances.clear()
+    instanceMatchingResults.clear()
   }
 
   private[daos] def dumpToRecoveryFile() : Unit = {

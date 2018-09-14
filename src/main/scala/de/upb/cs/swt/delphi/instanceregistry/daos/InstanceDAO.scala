@@ -56,4 +56,18 @@ trait InstanceDAO {
     */
   def removeAll() : Unit
 
+  /**
+    * Add a matching result for the specified instance
+    * @param id Id of the instance to post a result for
+    * @param matchingSuccessful Boolean indicating whether the matching was successful
+    */
+  def addMatchingResult(id: Long, matchingSuccessful : Boolean) : Try[Unit]
+
+  /**
+    * Gets the list of matching results for the instance with the specified id
+    * @param id Id of the instance
+    * @return List of boolean values
+    */
+  def getMatchingResultsFor(id: Long) : Try[List[Boolean]]
+
 }
