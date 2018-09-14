@@ -1,21 +1,33 @@
 package de.upb.cs.swt.delphi.instanceregistry.daos
 
+import java.io.{File, IOException, PrintWriter}
+
 import akka.actor.ActorSystem
-import de.upb.cs.swt.delphi.instanceregistry.{AppLogging, Server}
-import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.Instance
+import akka.stream.ActorMaterializer
+import de.upb.cs.swt.delphi.instanceregistry.{AppLogging, Configuration, Server}
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.{Instance, JsonSupport}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.ComponentType
 
 import scala.collection.mutable
+import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Success, Try}
+import spray.json._
+import spray.json.DefaultJsonProtocol._
+
+import scala.io.Source
 
 /**
   * Implementation of the instance data access object that keeps its data in memory
   * instead of using a persistent storage.
   */
-class DynamicInstanceDAO extends InstanceDAO with AppLogging {
+class DynamicInstanceDAO (configuration : Configuration) extends InstanceDAO with AppLogging with JsonSupport {
 
   private val instances : mutable.Set[Instance] = new mutable.HashSet[Instance]()
+
   implicit val system : ActorSystem = Server.system
+  implicit val materializer : ActorMaterializer = ActorMaterializer()
+  implicit val ec : ExecutionContext = system.dispatcher
+
 
   override def addInstance(instance: Instance): Try[Unit] = {
     //Verify ID is present in instance
@@ -27,6 +39,7 @@ class DynamicInstanceDAO extends InstanceDAO with AppLogging {
       //Verify id is not already present in instances!
       if(!hasInstance(instance.id.get)){
         instances.add(instance)
+        dumpToRecoveryFile()
         Success(log.info(s"Added instance ${instance.name} with id ${instance.id} to database."))
       } else {
         val msg = s"Cannot add instance ${instance.name}, id ${instance.id} already present."
@@ -46,6 +59,7 @@ class DynamicInstanceDAO extends InstanceDAO with AppLogging {
     if(hasInstance(id)){
       //AddInstance verifies that id is always present, hasInstance verifies that find will return an instance
       instances.remove(instances.find(i => i.id.get == id).get)
+      dumpToRecoveryFile()
       Success(log.info(s"Successfully removed instance with id $id."))
     } else {
       val msg = s"Cannot remove instance with id $id, that id is not present."
@@ -72,8 +86,63 @@ class DynamicInstanceDAO extends InstanceDAO with AppLogging {
     List() ++ instances
   }
 
-  override def clearAll() : Unit = {
+  override def removeAll() : Unit = {
     instances.clear()
+    dumpToRecoveryFile()
+  }
+
+  private[daos] def clearData() : Unit = {
+    instances.clear()
+  }
+
+  private[daos] def dumpToRecoveryFile() : Unit = {
+    log.info(s"Dumping data to recovery file ${configuration.recoveryFileName} ...")
+    val writer = new PrintWriter(new File(configuration.recoveryFileName))
+    writer.write(getAllInstances().toJson(listFormat(instanceFormat)).toString())
+    writer.flush()
+    writer.close()
+    log.info(s"Successfully wrote to recovery file.")
+  }
+
+  private[daos] def deleteRecoveryFile() : Unit = {
+    log.info("Deleting data recovery file...")
+    if(new File(configuration.recoveryFileName).delete()){
+      log.info(s"Successfully deleted data recovery file ${configuration.recoveryFileName}.")
+    } else {
+      log.warning(s"Failed to delete data recovery file ${configuration.recoveryFileName}.")
+    }
+  }
+
+  private[daos] def tryInitFromRecoveryFile() : Unit = {
+    try {
+      log.info(s"Attempting to load data from recovery file ${configuration.recoveryFileName} ...")
+      val recoveryFileContent = Source.fromFile(configuration.recoveryFileName).getLines()
+
+      if(!recoveryFileContent.hasNext){
+        log.warning(s"Recovery file invalid, more than one line found.")
+        throw new IOException("Recovery file invalid.")
+      }
+
+      val jsonString : String = recoveryFileContent.next()
+
+      val instanceList = jsonString.parseJson.convertTo[List[Instance]](listFormat(instanceFormat))
+
+      log.info(s"Successfully loaded ${instanceList.size} instance from recovery file. Initializing...")
+
+      clearData()
+      for(instance <- instanceList){
+        addInstance(instance)
+      }
+
+      log.info(s"Successfully initialized from recovery file.")
+
+    } catch  {
+      case iox : IOException =>
+        log.error(iox, s"An error occurred while reading the recovery file at ${configuration.recoveryFileName}.")
+      case x : Exception =>
+        log.error(x, "An error occurred while deserializing the contents of the recovery file.")
+    }
+
   }
 
 }

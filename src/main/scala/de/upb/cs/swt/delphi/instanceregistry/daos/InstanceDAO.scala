@@ -54,6 +54,6 @@ trait InstanceDAO {
   /**
     * Removes all instances from the DAO
     */
-  def clearAll() : Unit
+  def removeAll() : Unit
 
 }
