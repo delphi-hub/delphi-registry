@@ -49,7 +49,7 @@ trait InstanceDAO {
     * Retrieves all instances from the DAO
     * @return A list of all instances in the DAO
     */
-  def getAllInstances() : List[Instance]
+  def allInstances() : List[Instance]
 
   /**
     * Removes all instances from the DAO

@@ -4,7 +4,7 @@ import java.io.{File, IOException, PrintWriter}
 
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
-import de.upb.cs.swt.delphi.instanceregistry.{AppLogging, Configuration, Registry, Server}
+import de.upb.cs.swt.delphi.instanceregistry.{AppLogging, Configuration, Registry}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.{Instance, JsonSupport}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.ComponentType
 
@@ -12,7 +12,6 @@ import scala.collection.mutable
 import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Success, Try}
 import spray.json._
-import spray.json.DefaultJsonProtocol._
 
 import scala.io.Source
 
@@ -85,7 +84,7 @@ class DynamicInstanceDAO (configuration : Configuration) extends InstanceDAO wit
     List() ++ instances filter {i => i.componentType == componentType}
   }
 
-  override def getAllInstances(): List[Instance] = {
+  override def allInstances(): List[Instance] = {
     List() ++ instances
   }
 
@@ -141,7 +140,7 @@ class DynamicInstanceDAO (configuration : Configuration) extends InstanceDAO wit
   private[daos] def dumpToRecoveryFile() : Unit = {
     log.debug(s"Dumping data to recovery file ${configuration.recoveryFileName} ...")
     val writer = new PrintWriter(new File(configuration.recoveryFileName))
-    writer.write(getAllInstances().toJson(listFormat(instanceFormat)).toString())
+    writer.write(allInstances().toJson(listFormat(instanceFormat)).toString())
     writer.flush()
     writer.close()
     log.debug(s"Successfully wrote to recovery file.")

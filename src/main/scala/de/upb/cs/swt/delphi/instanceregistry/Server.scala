@@ -31,7 +31,7 @@ object Server extends HttpApp with JsonSupport with AppLogging {
       path("deregister") { deleteInstance() } ~
       path("instances" ) { fetchInstancesOfType() } ~
       path("numberOfInstances" ) { numberOfInstances() } ~
-      path("matchingInstance" ) { getMatchingInstance()} ~
+      path("matchingInstance" ) { matchingInstance()} ~
       path("matchingResult" ) {matchInstance()}
 
 
@@ -99,7 +99,7 @@ object Server extends HttpApp with JsonSupport with AppLogging {
     }
   }
 
-  def getMatchingInstance() : server.Route = parameters('ComponentType.as[String]){ compTypeString =>
+  def matchingInstance() : server.Route = parameters('ComponentType.as[String]){ compTypeString =>
     get{
       log.debug(s"GET /matchingInstance?ComponentType=$compTypeString has been called")
 

@@ -1,5 +1,6 @@
 package de.upb.cs.swt.delphi.instanceregistry
 
+import akka.actor.ActorSystem
 import de.upb.cs.swt.delphi.instanceregistry.daos.{DynamicInstanceDAO, InstanceDAO}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.Instance
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.ComponentType
@@ -8,15 +9,17 @@ import scala.util.{Failure, Success, Try}
 
 class RequestHandler (configuration: Configuration) extends AppLogging {
 
-  implicit val system = Registry.system
+  implicit val system : ActorSystem = Registry.system
 
   private val instanceDao : InstanceDAO = new DynamicInstanceDAO(configuration)
 
   def initialize() : Unit = {
     log.info("Initializing request handler...")
     instanceDao.initialize()
-    //Add default ES instance
-    registerNewInstance(Instance(None, "elasticsearch://localhost", 9200, "Default ElasticSearch Instance", ComponentType.ElasticSearch))
+    if(!instanceDao.allInstances().exists(instance => instance.name.equals("Default ElasticSearch Instance"))){
+      //Add default ES instance
+      registerNewInstance(Instance(None, "elasticsearch://localhost", 9200, "Default ElasticSearch Instance", ComponentType.ElasticSearch))
+    }
     log.info("Done initializing request handler.")
   }
 
@@ -25,10 +28,10 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
   }
 
   def registerNewInstance(instance : Instance) : Try[Long] = {
-    val newID = if(instanceDao.getAllInstances().isEmpty){
+    val newID = if(instanceDao.allInstances().isEmpty){
       0L
     } else {
-      (instanceDao.getAllInstances().map(i => i.id.getOrElse(0L)) max) + 1L
+      (instanceDao.allInstances().map(i => i.id.getOrElse(0L)) max) + 1L
     }
 
     log.info(s"Assigned new id $newID to registering instance with name ${instance.name}.")
@@ -55,7 +58,7 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
   }
 
   def getNumberOfInstances(compType : ComponentType) : Int = {
-    instanceDao.getAllInstances().count(i => i.componentType == compType)
+    instanceDao.allInstances().count(i => i.componentType == compType)
   }
 
   def getMatchingInstanceOfType(compType : ComponentType ) : Try[Instance] = {

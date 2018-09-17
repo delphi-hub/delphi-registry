@@ -22,14 +22,14 @@ class DynamicInstanceDAOTest extends FlatSpec with Matchers with BeforeAndAfterE
 
   "The instance DAO" must "be able to add an get an instance with a new id" in {
     assert(dao.addInstance(buildInstance(4)).isSuccess)
-    assert(dao.getAllInstances().size == 4)
+    assert(dao.allInstances().size == 4)
     assert(dao.hasInstance(4))
     assert(dao.removeInstance(4).isSuccess)
   }
 
   it must "not allow the addition of any id twice" in {
     assert(dao.addInstance(buildInstance(3)).isFailure)
-    assert(dao.getAllInstances().size == 3)
+    assert(dao.allInstances().size == 3)
   }
 
   it must "return true on hasInstance for any present id" in {
@@ -67,7 +67,7 @@ class DynamicInstanceDAOTest extends FlatSpec with Matchers with BeforeAndAfterE
       assert(dao.removeInstance(i).isSuccess)
       assert(!dao.hasInstance(i))
     }
-    assert(dao.getAllInstances().isEmpty)
+    assert(dao.allInstances().isEmpty)
   }
 
   it must "not change the data on removing invalid IDs" in {
@@ -78,7 +78,7 @@ class DynamicInstanceDAOTest extends FlatSpec with Matchers with BeforeAndAfterE
 
   it must "remove all instance on removeAll" in {
     dao.removeAll()
-    assert(dao.getAllInstances().isEmpty)
+    assert(dao.allInstances().isEmpty)
   }
 
   it must "have an empty list of matching results for newly added instances" in {
@@ -107,29 +107,29 @@ class DynamicInstanceDAOTest extends FlatSpec with Matchers with BeforeAndAfterE
   "The DAO" must "be able to read multiple instances from the recovery file" in {
     dao.dumpToRecoveryFile()
     dao.clearData()
-    assert(dao.getAllInstances().isEmpty)
+    assert(dao.allInstances().isEmpty)
     dao.tryInitFromRecoveryFile()
-    assert(dao.getAllInstances().size == 3)
+    assert(dao.allInstances().size == 3)
   }
 
   it must "fail to load from recovery file if it is not present" in {
     dao.dumpToRecoveryFile()
-    assert(dao.getAllInstances().size == 3)
+    assert(dao.allInstances().size == 3)
     dao.deleteRecoveryFile()
     dao.clearData()
-    assert(dao.getAllInstances().isEmpty)
+    assert(dao.allInstances().isEmpty)
     dao.tryInitFromRecoveryFile()
-    assert(dao.getAllInstances().isEmpty)
+    assert(dao.allInstances().isEmpty)
   }
 
   it must "contain the correct instance data after loading from recovery file" in {
     assert(dao.addInstance(buildInstance(4)).isSuccess)
     dao.dumpToRecoveryFile()
-    assert(dao.getAllInstances().size == 4)
+    assert(dao.allInstances().size == 4)
     dao.clearData()
-    assert(dao.getAllInstances().isEmpty)
+    assert(dao.allInstances().isEmpty)
     dao.tryInitFromRecoveryFile()
-    assert(dao.getAllInstances().size == 4)
+    assert(dao.allInstances().size == 4)
     val instance = dao.getInstance(4)
     assert(instance.isDefined)
     assert(instance.get.id.get == 4)
