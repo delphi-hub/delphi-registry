@@ -1,10 +1,12 @@
 package de.upb.cs.swt.delphi.instanceregistry
 
+import java.io.File
+
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.Instance
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.ComponentType
-import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, FlatSpec, Matchers}
+import org.scalatest.{BeforeAndAfterEach, FlatSpec, Matchers}
 
-class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach with BeforeAndAfterAll{
+class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach{
 
   val handler : RequestHandler = new RequestHandler(new Configuration())
 
@@ -12,12 +14,8 @@ class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach 
     Instance(Some(id), "https://localhost", 12345, "TestInstance", ComponentType.ElasticSearch)
   }
 
-  override protected def beforeAll():Unit = {
-    //Delete recovery file for sure
-    handler.shutdown()
-  }
-
   override protected def beforeEach(): Unit = {
+    new File(Registry.configuration.recoveryFileName).delete()
     handler.initialize()
   }
 
