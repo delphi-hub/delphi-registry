@@ -70,4 +70,14 @@ trait InstanceDAO {
     */
   def getMatchingResultsFor(id: Long) : Try[List[Boolean]]
 
+  /**
+    * Initializes the DAO
+    */
+  def initialize() : Unit
+
+  /**
+    * Shuts the DAO down
+    */
+  def shutdown(): Unit
+
 }

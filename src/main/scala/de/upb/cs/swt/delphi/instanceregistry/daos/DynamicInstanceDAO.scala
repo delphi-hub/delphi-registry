@@ -4,7 +4,7 @@ import java.io.{File, IOException, PrintWriter}
 
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
-import de.upb.cs.swt.delphi.instanceregistry.{AppLogging, Configuration, Server}
+import de.upb.cs.swt.delphi.instanceregistry.{AppLogging, Configuration, Registry, Server}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.{Instance, JsonSupport}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.ComponentType
 
@@ -25,7 +25,7 @@ class DynamicInstanceDAO (configuration : Configuration) extends InstanceDAO wit
   private val instances : mutable.Set[Instance] = new mutable.HashSet[Instance]()
   private val instanceMatchingResults : mutable.Map[Long, mutable.MutableList[Boolean]] = new mutable.HashMap[Long,mutable.MutableList[Boolean]]()
 
-  implicit val system : ActorSystem = Server.system
+  implicit val system : ActorSystem = Registry.system
   implicit val materializer : ActorMaterializer = ActorMaterializer()
   implicit val ec : ExecutionContext = system.dispatcher
 
@@ -120,18 +120,31 @@ class DynamicInstanceDAO (configuration : Configuration) extends InstanceDAO wit
     }
   }
 
+  override def initialize(): Unit = {
+    log.info("Initializing dynamic instance DAO...")
+    tryInitFromRecoveryFile()
+    log.info("Successfully initialized.")
+  }
+
+  override def shutdown() : Unit = {
+    log.info("Shutting down dynamic instance DAO...")
+    clearData()
+    deleteRecoveryFile()
+    log.info("Shutdown complete.")
+  }
+
   private[daos] def clearData() : Unit = {
     instances.clear()
     instanceMatchingResults.clear()
   }
 
   private[daos] def dumpToRecoveryFile() : Unit = {
-    log.info(s"Dumping data to recovery file ${configuration.recoveryFileName} ...")
+    log.debug(s"Dumping data to recovery file ${configuration.recoveryFileName} ...")
     val writer = new PrintWriter(new File(configuration.recoveryFileName))
     writer.write(getAllInstances().toJson(listFormat(instanceFormat)).toString())
     writer.flush()
     writer.close()
-    log.info(s"Successfully wrote to recovery file.")
+    log.debug(s"Successfully wrote to recovery file.")
   }
 
   private[daos] def deleteRecoveryFile() : Unit = {
@@ -167,10 +180,10 @@ class DynamicInstanceDAO (configuration : Configuration) extends InstanceDAO wit
       log.info(s"Successfully initialized from recovery file.")
 
     } catch  {
-      case iox : IOException =>
-        log.error(iox, s"An error occurred while reading the recovery file at ${configuration.recoveryFileName}.")
-      case x : Exception =>
-        log.error(x, "An error occurred while deserializing the contents of the recovery file.")
+      case _ : IOException =>
+        log.info(s"Recovery file ${configuration.recoveryFileName} not found, so no data will be loaded.")
+      case dx : DeserializationException =>
+        log.error(dx, "An error occurred while deserializing the contents of the recovery file.")
     }
 
   }
