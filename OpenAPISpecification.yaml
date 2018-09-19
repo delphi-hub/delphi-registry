@@ -1,190 +1,279 @@
-swagger: "2.0"
+swagger: '2.0'
 info:
-  description: "This is a sample client side  for Delphi Instance Registry."
-  version: "1.0.0"
-  title: "Delphi Instance Registry"
-host: "localhost:8087"
+  description: The interface of the Delphi instance registry, which is responsible for connecting instances within the system as well as providing basic status information about them. For more information on Delphi, see https://github.com/delphi-hub/.
+  version: 1.5.0
+  title: Delphi Instance Registry
+host: 'localhost:8087'
 consumes:
-- "application/json"
+  - application/json
 produces:
-- "application/json"
-basePath: "/"
+  - application/json
+basePath: /
 tags:
-- name: "instance"
-  description: "Anything about Instances"
+  - name: Basic Operations
+    description: Operations on instances that are not necessarily running in docker containers
+  - name: Docker Operations
+    description: Operations on instances that are running in a docker container
 schemes:
-- "https"
-- "http"
+  - https
+  - http
 paths:
   /register:
     post:
       tags:
-      - "instance"
-      summary: "Register New Instance"
-      description: "Register New Instances"
-      operationId: "addInstance"
+        - Basic Operations
+      summary: Register a new instance at the registry
+      description: This commands registers the given instance at the registry and will return the ID that was assigned to that instance. This is meant for instances that are not running inside a docker container, as those will be registered on calling /deploy.
+      operationId: addInstance
       parameters:
-      - in: "body"
-        name: "Registering"
-        description: "Data to Register Instance"
-        required: true
-        schema:
-          $ref: "#/definitions/Instance"
+        - in: body
+          name: InstanceToRegister
+          description: The instance that will be registered with this call. The ID attribute is optional and will be ignored, as the registry assignes a new unique id to the instance.
+          required: true
+          schema:
+            $ref: '#/definitions/Instance'
       responses:
         200:
-          description: "Successfully Registered"
+          description: The ID of the registered instance
           schema:
-            type: "integer"
-            format: "int64"
+            type: integer
+            format: int64
+            example: 42
         405:
-          description: "Invalid input"
+          description: Invalid input
   /deregister:
     post:
       tags:
-      - "instance"
-      summary: "Deregister"
-      description: "Delete an Instance"
-      operationId: "deleteInstance"
+        - Basic Operations
+      summary: Deregister an instance from the registry
+      description: This command deregisteres the instance with the given ID from the registry. This means that it can no longer be matched to other instances, and it can not be monitored by the management application anymore.
+      operationId: deleteInstance
       parameters:
-      - in: "body"
-        name: "Instance"
-        description: "Details of Instance to be deleted"
-        required: true
-        schema:
-          $ref: "#/definitions/Instance"
+        - in: query
+          name: InstanceID
+          description: The ID of the instance to be deregistered.
+          required: true
+          type: integer
+          format: int64
       responses:
         200:
-          description: "Sucessfully Deregistered"
+          description: Sucessfully Deregistered
         400:
-          description: "Invalid Status Value"
+          description: Invalid Status Value
         404:
-          description: "Instance not found"
+          description: Instance not found
         405:
-          description: "Validation exception"
-
+          description: Validation exception
   /matchingInstance:
     get:
       tags:
-      - "instance"
-      summary: " Get Matching Instances"
-      operationId: "getMatchingInstance"
+        - Basic Operations
+      summary: Get a matching instance of the specified type
+      description: This command retrieves an instance from the registry that has the specified type and is currently running / has the best matching results on the server.
+      operationId: matchingInstance
       parameters:
-      - name: "ComponentType"
-        in: "query"
-        description: "Component to be fetched"
-        required: true
-        type: "string"
-        enum:
-        - "Crawler"
-        - "WebApi"
-        - "WebApp"
-        - "DelphiManagement"
+        - name: ComponentType
+          in: query
+          description: Type of the instance to be retrieved
+          required: true
+          type: string
+          enum:
+            - Crawler
+            - WebApi
+            - WebApp
+            - DelphiManagement
+            - ElasticSearch
       responses:
         200:
-          $ref: "#/definitions/Instance"
+          description: The ID of the registered instance
+          schema:
+            $ref: '#/definitions/Instance'
         400:
-          description: "Invalid status value"
+          description: Invalid status value
   /instances:
     get:
       tags:
-      - "instance"
-      summary: "Fetch Instances"
-      description: "Fetch Specific Instance"
-      operationId: "fetchInstanceOfType"
+        - Basic Operations
+      summary: Get all instances of the specified type
+      description: This command retrieves a list of all instances that are registered at the registry and that have the specified type.
+      operationId: instanceOfType
       parameters:
-      - name: "ComponentType"
-        in: "query"
-        type: "string"
-        required: true
-        enum:
-        - "Crawler"
-        - "WebApi"
-        - "WebApp"
-        - "DelphiManagement"
+        - name: ComponentType
+          in: query
+          description: Type of the instances to be retrieved
+          required: true
+          type: string
+          enum:
+            - Crawler
+            - WebApi
+            - WebApp
+            - DelphiManagement
+            - ElasticSearch
       responses:
         200:
-          description: "successful operation"
+          description: List of instances of the specified type
           schema:
-            type: "array"
+            type: array
             items:
-              $ref: "#/definitions/Instance"
+              $ref: '#/definitions/Instance'
         400:
-          description: "Invalid value"
+          description: Invalid value
   /numberOfInstances:
     get:
       tags:
-      - "instance"
-      summary: "Find number of running instances"
-      description: "How many instances per type are running"
-      operationId: "numberOfInstances"
-
+        - Basic Operations
+      summary: Gets the number of instances running for the specified type
+      description: This command retrieves the number of registered instances of the specified type that are currently running.
+      operationId: numberOfInstances
       parameters:
-      - name: "ComponentType"
-        in: "query"
-        type: "string"
-        required: true
-        enum:
-        - "Crawler"
-        - "WebApi"
-        - "WebApp"
-        - "DelphiManagement"
+        - name: ComponentType
+          in: query
+          description: Type of the instances to be counted
+          required: true
+          type: string
+          enum:
+            - Crawler
+            - WebApi
+            - WebApp
+            - DelphiManagement
+            - ElasticSearch
       responses:
         200:
-          description: "successful operation"
+          description: Number of instances running for the specified type
           schema:
-            type: "integer"
-            format: "int32"
+            type: integer
+            format: int32
+            example: 7
         400:
-          description: "Invalid ID supplied"
+          description: Invalid ID supplied
         404:
-          description: "Instances not found"
+          description: Instances not found
   /matchingResult:
     post:
       tags:
-      - "instance"
-      summary: "Find the matching instance"
-      description: "Match the instance"
-      operationId: "matchInstance"
+        - Basic Operations
+      summary: Posts a matching result to the instance registry
+      description: This command posts a matching result to the instance registry. This means that the sender tried to connect to the instance with the specified ID, and it was either successful or not (indicated by the parameter 'MatchingSuccessful').
+      operationId: matchInstance
       parameters:
-      - name: "MatchingSuccessful"
-        in: "query"
-        description: "Boolean to indicate if matching is successful"
-        required: true
-        type: "boolean"
-      - name: "Component"
-        in: "body"
-        description: "Registering Instance"
-        required: true
-        schema:
-          $ref: "#/definitions/Instance"
+        - in: query
+          name: InstanceID
+          description: The ID of the instance that the sender was matched to.
+          required: true
+          type: integer
+          format: int64
+        - name: MatchingSuccessful
+          in: query
+          description: Boolean indicating whether the macthing was successful or not
+          required: true
+          type: boolean
       responses:
         200:
-          description: "successful operation"
+          description: successful operation
         400:
-          description: "Invalid ID supplied"
+          description: Invalid ID supplied
         404:
-          description: "No match found"
+          description: No match found
+  /reportFailure:
+    post:
+      tags:
+        - Docker Operations
+      summary: Report the failure of an instance to the registry
+      description: This commands allows instances to report a failure that lead to the termination of their execution. The instanceregistry will update the state of the component accordingly and not use this component for matching in the future. This is only applicable for instances running inside a docker container, as the failure of non-container instances will immediately lead to them being deregistered, since they cannot be restarted.
+      operationId: reportFailure
+      parameters:
+        - in: query
+          name: InstanceID
+          description: The ID of the instance that encountered the failure.
+          required: true
+          type: integer
+          format: int64
+        - in: query
+          name: ErrorLog
+          description: An optional string explaining the failure
+          required: false
+          type: string
+      responses:
+        200:
+          description: Operation successful
+        404:
+          description: ID not found on server
+        500:
+          description: Internal server error
+  /reportStart:
+    post:
+      tags:
+        - Docker Operations
+      summary: Reports the successful start of an instances to the registry
+      description: This command informs the registry about an instance that successfully reached the state 'Running'. This is only applicable to instances running inside a docker container, as non-container instances would not be registered before startup. Container instances are registered when /deploy is called.
+      operationId: reportStart
+      parameters:
+        - in: query
+          name: InstanceID
+          description: The ID of the instance that was started.
+          required: true
+          type: integer
+          format: int64
+      responses:
+        200:
+          description: Operation successful
+        404:
+          description: ID not found on server
+        500:
+          description: Internal server error
+  /deploy:
+    post:
+      tags:
+        - Docker Operations
+      summary: Deploys a new instance of the specified type
+      description: This command deploys a new instance of the specified ComponentType onto the docker host. It will also initiate the registration process. Immediatley after this call is finished the instance will be contained in the registry, but its state will be 'Stopped' until the instance itself called /reportStart, which will change the state to 'Running'
+      operationId: deploy
+      parameters:
+        - name: ComponentType
+          in: query
+          description: Type of the instances to be counted
+          required: true
+          type: string
+          enum:
+            - Crawler
+            - WebApi
+            - WebApp
+            - DelphiManagement
+            - ElasticSearch
+        - name: InstanceName
+          in: query
+          description: Name for the newly created instance
+          required: false
+          type: string
+      responses:
+        200:
+          description: Operation successful
+        500:
+          description: Internal server error
 definitions:
   Instance:
-    type: "object"
+    type: object
     properties:
       ID:
-        type: "integer"
-        format: "int64"
+        type: integer
+        format: int64
       IP:
-        type: "string"
+        type: string
+        example: "http://localhost"
       portnumber:
-        type: "integer"
-        format: "int64"
+        type: integer
+        format: int64
+        example: 8085
       name:
-
-        type: "string"
+        type: string
+        example: "CrawlerNo1"
       ComponentType:
-        type: "string"
-        description: "Component Type"
+        type: string
+        description: Component Type
+        example: "Crawler"
         enum:
-        - "Crawler"
-        - "WebApi"
-        - "WebApp"
-        - "DelphiManagement"
-        - "ElasticSearch"
+          - Crawler
+          - WebApi
+          - WebApp
+          - DelphiManagement
+          - ElasticSearch
