@@ -27,12 +27,22 @@ object Server extends HttpApp with JsonSupport with AppLogging {
   private val handler : RequestHandler = Registry.requestHandler
 
   override def routes : server.Route =
+      /****************BASIC OPERATIONS****************/
       path("register") {entity(as[String]) { jsonString => addInstance(jsonString) }} ~
       path("deregister") { deleteInstance() } ~
-      path("instances" ) { fetchInstancesOfType() } ~
-      path("numberOfInstances" ) { numberOfInstances() } ~
-      path("matchingInstance" ) { matchingInstance()} ~
-      path("matchingResult" ) {matchInstance()}
+      path("instances") { fetchInstancesOfType() } ~
+      path("numberOfInstances") { numberOfInstances() } ~
+      path("matchingInstance") { matchingInstance()} ~
+      path("matchingResult") { matchInstance()} ~
+      /****************DOCKER OPERATIONS****************/
+      path("deploy") { deployContainer()} ~
+      path("reportStart") { reportStart()} ~
+      path("reportFailure") { reportFailure()} ~
+      path("pause") { pause()} ~
+      path("resume") { resume()} ~
+      path("stop") { stop()} ~
+      path("start") { start()} ~
+      path("delete") { deleteContainer()}
 
 
    def addInstance(InstanceString: String) : server.Route = {
@@ -110,7 +120,7 @@ object Server extends HttpApp with JsonSupport with AppLogging {
         handler.getMatchingInstanceOfType(compType) match {
           case Success(matchedInstance) =>
             log.info(s"Matched to $matchedInstance.")
-            complete(matchedInstance)
+            complete(matchedInstance.toJson(instanceFormat))
           case Failure(x) =>
             log.warning(s"Could not find matching instance for type $compType, message was ${x.getMessage}.")
             complete(HttpResponse(StatusCodes.NotFound, entity = s"Could not find matching instance for type $compType"))
@@ -134,6 +144,103 @@ object Server extends HttpApp with JsonSupport with AppLogging {
       }
     }
   }
+
+  def deployContainer() : server.Route = parameters('ComponentType.as[String], 'InstanceName.as[String].?) { (compTypeString, name) =>
+    post {
+      if(name.isEmpty){
+        log.debug(s"POST /deploy?ComponentType=$compTypeString has been called")
+      } else {
+        log.debug(s"POST /deploy?ComponentType=$compTypeString&name=${name.get} has been called")
+      }
+
+      val compType: ComponentType = ComponentType.values.find(v => v.toString == compTypeString).orNull
+
+      if (compType != null) {
+        log.info(s"Trying to deploy container of type $compType" + (if(name.isDefined){s" with name ${name.get}..."}else {"..."}))
+        //TODO: Call handler, verify that Docker host is present, if not return BadRequest.
+        complete{HttpResponse(StatusCodes.Accepted, entity = s"Container of type $compType is being deployed.")}
+      } else {
+        log.error(s"Failed to deserialize parameter string $compTypeString to ComponentType.")
+        complete(HttpResponse(StatusCodes.BadRequest, entity = s"Could not deserialize parameter string $compTypeString to ComponentType"))
+      }
+    }
+  }
+
+  def reportStart() : server.Route = parameters('Id.as[Long]) {id =>
+    post{
+      log.debug(s"POST /reportStart?Id=$id has been called")
+      //TODO: Verify id present => else 404
+      //TODO: Verify id is docker container => else 400
+      //TODO: Update instance
+      complete{"Report successfully processed."}
+    }
+  }
+
+  def reportFailure() : server.Route = parameters('Id.as[Long], 'ErrorLog.as[String].?) {(id, errorLog) =>
+    post{
+      if(errorLog.isEmpty){
+        log.debug(s"POST /reportFailure?Id=$id has been called")
+      } else {
+        log.debug(s"POST /reportFailure?Id=$id&ErrorLog=${errorLog.get} has been called")
+      }
+      //TODO: Verify id present => else 404
+      //TODO: Verify id is docker container => else 400
+      //TODO: Update instance
+      complete{"Report successfully processed."}
+    }
+  }
+
+  def pause() : server.Route = parameters('Id.as[Long]) { id =>
+    post{
+      log.debug(s"POST /pause?Id=$id has been called")
+      //TODO: Verify id present => else 404
+      //TODO: Verify id is docker container && container is running => else 400
+      //TODO: Execute pause
+      complete{HttpResponse(StatusCodes.Accepted, entity = "Operation accepted.")}
+    }
+  }
+
+  def resume() : server.Route = parameters('Id.as[Long]) { id =>
+    post {
+      log.debug(s"POST /resume?Id=$id has been called")
+      //TODO: verify id present => else 404
+      //TODO: Verify id is docker container && container is paused => else 400
+      //TODO: Execute resume
+      complete{HttpResponse(StatusCodes.Accepted, entity = "Operation accepted.")}
+    }
+  }
+
+  def stop() : server.Route = parameters('Id.as[Long]) { id =>
+    post {
+      log.debug(s"POST /stop?Id=$id has been called")
+      //TODO: verify id present => else 404
+      //TODO: Verify id is docker container => else 400
+      //TODO: Execute stop
+      complete{HttpResponse(StatusCodes.Accepted, entity = "Operation accepted.")}
+    }
+  }
+
+  def start() : server.Route = parameters('Id.as[Long]) { id =>
+    post{
+      log.debug(s"POST /start?Id=$id has been called")
+      //TODO: verify id present => else 404
+      //TODO: Verify id is docker container && container is stopped => else 400
+      //TODO: Execute start
+      complete{HttpResponse(StatusCodes.Accepted, entity = "Operation accepted.")}
+    }
+  }
+
+  def deleteContainer() : server.Route = parameters('Id.as[Long]) { id =>
+    post{
+      log.debug(s"POST /delete?Id=$id has been called")
+      //TODO: verify id present => else 404
+      //TODO: Verify id is docker container && Container is stopped => else 400
+      //TODO: Execute delete, remove from DAO
+      complete{HttpResponse(StatusCodes.Accepted, entity = "Operation accepted.")}
+    }
+  }
+
+
 
 }
 
