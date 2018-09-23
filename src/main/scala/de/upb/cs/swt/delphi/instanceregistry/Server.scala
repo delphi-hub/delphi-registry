@@ -169,10 +169,18 @@ object Server extends HttpApp with JsonSupport with AppLogging {
   def reportStart() : server.Route = parameters('Id.as[Long]) {id =>
     post{
       log.debug(s"POST /reportStart?Id=$id has been called")
-      //TODO: Verify id present => else 404
-      //TODO: Verify id is docker container => else 400
-      //TODO: Update instance
-      complete{"Report successfully processed."}
+      if(handler.isInstanceIdPresent(id)){
+        if(handler.isInstanceDockerContainer(id)){
+          //TODO: Update instance
+          complete{"Report successfully processed."}
+        } else {
+          log.warning(s"Cannot report start for id $id, that instance is not running in a docker container.")
+          complete{HttpResponse(StatusCodes.BadRequest, entity = s"Id $id is not running in a docker container.")}
+        }
+      } else {
+        log.warning(s"Cannot report start for id $id, that id was not found.")
+        complete{HttpResponse(StatusCodes.NotFound, entity = s"Id $id not found.")}
+      }
     }
   }
 
@@ -183,9 +191,18 @@ object Server extends HttpApp with JsonSupport with AppLogging {
       } else {
         log.debug(s"POST /reportFailure?Id=$id&ErrorLog=${errorLog.get} has been called")
       }
-      //TODO: Verify id present => else 404
-      //TODO: Verify id is docker container => else 400
-      //TODO: Update instance
+      if(handler.isInstanceIdPresent(id)){
+        if(handler.isInstanceDockerContainer(id)){
+          //TODO: Update instance
+          complete{"Report successfully processed."}
+        } else {
+          log.warning(s"Cannot report failure for id $id, that instance is not running in a docker container.")
+          complete{HttpResponse(StatusCodes.BadRequest, entity = s"Id $id is not running in a docker container.")}
+        }
+      } else {
+        log.warning(s"Cannot report failure for id $id, that id was not found.")
+        complete{HttpResponse(StatusCodes.NotFound, entity = s"Id $id not found.")}
+      }
       complete{"Report successfully processed."}
     }
   }
@@ -193,49 +210,94 @@ object Server extends HttpApp with JsonSupport with AppLogging {
   def pause() : server.Route = parameters('Id.as[Long]) { id =>
     post{
       log.debug(s"POST /pause?Id=$id has been called")
-      //TODO: Verify id present => else 404
-      //TODO: Verify id is docker container && container is running => else 400
-      //TODO: Execute pause
-      complete{HttpResponse(StatusCodes.Accepted, entity = "Operation accepted.")}
+      if(handler.isInstanceIdPresent(id)){
+        if(handler.isInstanceDockerContainer(id)){
+          //TODO: Check state is running
+          //TODO: Pause instance
+          complete{HttpResponse(StatusCodes.Accepted, entity = "Operation accepted.")}
+        } else {
+          log.warning(s"Cannot pause id $id, that instance is not running in a docker container.")
+          complete{HttpResponse(StatusCodes.BadRequest, entity = s"Id $id is not running in a docker container.")}
+        }
+      } else {
+        log.warning(s"Cannot pause id $id, that id was not found.")
+        complete{HttpResponse(StatusCodes.NotFound, entity = s"Id $id not found.")}
+      }
     }
   }
 
   def resume() : server.Route = parameters('Id.as[Long]) { id =>
     post {
       log.debug(s"POST /resume?Id=$id has been called")
-      //TODO: verify id present => else 404
-      //TODO: Verify id is docker container && container is paused => else 400
-      //TODO: Execute resume
-      complete{HttpResponse(StatusCodes.Accepted, entity = "Operation accepted.")}
+      if(handler.isInstanceIdPresent(id)){
+        if(handler.isInstanceDockerContainer(id)){
+          //TODO: Check state is paused
+          //TODO: Resume instance
+          complete{HttpResponse(StatusCodes.Accepted, entity = "Operation accepted.")}
+        } else {
+          log.warning(s"Cannot resume id $id, that instance is not running in a docker container.")
+          complete{HttpResponse(StatusCodes.BadRequest, entity = s"Id $id is not running in a docker container.")}
+        }
+      } else {
+        log.warning(s"Cannot resume id $id, that id was not found.")
+        complete{HttpResponse(StatusCodes.NotFound, entity = s"Id $id not found.")}
+      }
     }
   }
 
   def stop() : server.Route = parameters('Id.as[Long]) { id =>
     post {
       log.debug(s"POST /stop?Id=$id has been called")
-      //TODO: verify id present => else 404
-      //TODO: Verify id is docker container => else 400
-      //TODO: Execute stop
-      complete{HttpResponse(StatusCodes.Accepted, entity = "Operation accepted.")}
+      if(handler.isInstanceIdPresent(id)){
+        if(handler.isInstanceDockerContainer(id)){
+          //TODO: Stop instance
+          complete{HttpResponse(StatusCodes.Accepted, entity = "Operation accepted.")}
+        } else {
+          log.warning(s"Cannot stop id $id, that instance is not running in a docker container.")
+          complete{HttpResponse(StatusCodes.BadRequest, entity = s"Id $id is not running in a docker container.")}
+        }
+      } else {
+        log.warning(s"Cannot stop id $id, that id was not found.")
+        complete{HttpResponse(StatusCodes.NotFound, entity = s"Id $id not found.")}
+      }
     }
   }
 
   def start() : server.Route = parameters('Id.as[Long]) { id =>
     post{
       log.debug(s"POST /start?Id=$id has been called")
-      //TODO: verify id present => else 404
-      //TODO: Verify id is docker container && container is stopped => else 400
-      //TODO: Execute start
-      complete{HttpResponse(StatusCodes.Accepted, entity = "Operation accepted.")}
+      if(handler.isInstanceIdPresent(id)){
+        if(handler.isInstanceDockerContainer(id)){
+          //TODO: Check state is stopped
+          //TODO: Pause instance
+          complete{HttpResponse(StatusCodes.Accepted, entity = "Operation accepted.")}
+        } else {
+          log.warning(s"Cannot start id $id, that instance is not running in a docker container.")
+          complete{HttpResponse(StatusCodes.BadRequest, entity = s"Id $id is not running in a docker container.")}
+        }
+      } else {
+        log.warning(s"Cannot start id $id, that id was not found.")
+        complete{HttpResponse(StatusCodes.NotFound, entity = s"Id $id not found.")}
+      }
     }
   }
 
   def deleteContainer() : server.Route = parameters('Id.as[Long]) { id =>
     post{
       log.debug(s"POST /delete?Id=$id has been called")
-      //TODO: verify id present => else 404
-      //TODO: Verify id is docker container && Container is stopped => else 400
-      //TODO: Execute delete, remove from DAO
+      if(handler.isInstanceIdPresent(id)){
+        if(handler.isInstanceDockerContainer(id)){
+          //TODO: delete instance
+          //TODO: Check stopped
+          complete{HttpResponse(StatusCodes.Accepted, entity = "Operation accepted.")}
+        } else {
+          log.warning(s"Cannot delete id $id, that instance is not running in a docker container.")
+          complete{HttpResponse(StatusCodes.BadRequest, entity = s"Id $id is not running in a docker container.")}
+        }
+      } else {
+        log.warning(s"Cannot delete id $id, that id was not found.")
+        complete{HttpResponse(StatusCodes.NotFound, entity = s"Id $id not found.")}
+      }
       complete{HttpResponse(StatusCodes.Accepted, entity = "Operation accepted.")}
     }
   }

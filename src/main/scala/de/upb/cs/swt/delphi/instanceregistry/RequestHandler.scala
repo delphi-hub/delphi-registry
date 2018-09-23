@@ -140,4 +140,17 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
     }
 
   }
+
+  def isInstanceIdPresent(id: Long) : Boolean = {
+    instanceDao.hasInstance(id)
+  }
+
+  def isInstanceDockerContainer(id: Long) : Boolean = {
+    if(instanceDao.hasInstance(id)) {
+      val instance = instanceDao.getInstance(id)
+      true //TODO: Check instance for docker attribute
+    } else {
+      false
+    }
+  }
 }
