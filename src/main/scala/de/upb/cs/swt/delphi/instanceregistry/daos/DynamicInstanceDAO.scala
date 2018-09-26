@@ -132,6 +132,16 @@ class DynamicInstanceDAO (configuration : Configuration) extends InstanceDAO wit
     log.info("Shutdown complete.")
   }
 
+  override def getDockerIdFor(id: Long) : Try[String] = {
+    getInstance(id) match {
+      case Some(instance) => instance.dockerId match {
+        case Some(dockerId) => Success(dockerId)
+        case None => Failure(new RuntimeException(s"Instance with id $id is not running inside a docker container."))
+      }
+      case None => Failure(new RuntimeException(s"An instance with id $id was not found."))
+    }
+  }
+
   private[daos] def clearData() : Unit = {
     instances.clear()
     instanceMatchingResults.clear()

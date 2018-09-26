@@ -80,4 +80,10 @@ trait InstanceDAO {
     */
   def shutdown(): Unit
 
+  /**
+    * If successful, returns the docker handle of the instance with the specified id. If the specified instance is not
+    * present or not running as a docker container, Failure will be returned.
+    */
+  def getDockerIdFor(id: Long) : Try[String]
+
 }

@@ -3,7 +3,7 @@ package de.upb.cs.swt.delphi.instanceregistry
 import akka.actor.ActorSystem
 import de.upb.cs.swt.delphi.instanceregistry.daos.{DynamicInstanceDAO, InstanceDAO}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.Instance
-import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.ComponentType
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.{ComponentType, InstanceState}
 
 import scala.util.{Failure, Success, Try}
 
@@ -18,7 +18,7 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
     instanceDao.initialize()
     if(!instanceDao.allInstances().exists(instance => instance.name.equals("Default ElasticSearch Instance"))){
       //Add default ES instance
-      registerNewInstance(Instance(None, "elasticsearch://localhost", 9200, "Default ElasticSearch Instance", ComponentType.ElasticSearch))
+      registerNewInstance(Instance(None, "elasticsearch://localhost", 9200, "Default ElasticSearch Instance", ComponentType.ElasticSearch, None, InstanceState.Running))
     }
     log.info("Done initializing request handler.")
   }
@@ -27,6 +27,12 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
     instanceDao.shutdown()
   }
 
+  /**
+    * Called when a new instance registers itself, meaning it is not running in a docker container. Will ignore the
+    * parameter instances' id, dockerId and state
+    * @param instance Instance that is registering
+    * @return Newly assigned ID if successful
+    */
   def registerNewInstance(instance : Instance) : Try[Long] = {
     val newID = if(instanceDao.allInstances().isEmpty){
       0L
@@ -37,7 +43,8 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
     log.info(s"Assigned new id $newID to registering instance with name ${instance.name}.")
 
     val newInstance = Instance(id = Some(newID), name = instance.name, host = instance.host,
-      portNumber = instance.portNumber, componentType = instance.componentType)
+      portNumber = instance.portNumber, componentType = instance.componentType,
+      dockerId = None, instanceState = InstanceState.Running)
 
     instanceDao.addInstance(newInstance) match {
       case Success(_) => Success(newID)
@@ -45,9 +52,18 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
     }
   }
 
+  /***
+    * Called when an instance is shut down that is not running inside of a docker container. Will remove the instance
+    * from the registry.
+    * @param instanceId ID of the instance that was shut down
+    * @return Success if successful, Failure otherwise
+    */
   def removeInstance(instanceId : Long) : Try[Unit] = {
     if(!instanceDao.hasInstance(instanceId)){
       Failure(new RuntimeException(s"Cannot remove instance with id $instanceId, that id is not known to the server."))
+    } else if(instanceDao.getDockerIdFor(instanceId).isSuccess){
+      Failure(new RuntimeException(s"Cannot remove instance with id $instanceId, this instance is running inside a docker" +
+        s"container. Call /delete to remove it from the server and delete the container."))
     } else {
       instanceDao.removeInstance(instanceId)
     }
@@ -118,7 +134,25 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
     if(!instanceDao.hasInstance(id)){
       Failure(new RuntimeException(s"Cannot apply matching result to instance with id $id, that id is not known to the server"))
     } else {
+      val instance = instanceDao.getInstance(id)
       instanceDao.addMatchingResult(id, result)
+      if(result && instance.get.state == InstanceState.NotReachable) {
+        instance.get.state = InstanceState.Running
+      } else if (!result && instance.get.state == InstanceState.Running) {
+        instance.get.state = InstanceState.NotReachable
+      }
+      Success(log.info(s"Applied matching result $result to instance with id $id."))
+    }
+  }
+
+  def isInstanceIdPresent(id: Long) : Boolean = {
+    instanceDao.hasInstance(id)
+  }
+
+  def isInstanceDockerContainer(id: Long) : Boolean = {
+    instanceDao.getDockerIdFor(id) match {
+      case Success(_) => true
+      case Failure(_) => false
     }
   }
 
@@ -141,16 +175,5 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
 
   }
 
-  def isInstanceIdPresent(id: Long) : Boolean = {
-    instanceDao.hasInstance(id)
-  }
 
-  def isInstanceDockerContainer(id: Long) : Boolean = {
-    if(instanceDao.hasInstance(id)) {
-      val instance = instanceDao.getInstance(id)
-      true //TODO: Check instance for docker attribute
-    } else {
-      false
-    }
-  }
 }

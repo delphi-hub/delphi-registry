@@ -39,7 +39,7 @@ trait JsonSupport extends SprayJsonSupport with DefaultJsonProtocol {
     }
   }
 
-  implicit val instanceFormat : JsonFormat[Instance] = jsonFormat5(Instance)
+  implicit val instanceFormat : JsonFormat[Instance] = jsonFormat7(Instance)
 }
 
 final case class Instance (
@@ -47,10 +47,13 @@ final case class Instance (
      host: String,
      portNumber: Long,
      name: String,
-     componentType: InstanceEnums.ComponentType /*,
+     componentType: InstanceEnums.ComponentType,
      dockerId: Option[String],
-     state: Option[InstanceEnums.State]*/
+     instanceState: InstanceEnums.State
 )
+{
+  var state: InstanceEnums.State = instanceState
+}
 
 object InstanceEnums {
 
