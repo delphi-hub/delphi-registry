@@ -240,7 +240,7 @@ paths:
     post:
       tags:
         - Docker Operations
-      summary: Reports the successful start of an instances to the registry
+      summary: Reports the successful start of an instance to the registry
       description: >-
         This command informs the registry about an instance that successfully
         reached the state 'Running'. This is only applicable to instances
@@ -259,7 +259,36 @@ paths:
         '200':
           description: Report successfully processed.
         '400':
-          description: Bad request, the instance with the specified ID is not deployed as a docker container.
+          description: >-
+            Bad request, the instance with the specified ID is not deployed as a
+            docker container.
+        '404':
+          description: ID not found on server
+        '500':
+          description: Internal server error
+  /reportStop:
+    post:
+      tags:
+        - Docker Operations
+      summary: Reports the manual stop of an instances to the registry
+      description: >-
+        This command informs the registry about an instance that was stopped manually, meaning not via calling /stop on the instance registry. This is only applicable to instances
+        running inside a docker container, as non-container instances would deregister themselves when stopped. 
+      operationId: reportStop
+      parameters:
+        - in: query
+          name: InstanceID
+          description: The ID of the instance that was stopped
+          required: true
+          type: integer
+          format: int64
+      responses:
+        '200':
+          description: Report successfully processed.
+        '400':
+          description: >-
+            Bad request, the instance with the specified ID is not deployed as a
+            docker container.
         '404':
           description: ID not found on server
         '500':
@@ -294,7 +323,9 @@ paths:
         '200':
           description: Report successfully processed.
         '400':
-          description: Bad request, the instance with the specified ID is not deployed as a docker container.
+          description: >-
+            Bad request, the instance with the specified ID is not deployed as a
+            docker container.
         '404':
           description: ID not found on server
         '500':
@@ -304,7 +335,9 @@ paths:
       tags:
         - Docker Operations
       summary: Pauses the specified instances' docker container
-      description: This command pauses the docker container of the instance with the specified ID. Will change the instance state from 'Running' to 'Paused'
+      description: >-
+        This command pauses the docker container of the instance with the
+        specified ID. Will change the instance state from 'Running' to 'Paused'
       operationId: pause
       parameters:
         - in: query
@@ -315,9 +348,11 @@ paths:
           format: int64
       responses:
         '202':
-          description: Accepted, the operation will be completed in the future.
+          description: 'Accepted, the operation will be completed in the future.'
         '400':
-          description: Bad request, the instance with the specified ID is either not running or not deployed as a docker container at all.
+          description: >-
+            Bad request, the instance with the specified ID is either not
+            running or not deployed as a docker container at all.
         '404':
           description: ID not found on server
         '500':
@@ -327,7 +362,10 @@ paths:
       tags:
         - Docker Operations
       summary: Resumes the specified instances' docker container
-      description: This command resumes the execution of the docker container of the instance with the specified ID. Will change the instance state from 'Paused' to 'Running'.
+      description: >-
+        This command resumes the execution of the docker container of the
+        instance with the specified ID. Will change the instance state from
+        'Paused' to 'Running'.
       operationId: resume
       parameters:
         - in: query
@@ -338,9 +376,11 @@ paths:
           format: int64
       responses:
         '202':
-          description: Accepted, the operation will be completed in the future.
+          description: 'Accepted, the operation will be completed in the future.'
         '400':
-          description: Bad request, the instance with the specified ID is either not paused or not deployed as a docker container at all.
+          description: >-
+            Bad request, the instance with the specified ID is either not paused
+            or not deployed as a docker container at all.
         '404':
           description: ID not found on server
         '500':
@@ -350,7 +390,10 @@ paths:
       tags:
         - Docker Operations
       summary: Stops the specified instances' docker container
-      description: This command stops the docker container of the instance with the specified ID. The instance will be properly shut down by calling its /stop command first. Will change the instance state to 'Stopped'.
+      description: >-
+        This command stops the docker container of the instance with the
+        specified ID. The instance will be properly shut down by calling its
+        /stop command first. Will change the instance state to 'Stopped'.
       operationId: stop
       parameters:
         - in: query
@@ -361,9 +404,11 @@ paths:
           format: int64
       responses:
         '202':
-          description: Accepted, the operation will be completed in the future.
+          description: 'Accepted, the operation will be completed in the future.'
         '400':
-          description: Bad request, the instance with the specified ID is either already stopped or not deployed as a docker container at all.
+          description: >-
+            Bad request, the instance with the specified ID is either already
+            stopped or not deployed as a docker container at all.
         '404':
           description: ID not found on server
         '500':
@@ -373,7 +418,10 @@ paths:
       tags:
         - Docker Operations
       summary: Starts the specified instances' docker container
-      description: This command starts the docker container of the instance with the specified ID. Will change the instance state from 'Stopped' to 'Running'.
+      description: >-
+        This command starts the docker container of the instance with the
+        specified ID. Will change the instance state from 'Stopped' to
+        'Running'.
       operationId: start
       parameters:
         - in: query
@@ -384,9 +432,11 @@ paths:
           format: int64
       responses:
         '202':
-          description: Accepted, the operation will be completed in the future.
+          description: 'Accepted, the operation will be completed in the future.'
         '400':
-          description: Bad request, the instance with the specified ID is either not stopped or not deployed as a docker container at all.
+          description: >-
+            Bad request, the instance with the specified ID is either not
+            stopped or not deployed as a docker container at all.
         '404':
           description: ID not found on server
         '500':
@@ -396,7 +446,10 @@ paths:
       tags:
         - Docker Operations
       summary: Deletes the specified instances' docker container
-      description: This command deletes the docker container of the instance with the specified ID. The container needs to be stopped first. This will remove any data the instance registry holds about the instance.
+      description: >-
+        This command deletes the docker container of the instance with the
+        specified ID. The container needs to be stopped first. This will remove
+        any data the instance registry holds about the instance.
       operationId: delete
       parameters:
         - in: query
@@ -407,9 +460,11 @@ paths:
           format: int64
       responses:
         '202':
-          description: Accepted, the operation will be completed in the future.
+          description: 'Accepted, the operation will be completed in the future.'
         '400':
-          description: Bad request, the instance with the specified ID is either not stopped or not deployed as a docker container at all.
+          description: >-
+            Bad request, the instance with the specified ID is either not
+            stopped or not deployed as a docker container at all.
         '404':
           description: ID not found on server
         '500':
@@ -417,7 +472,11 @@ paths:
 definitions:
   Instance:
     type: object
-    required: [host, portNumber, name, componentType]
+    required:
+      - host
+      - portNumber
+      - name
+      - componentType
     properties:
       id:
         type: integer
@@ -455,4 +514,3 @@ definitions:
           - Stopped
           - Paused
           - NotReachable
-      

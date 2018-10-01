@@ -37,6 +37,7 @@ object Server extends HttpApp with JsonSupport with AppLogging {
       /****************DOCKER OPERATIONS****************/
       path("deploy") { deployContainer()} ~
       path("reportStart") { reportStart()} ~
+      path("reportStop") { reportStop()} ~
       path("reportFailure") { reportFailure()} ~
       path("pause") { pause()} ~
       path("resume") { resume()} ~
@@ -185,6 +186,23 @@ object Server extends HttpApp with JsonSupport with AppLogging {
           complete{HttpResponse(StatusCodes.InternalServerError, entity = s"Internal server error, unknown operation result $r")}
       }
 
+    }
+  }
+
+  def reportStop() : server.Route = parameters('Id.as[Long]) {id =>
+    post{
+      handler.handleReportStop(id) match {
+        case handler.OperationResult.IdUnknown =>
+          log.warning(s"Cannot report start for id $id, that id was not found.")
+          complete{HttpResponse(StatusCodes.NotFound, entity = s"Id $id not found.")}
+        case handler.OperationResult.NoDockerContainer =>
+          log.warning(s"Cannot report start for id $id, that instance is not running in a docker container.")
+          complete{HttpResponse(StatusCodes.BadRequest, entity = s"Id $id is not running in a docker container.")}
+        case handler.OperationResult.Ok =>
+          complete{"Report successfully processed."}
+        case r =>
+          complete{HttpResponse(StatusCodes.InternalServerError, entity = s"Internal server error, unknown operation result $r")}
+      }
     }
   }
 

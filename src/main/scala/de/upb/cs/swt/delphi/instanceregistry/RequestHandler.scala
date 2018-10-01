@@ -195,6 +195,37 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
   }
 
   /***
+    * Handles a call to /reportStop. Needs the instance with the specified id to be present and running inside a docker
+    * container. Will update the state of the instance to 'NotReachable'. Will print warnings if illegal state transitions
+    * occur, but will update state anyway.
+    *
+    * @param id Id of the instance that reported stop
+    * @return OperationResult indicating either success or the reason for failure (which precondition was not met)
+    */
+  def handleReportStop(id: Long): OperationResult.Value = {
+    if(!instanceDao.hasInstance(id)){
+      OperationResult.IdUnknown
+    } else if (!isInstanceDockerContainer(id)) {
+      OperationResult.NoDockerContainer
+    } else {
+      val instance = instanceDao.getInstance(id).get
+      instance.instanceState match {
+        case InstanceState.Stopped =>
+          log.warning(s"Instance with id $id reported stop but state already was 'Stopped'.")
+        case InstanceState.Failed =>
+          log.warning(s"Instance with id $id reported stop but state already was 'Failed'.")
+        case InstanceState.Paused =>
+          log.warning(s"Instance with id $id reported stop but state already was 'Paused'.")
+        case InstanceState.Running || InstanceState.NotReachable =>
+          instanceDao.setStateFor(instance.id.get, InstanceState.NotReachable)
+        case _ =>
+          instanceDao.setStateFor(instance.id.get, InstanceState.NotReachable)
+      }
+      OperationResult.Ok
+    }
+  }
+
+  /***
     * Handles a call to /reportFailure. Needs the instance with the specified id to be present and running inside a docker
     * container. Will update the state of the instance to 'Failed'. Will print warnings if illegal state transitions
     * occur, but will update state anyway.
