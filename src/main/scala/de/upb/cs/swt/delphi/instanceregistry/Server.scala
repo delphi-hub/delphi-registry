@@ -53,7 +53,7 @@ object Server extends HttpApp with JsonSupport with AppLogging {
 
       try {
         val paramInstance : Instance = InstanceString.parseJson.convertTo[Instance](instanceFormat)
-        handler.registerNewInstance(paramInstance) match {
+        handler.handleRegister(paramInstance) match {
           case Success(id) => complete{id.toString}
           case Failure(_) =>  complete(HttpResponse(StatusCodes.InternalServerError, entity = "An internal server error occurred."))
         }
@@ -70,13 +70,17 @@ object Server extends HttpApp with JsonSupport with AppLogging {
     post {
       log.debug(s"POST /deregister?Id=$Id has been called")
 
-      handler.removeInstance(Id) match {
-        case Success(_) =>
+      handler.handleDeregister(Id) match {
+        case handler.OperationResult.IdUnknown  =>
+          log.warning(s"Cannot remove instance with id $Id, that id is not known to the server.")
+          complete{HttpResponse(StatusCodes.NotFound, entity = s"Id $Id not known to the server")}
+        case handler.OperationResult.IsDockerContainer =>
+          log.warning(s"Cannot remove instance with id $Id, this instance is running inside a docker container")
+          complete{HttpResponse(StatusCodes.BadRequest, entity = s"Cannot remove instance with id $Id, this instance is " +
+            s"running inside a docker container. Call /delete to remove it from the server and delete the container.")}
+        case handler.OperationResult.Ok =>
           log.info(s"Successfully removed instance with id $Id")
           complete {s"Successfully removed instance with id $Id"}
-        case Failure(x) =>
-          log.error(x, s"Cannot remove instance with id $Id, that id is not known to the server.")
-          complete{HttpResponse(StatusCodes.NotFound, entity = s"Id $Id not known to the server")}
       }
     }
   }
@@ -137,11 +141,12 @@ object Server extends HttpApp with JsonSupport with AppLogging {
     post {
       log.debug(s"POST /matchingResult?Id=$id&MatchingSuccessful=$matchingResult has been called")
 
-      handler.applyMatchingResult(id, matchingResult) match {
-        case Success(_) => complete{s"Matching result $matchingResult processed."}
-        case Failure(x) =>
-          log.warning(s"Could not process matching result, exception was: ${x.getMessage}")
-          complete(HttpResponse(StatusCodes.NotFound, entity = s"Could not process matching result, id $id was not found."))
+      handler.handleMatchingResult(id, matchingResult) match {
+        case handler.OperationResult.IdUnknown =>
+          log.warning(s"Cannot apply matching result for id $id, that id was not found.")
+          complete{HttpResponse(StatusCodes.NotFound, entity = s"Id $id not found.")}
+        case handler.OperationResult.Ok =>
+          complete{s"Matching result $matchingResult processed."}
       }
     }
   }

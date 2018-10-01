@@ -18,7 +18,7 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
     instanceDao.initialize()
     if(!instanceDao.allInstances().exists(instance => instance.name.equals("Default ElasticSearch Instance"))){
       //Add default ES instance
-      registerNewInstance(Instance(None, "elasticsearch://localhost", 9200, "Default ElasticSearch Instance", ComponentType.ElasticSearch, None, InstanceState.Running))
+      handleRegister(Instance(None, "elasticsearch://localhost", 9200, "Default ElasticSearch Instance", ComponentType.ElasticSearch, None, InstanceState.Running))
     }
     log.info("Done initializing request handler.")
   }
@@ -33,7 +33,7 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
     * @param instance Instance that is registering
     * @return Newly assigned ID if successful
     */
-  def registerNewInstance(instance : Instance) : Try[Long] = {
+  def handleRegister(instance : Instance) : Try[Long] = {
     val newID = if(instanceDao.allInstances().isEmpty){
       0L
     } else {
@@ -56,16 +56,16 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
     * Called when an instance is shut down that is not running inside of a docker container. Will remove the instance
     * from the registry.
     * @param instanceId ID of the instance that was shut down
-    * @return Success if successful, Failure otherwise
+    * @return OperationResult indicating either success or the reason for failure (which precondition was not met)
     */
-  def removeInstance(instanceId : Long) : Try[Unit] = {
+  def handleDeregister(instanceId : Long) : OperationResult.Value = {
     if(!instanceDao.hasInstance(instanceId)){
-      Failure(new RuntimeException(s"Cannot remove instance with id $instanceId, that id is not known to the server."))
-    } else if(instanceDao.getDockerIdFor(instanceId).isSuccess){
-      Failure(new RuntimeException(s"Cannot remove instance with id $instanceId, this instance is running inside a docker" +
-        s"container. Call /delete to remove it from the server and delete the container."))
+      OperationResult.IdUnknown
+    } else if(isInstanceDockerContainer(instanceId)){
+      OperationResult.IsDockerContainer
     } else {
       instanceDao.removeInstance(instanceId)
+      OperationResult.Ok
     }
   }
 
@@ -130,9 +130,9 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
 
   }
 
-  def applyMatchingResult(id : Long, result : Boolean) : Try[Unit] = {
+  def handleMatchingResult(id : Long, result : Boolean) : OperationResult.Value = {
     if(!instanceDao.hasInstance(id)){
-      Failure(new RuntimeException(s"Cannot apply matching result to instance with id $id, that id is not known to the server"))
+      OperationResult.IdUnknown
     } else {
       val instance = instanceDao.getInstance(id).get
       instanceDao.addMatchingResult(id, result)
@@ -141,7 +141,8 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
       } else if (!result && instance.instanceState == InstanceState.Running) {
         instanceDao.setStateFor(instance.id.get, InstanceState.NotReachable)
       }
-      Success(log.info(s"Applied matching result $result to instance with id $id."))
+      log.info(s"Applied matching result $result to instance with id $id.")
+      OperationResult.Ok
     }
   }
 
@@ -156,7 +157,7 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
 
     val instance = Instance(None, host, port, name.getOrElse(s"Generic $componentType"), componentType, Some(dockerId), InstanceState.Stopped)
     log.info(s"Registering instance $instance....")
-    registerNewInstance(instance) match {
+    handleRegister(instance) match {
       case Success(_) =>
         log.info("Successfully registered.")
         OperationResult.Ok
@@ -216,7 +217,7 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
           log.warning(s"Instance with id $id reported stop but state already was 'Failed'.")
         case InstanceState.Paused =>
           log.warning(s"Instance with id $id reported stop but state already was 'Paused'.")
-        case InstanceState.Running || InstanceState.NotReachable =>
+        case InstanceState.Running | InstanceState.NotReachable =>
           instanceDao.setStateFor(instance.id.get, InstanceState.NotReachable)
         case _ =>
           instanceDao.setStateFor(instance.id.get, InstanceState.NotReachable)
