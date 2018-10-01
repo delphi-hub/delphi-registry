@@ -52,7 +52,6 @@ final case class Instance (
      instanceState: InstanceEnums.State
 )
 {
-  var state: InstanceEnums.State = instanceState
 }
 
 object InstanceEnums {

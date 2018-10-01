@@ -1,7 +1,6 @@
 package de.upb.cs.swt.delphi.instanceregistry
 
 import akka.actor.ActorSystem
-import de.upb.cs.swt.delphi.instanceregistry.Server.{handler, log}
 import de.upb.cs.swt.delphi.instanceregistry.daos.{DynamicInstanceDAO, InstanceDAO}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.{Instance, InstanceEnums}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.{ComponentType, InstanceState}
@@ -137,12 +136,33 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
     } else {
       val instance = instanceDao.getInstance(id).get
       instanceDao.addMatchingResult(id, result)
-      if(result && instance.state == InstanceState.NotReachable) {
-        instance.state = InstanceState.Running
-      } else if (!result && instance.state == InstanceState.Running) {
-        instance.state = InstanceState.NotReachable
+      if(result && instance.instanceState == InstanceState.NotReachable) {
+        instanceDao.setStateFor(instance.id.get, InstanceState.Running)
+      } else if (!result && instance.instanceState == InstanceState.Running) {
+        instanceDao.setStateFor(instance.id.get, InstanceState.NotReachable)
       }
       Success(log.info(s"Applied matching result $result to instance with id $id."))
+    }
+  }
+
+  def handleDeploy(componentType: ComponentType, name : Option[String]) : OperationResult.Value = {
+    //TODO: Deploy container (async?)
+    //TODO: Get below values for container!
+    val host : String = ???
+    val port : Int = ???
+    val dockerId : String = ???
+
+    log.info(s"Deployed new container with id $dockerId.")
+
+    val instance = Instance(None, host, port, name.getOrElse(s"Generic $componentType"), componentType, Some(dockerId), InstanceState.Stopped)
+    log.info(s"Registering instance $instance....")
+    registerNewInstance(instance) match {
+      case Success(_) =>
+        log.info("Successfully registered.")
+        OperationResult.Ok
+      case Failure(x) =>
+        log.info(s"Failed to register. Exception: $x")
+        OperationResult.InternalError
     }
   }
 
@@ -161,14 +181,14 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
       OperationResult.NoDockerContainer
     } else {
       val instance = instanceDao.getInstance(id).get
-      instance.state match {
+      instance.instanceState match {
         case InstanceState.Running =>
           log.warning(s"Instance with id $id reported start but state already was 'Running'.")
         case InstanceState.Paused =>
           log.warning(s"Instance with id $id reported start but state is 'Paused'. Will set state to 'Running'.")
-          instance.state = InstanceState.Running
+          instanceDao.setStateFor(instance.id.get, InstanceState.Running)
         case _ =>
-          instance.state = InstanceState.Running
+          instanceDao.setStateFor(instance.id.get, InstanceState.Running)
       }
       OperationResult.Ok
     }
@@ -189,17 +209,17 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
       OperationResult.NoDockerContainer
     } else {
       val instance = instanceDao.getInstance(id).get//TODO:Handle errorLog
-      instance.state match {
+      instance.instanceState match {
         case InstanceState.Failed =>
           log.warning(s"Instance with id $id reported failure but state already was 'Failed'.")
         case InstanceState.Paused =>
           log.warning(s"Instance with id $id reported failure but state is 'Paused'. Will set state to 'Failed.")
-          instance.state = InstanceState.Failed
+          instanceDao.setStateFor(instance.id.get, InstanceState.Failed)
         case InstanceState.Stopped =>
           log.warning(s"Instance with id $id reported failure but state is 'Stopped'. Will set state to 'Failed'.")
-          instance.state = InstanceState.Failed
+          instanceDao.setStateFor(instance.id.get, InstanceState.Failed)
         case _ =>
-          instance.state = InstanceState.Failed
+          instanceDao.setStateFor(instance.id.get, InstanceState.Failed)
       }
       OperationResult.Ok
     }
@@ -219,10 +239,10 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
       OperationResult.NoDockerContainer
     } else {
       val instance = instanceDao.getInstance(id).get
-      if(instance.state == InstanceState.Running) {
-        log.info(s"Handling /pausefor instance with id $id...")
+      if(instance.instanceState == InstanceState.Running) {
+        log.info(s"Handling /pause for instance with id $id...")
         //TODO: execute pause command (async?)
-        instance.state = InstanceState.Paused //TODO: Move state update to async block?
+        instanceDao.setStateFor(instance.id.get, InstanceState.Paused)//TODO: Move state update to async block?
         OperationResult.Ok
       } else {
         OperationResult.InvalidStateForOperation
@@ -243,10 +263,10 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
       OperationResult.NoDockerContainer
     } else {
       val instance = instanceDao.getInstance(id).get
-      if(instance.state == InstanceState.Paused) {
+      if(instance.instanceState == InstanceState.Paused) {
         log.info(s"Handling /resume for instance with id $id...")
         //TODO: Pause the container (async?)
-        instance.state = InstanceState.Running //TODO: Move state update to async block?
+        instanceDao.setStateFor(instance.id.get, InstanceState.Running) //TODO: Move state update to async block?
         OperationResult.Ok
       } else {
         OperationResult.InvalidStateForOperation
@@ -268,15 +288,15 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
     } else {
       log.info(s"Handling /stop for instance with id $id...")
       val instance = instanceDao.getInstance(id).get
-      if(instance.state == InstanceState.Running) {
+      if(instance.instanceState == InstanceState.Running) {
         log.info(s"Shutting instance down gracefully...")
         //TODO: Call /stop on the instance to gracefully shutdown
       } else {
-        log.warning(s"Instance with id $id is in state ${instance.state}, so it will not be gracefully shut down.")
+        log.warning(s"Instance with id $id is in state ${instance.instanceState}, so it will not be gracefully shut down.")
       }
       log.info("Stopping container...")
       //TODO: Stop the container (async?)
-      instance.state = InstanceState.Stopped //TODO: Move state update to async block?
+      instanceDao.setStateFor(instance.id.get, InstanceState.Stopped) //TODO: Move state update to async block?
 
       OperationResult.Ok
     }
@@ -287,7 +307,7 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
     * and stopped. Will start the docker container. State will be updated by the corresponding instance by calling
     * /reportStart.
     * @param id Id of the instance to start
-    * @return OperationResult indicating either success or the reaons for failure (which preconditions failed)
+    * @return OperationResult indicating either success or the reasons for failure (which preconditions failed)
     */
   def handleStart(id: Long): OperationResult.Value = {
     if(!instanceDao.hasInstance(id)){
@@ -297,10 +317,37 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
     } else {
       log.info(s"Handling /start for instance with id $id...")
       val instance = instanceDao.getInstance(id).get
-      if(instance.state == InstanceState.Stopped) {
+      if(instance.instanceState == InstanceState.Stopped) {
         log.info("Starting container...")
         //TODO: Start container (async?)
         OperationResult.Ok
+      } else {
+        OperationResult.InvalidStateForOperation
+      }
+    }
+  }
+
+  /***
+    * Handles a call to /delete. Needs the instance with the specified id to be present, deployed inside a docker container,
+    * and stopped. Will delete the docker container and remove any data from the IR.
+    * @param id Id of the instance to delete
+    * @return OperationResult indicating either success or the reason for failure (which preconditions failed)
+    */
+  def handleDeleteContainer(id: Long) : OperationResult.Value = {
+    if(!instanceDao.hasInstance(id)){
+      OperationResult.IdUnknown
+    } else if (!isInstanceDockerContainer(id)){
+      OperationResult.NoDockerContainer
+    } else {
+      log.info(s"Handling /delete for instance with id $id...")
+      val instance = instanceDao.getInstance(id).get
+      if(instance.instanceState == InstanceState.Stopped){
+        log.info("Deleting container...")
+        //TODO: Delete container (async?)
+        instanceDao.removeInstance(id) match {
+          case Success(_) => OperationResult.Ok
+          case Failure(_) => OperationResult.InternalError
+        }
       } else {
         OperationResult.InvalidStateForOperation
       }
@@ -318,7 +365,7 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
 
   def instanceHasState(id: Long, state : InstanceEnums.State ) : Boolean = {
     instanceDao.getInstance(id) match {
-      case Some(instance) => instance.state == state
+      case Some(instance) => instance.instanceState == state
       case None => false
     }
   }
@@ -355,6 +402,7 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
     val IsDockerContainer : Value = Value("IsDockerContainer")
     val InvalidStateForOperation : Value = Value("InvalidState")
     val Ok : Value = Value("Ok")
+    val InternalError : Value = Value("InternalError")
   }
 
 }

@@ -6,7 +6,7 @@ import akka.http.scaladsl.server
 import akka.http.scaladsl.model.{HttpResponse, StatusCodes}
 import akka.http.scaladsl.server.HttpApp
 import akka.stream.ActorMaterializer
-import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.{ComponentType, InstanceState}
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.ComponentType
 import io.swagger.client.model.{Instance, JsonSupport}
 
 import scala.concurrent.ExecutionContext
@@ -152,13 +152,17 @@ object Server extends HttpApp with JsonSupport with AppLogging {
       } else {
         log.debug(s"POST /deploy?ComponentType=$compTypeString&name=${name.get} has been called")
       }
-
       val compType: ComponentType = ComponentType.values.find(v => v.toString == compTypeString).orNull
 
       if (compType != null) {
         log.info(s"Trying to deploy container of type $compType" + (if(name.isDefined){s" with name ${name.get}..."}else {"..."}))
-        //TODO: Call handler, verify that Docker host is present, if not return BadRequest.
-        complete{HttpResponse(StatusCodes.Accepted, entity = s"Container of type $compType is being deployed.")}
+        handler.handleDeploy(compType, name) match {
+          case handler.OperationResult.Ok =>
+            complete{HttpResponse(StatusCodes.Accepted, entity = s"Container of type $compType is being deployed.")}
+          case r =>
+            complete{HttpResponse(StatusCodes.InternalServerError, entity = s"Internal server error, unknown operation result $r")}
+        }
+
       } else {
         log.error(s"Failed to deserialize parameter string $compTypeString to ComponentType.")
         complete(HttpResponse(StatusCodes.BadRequest, entity = s"Could not deserialize parameter string $compTypeString to ComponentType"))
@@ -291,20 +295,21 @@ object Server extends HttpApp with JsonSupport with AppLogging {
   def deleteContainer() : server.Route = parameters('Id.as[Long]) { id =>
     post{
       log.debug(s"POST /delete?Id=$id has been called")
-      if(handler.isInstanceIdPresent(id)){
-        if(handler.isInstanceDockerContainer(id)){
-          //TODO: delete instance
-          //TODO: Check stopped
-          complete{HttpResponse(StatusCodes.Accepted, entity = "Operation accepted.")}
-        } else {
+      handler.handleDeleteContainer(id) match {
+        case handler.OperationResult.IdUnknown =>
+          log.warning(s"Cannot delete id $id, that id was not found.")
+          complete{HttpResponse(StatusCodes.NotFound, entity = s"Id $id not found.")}
+        case handler.OperationResult.NoDockerContainer =>
           log.warning(s"Cannot delete id $id, that instance is not running in a docker container.")
           complete{HttpResponse(StatusCodes.BadRequest, entity = s"Id $id is not running in a docker container.")}
-        }
-      } else {
-        log.warning(s"Cannot delete id $id, that id was not found.")
-        complete{HttpResponse(StatusCodes.NotFound, entity = s"Id $id not found.")}
+        case handler.OperationResult.InvalidStateForOperation =>
+          log.warning(s"Cannot delete id $id, that instance is not stopped.")
+          complete {HttpResponse(StatusCodes.BadRequest, entity = s"Id $id is not stopped.")}
+        case handler.OperationResult.Ok =>
+          complete{HttpResponse(StatusCodes.Accepted, entity = "Operation accepted.")}
+        case handler.OperationResult.InternalError =>
+          complete{HttpResponse(StatusCodes.InternalServerError, entity = s"Internal server error")}
       }
-      complete{HttpResponse(StatusCodes.Accepted, entity = "Operation accepted.")}
     }
   }
 

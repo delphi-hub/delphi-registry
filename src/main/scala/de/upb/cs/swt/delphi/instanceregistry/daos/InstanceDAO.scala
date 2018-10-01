@@ -1,7 +1,7 @@
 package de.upb.cs.swt.delphi.instanceregistry.daos
 
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.Instance
-import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.ComponentType
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.{ComponentType, InstanceState}
 
 import scala.util.Try
 
@@ -85,5 +85,12 @@ trait InstanceDAO {
     * present or not running as a docker container, Failure will be returned.
     */
   def getDockerIdFor(id: Long) : Try[String]
+
+  /**
+    * If successful, sets the state for the instance with the given id to the given state.
+    * @param id Id of the instance
+    * @param state New state to set
+    */
+  def setStateFor(id: Long, state: InstanceState.Value) : Try[Unit]
 
 }
