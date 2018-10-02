@@ -1,15 +1,20 @@
 package de.upb.cs.swt.delphi.instanceregistry
 
 import akka.actor.ActorSystem
+import akka.http.scaladsl.model.StatusCodes
+import de.upb.cs.swt.delphi.instanceregistry.connection.RestClient
 import de.upb.cs.swt.delphi.instanceregistry.daos.{DynamicInstanceDAO, InstanceDAO}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.{Instance, InstanceEnums}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.{ComponentType, InstanceState}
 
+import scala.concurrent.duration.Duration
+import scala.concurrent.{Await, ExecutionContext}
 import scala.util.{Failure, Success, Try}
 
 class RequestHandler (configuration: Configuration) extends AppLogging {
 
   implicit val system : ActorSystem = Registry.system
+  implicit val ec : ExecutionContext = system.dispatcher
 
   private val instanceDao : InstanceDAO = new DynamicInstanceDAO(configuration)
 
@@ -34,11 +39,7 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
     * @return Newly assigned ID if successful
     */
   def handleRegister(instance : Instance) : Try[Long] = {
-    val newID = if(instanceDao.allInstances().isEmpty){
-      0L
-    } else {
-      (instanceDao.allInstances().map(i => i.id.getOrElse(0L)) max) + 1L
-    }
+    val newID = generateNextId()
 
     log.info(s"Assigned new id $newID to registering instance with name ${instance.name}.")
 
@@ -146,8 +147,9 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
     }
   }
 
-  def handleDeploy(componentType: ComponentType, name : Option[String]) : OperationResult.Value = {
-    //TODO: Deploy container (async?)
+  def handleDeploy(componentType: ComponentType, name : Option[String]) : Try[Long] = {
+    val newId = generateNextId()
+    //TODO: Deploy container (async?), set env var 'INSTANCE_ID' to newId
     //TODO: Get below values for container!
     val host : String = ???
     val port : Int = ???
@@ -155,15 +157,16 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
 
     log.info(s"Deployed new container with id $dockerId.")
 
-    val instance = Instance(None, host, port, name.getOrElse(s"Generic $componentType"), componentType, Some(dockerId), InstanceState.Stopped)
-    log.info(s"Registering instance $instance....")
-    handleRegister(instance) match {
+    val newInstance = Instance(Some(newId), host, port, name.getOrElse(s"Generic $componentType"), componentType, Some(dockerId), InstanceState.Stopped)
+    log.info(s"Registering instance $newInstance....")
+
+    instanceDao.addInstance(newInstance) match {
       case Success(_) =>
         log.info("Successfully registered.")
-        OperationResult.Ok
+        Success(newId)
       case Failure(x) =>
         log.info(s"Failed to register. Exception: $x")
-        OperationResult.InternalError
+        Failure(x)
     }
   }
 
@@ -321,8 +324,25 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
       log.info(s"Handling /stop for instance with id $id...")
       val instance = instanceDao.getInstance(id).get
       if(instance.instanceState == InstanceState.Running) {
-        log.info(s"Shutting instance down gracefully...")
-        //TODO: Call /stop on the instance to gracefully shutdown
+        //Only call /stop when instance is crawler, webapi or webapp
+        if(instance.componentType == ComponentType.Crawler ||
+        instance.componentType == ComponentType.WebApi ||
+        instance.componentType == ComponentType.WebApp){
+          log.info(s"Shutting instance down gracefully...")
+
+          val shutdownFuture = RestClient.executePost(RestClient.getUri(instance) + "/stop")
+          shutdownFuture.onComplete{
+            case Success(response) =>
+              if(response.status == StatusCodes.OK){
+                log.info(s"Successfully shut down instance with id $id.")
+              } else {
+                log.warning(s"Failed to shut down instance with id $id, server returned ${response.status}.")
+              }
+            case Failure(x) =>
+              log.warning(s"Failed to shut down instance with id $id, exception occurred: $x")
+          }
+          Await.ready(shutdownFuture, Duration.Inf)
+        }
       } else {
         log.warning(s"Instance with id $id is in state ${instance.instanceState}, so it will not be gracefully shut down.")
       }
@@ -426,6 +446,14 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
       count
     }
 
+  }
+
+  private def generateNextId() : Long = {
+    if(instanceDao.allInstances().isEmpty){
+      0L
+    } else {
+      (instanceDao.allInstances().map(i => i.id.getOrElse(0L)) max) + 1L
+    }
   }
 
   object OperationResult extends Enumeration {

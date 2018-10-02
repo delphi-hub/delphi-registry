@@ -2,6 +2,7 @@ package de.upb.cs.swt.delphi.instanceregistry
 
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
+import de.upb.cs.swt.delphi.instanceregistry.connection.Server
 
 import scala.concurrent.ExecutionContext
 

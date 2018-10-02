@@ -1,17 +1,16 @@
-package de.upb.cs.swt.delphi.instanceregistry
-
+package de.upb.cs.swt.delphi.instanceregistry.connection
 
 import akka.actor.ActorSystem
-import akka.http.scaladsl.server
 import akka.http.scaladsl.model.{HttpResponse, StatusCodes}
+import akka.http.scaladsl.server
 import akka.http.scaladsl.server.HttpApp
 import akka.stream.ActorMaterializer
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.ComponentType
-import io.swagger.client.model.{Instance, JsonSupport}
-
-import scala.concurrent.ExecutionContext
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.{Instance, JsonSupport}
+import de.upb.cs.swt.delphi.instanceregistry.{AppLogging, Registry, RequestHandler}
 import spray.json._
 
+import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Success}
 
 
@@ -163,10 +162,10 @@ object Server extends HttpApp with JsonSupport with AppLogging {
       if (compType != null) {
         log.info(s"Trying to deploy container of type $compType" + (if(name.isDefined){s" with name ${name.get}..."}else {"..."}))
         handler.handleDeploy(compType, name) match {
-          case handler.OperationResult.Ok =>
-            complete{HttpResponse(StatusCodes.Accepted, entity = s"Container of type $compType is being deployed.")}
-          case r =>
-            complete{HttpResponse(StatusCodes.InternalServerError, entity = s"Internal server error, unknown operation result $r")}
+          case Success(id) =>
+            complete{HttpResponse(StatusCodes.Accepted, entity = id.toString)}
+          case Failure(x) =>
+            complete{HttpResponse(StatusCodes.InternalServerError, entity = s"Internal server error. Message: ${x.getMessage}")}
         }
 
       } else {
