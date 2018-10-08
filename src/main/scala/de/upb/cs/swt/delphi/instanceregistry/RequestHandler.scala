@@ -16,7 +16,7 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
   implicit val system : ActorSystem = Registry.system
   implicit val ec : ExecutionContext = system.dispatcher
 
-  private val instanceDao : InstanceDAO = new DynamicInstanceDAO(configuration)
+  private[instanceregistry] val instanceDao : InstanceDAO = new DynamicInstanceDAO(configuration)
 
   def initialize() : Unit = {
     log.info("Initializing request handler...")
@@ -194,6 +194,7 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
         case _ =>
           instanceDao.setStateFor(instance.id.get, InstanceState.Running)
       }
+      log.info(s"Instance with id $id has reported start.")
       OperationResult.Ok
     }
   }
@@ -225,6 +226,7 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
         case _ =>
           instanceDao.setStateFor(instance.id.get, InstanceState.NotReachable)
       }
+      log.info(s"Instance with id $id has reported stop.")
       OperationResult.Ok
     }
   }
@@ -256,6 +258,7 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
         case _ =>
           instanceDao.setStateFor(instance.id.get, InstanceState.Failed)
       }
+      log.info(s"Instance with id $id has reported failure.")
       OperationResult.Ok
     }
 
@@ -423,10 +426,7 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
   }
 
   def isInstanceDockerContainer(id: Long) : Boolean = {
-    instanceDao.getDockerIdFor(id) match {
-      case Success(_) => true
-      case Failure(_) => false
-    }
+    instanceDao.getDockerIdFor(id).isSuccess
   }
 
   private def countConsecutivePositiveMatchingResults(id : Long) : Int = {
