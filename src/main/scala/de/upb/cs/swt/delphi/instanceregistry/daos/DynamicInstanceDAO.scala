@@ -121,6 +121,7 @@ class DynamicInstanceDAO (configuration : Configuration) extends InstanceDAO wit
 
   override def initialize(): Unit = {
     log.info("Initializing dynamic instance DAO...")
+    clearData()
     tryInitFromRecoveryFile()
     log.info("Successfully initialized.")
   }

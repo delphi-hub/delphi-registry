@@ -17,6 +17,8 @@ class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach{
   override protected def beforeEach(): Unit = {
     new File(Registry.configuration.recoveryFileName).delete()
     handler.initialize()
+    handler.instanceDao.removeAll()
+    handler.initialize()
   }
 
   "The RequestHandler" must "assign new IDs to instances regardless of their actual id" in {
@@ -24,9 +26,9 @@ class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach{
     assert(registerNewInstance.isSuccess)
     assert(registerNewInstance.get != Long.MaxValue)
 
-    val registerNewInstance2 = handler.handleRegister(buildInstance(1L))
+    val registerNewInstance2 = handler.handleRegister(buildInstance(42L))
     assert(registerNewInstance2.isSuccess)
-    assert(registerNewInstance2.get != 1L)
+    assert(registerNewInstance2.get != 42L)
   }
 
   it must "ignore the dockerId and instanceState on registration" in {
@@ -142,6 +144,97 @@ class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach{
     assert(handler.getInstance(43).get.instanceState == InstanceState.Failed)
   }
 
+  it must "validate preconditions on handlePause" in {
+    val register1 = handler.instanceDao.addInstance(buildInstance(1, None))
+    val register2 = handler.instanceDao.addInstance(buildInstance(2, Some("RandomDockerId"), InstanceState.Failed))
+    assert(register1.isSuccess)
+    assert(register2.isSuccess)
+
+    assert(handler.handlePause(Int.MaxValue) == handler.OperationResult.IdUnknown)
+    assert(handler.handlePause(1) == handler.OperationResult.NoDockerContainer)
+    assert(handler.handlePause(2) == handler.OperationResult.InvalidStateForOperation)
+  }
+
+  it must "change the state on handlePause" in {
+    val register1 = handler.instanceDao.addInstance(buildInstance(1, Some("RandomDockerId"), InstanceState.Running))
+    assert(register1.isSuccess)
+
+    assert(handler.handlePause(1) == handler.OperationResult.Ok)
+    assert(handler.getInstance(1).get.instanceState == InstanceState.Paused)
+  }
+
+  it must "validate preconditions on handleResume" in {
+    val register1 = handler.instanceDao.addInstance(buildInstance(1, None))
+    val register2 = handler.instanceDao.addInstance(buildInstance(2, Some("RandomDockerId"), InstanceState.Failed))
+    assert(register1.isSuccess)
+    assert(register2.isSuccess)
+
+    assert(handler.handleResume(Int.MaxValue) == handler.OperationResult.IdUnknown)
+    assert(handler.handleResume(1) == handler.OperationResult.NoDockerContainer)
+    assert(handler.handleResume(2) == handler.OperationResult.InvalidStateForOperation)
+  }
+
+  it must "change the state on handleResume" in {
+    val register1 = handler.instanceDao.addInstance(buildInstance(1, Some("RandomDockerId"), InstanceState.Paused))
+    assert(register1.isSuccess)
+
+    assert(handler.handleResume(1) == handler.OperationResult.Ok)
+    assert(handler.getInstance(1).get.instanceState == InstanceState.Running)
+  }
+
+  it must "validate preconditions on handleStop" in {
+    val register1 = handler.instanceDao.addInstance(buildInstance(1, None))
+    assert(register1.isSuccess)
+
+    assert(handler.handleStop(Int.MaxValue) == handler.OperationResult.IdUnknown)
+    assert(handler.handleStop(1) == handler.OperationResult.NoDockerContainer)
+  }
+
+  it must "change the state of the instance on handleStop" in {
+    val register1 = handler.instanceDao.addInstance(Instance(Some(1), "http://localhost", 8083, "MyCrawler", ComponentType.Crawler, Some("RandomDockerId"), InstanceState.Running))
+    assert(register1.isSuccess)
+
+    assert(handler.handleStop(1) == handler.OperationResult.Ok)
+    assert(handler.getInstance(1).get.instanceState == InstanceState.Stopped)
+  }
+
+  it must "validate preconditions on handleStart" in {
+    val register1 = handler.instanceDao.addInstance(buildInstance(1, None))
+    val register2 = handler.instanceDao.addInstance(buildInstance(2, Some("RandomDockerId"), InstanceState.Paused))
+    assert(register1.isSuccess)
+    assert(register2.isSuccess)
+
+    assert(handler.handleStart(Int.MaxValue) == handler.OperationResult.IdUnknown)
+    assert(handler.handleStart(1) == handler.OperationResult.NoDockerContainer)
+    assert(handler.handleStart(2) == handler.OperationResult.InvalidStateForOperation)
+  }
+
+  it must "not change the state of the instance on handleStart" in {
+    val register1 = handler.instanceDao.addInstance(buildInstance(1, Some("RandomDockerId"), InstanceState.Stopped))
+    assert(register1.isSuccess)
+
+    assert(handler.handleStop(1) == handler.OperationResult.Ok)
+    assert(handler.getInstance(1).get.instanceState == InstanceState.Stopped)
+  }
+
+  it must "validate preconditions on handleDeleteContainer" in {
+    val register1 = handler.instanceDao.addInstance(buildInstance(1, None))
+    val register2 = handler.instanceDao.addInstance(buildInstance(2, Some("RandomDockerId"), InstanceState.Paused))
+    assert(register1.isSuccess)
+    assert(register2.isSuccess)
+
+    assert(handler.handleDeleteContainer(Int.MaxValue) == handler.OperationResult.IdUnknown)
+    assert(handler.handleDeleteContainer(1) == handler.OperationResult.NoDockerContainer)
+    assert(handler.handleDeleteContainer(2) == handler.OperationResult.InvalidStateForOperation)
+  }
+
+  it must "remove instances on handleDeleteContainer" in {
+    val register1 = handler.instanceDao.addInstance(buildInstance(1, Some("RandomDockerId"), InstanceState.Stopped))
+    assert(register1.isSuccess)
+
+    assert(handler.handleDeleteContainer(1) == handler.OperationResult.Ok)
+    assert(handler.getInstance(1).isEmpty)
+  }
 
   it must "not add two default ES instances on initializing" in {
     assert(handler.getNumberOfInstances(ComponentType.ElasticSearch) == 1)
