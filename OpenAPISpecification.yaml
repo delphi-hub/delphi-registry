@@ -250,7 +250,7 @@ paths:
       operationId: reportStart
       parameters:
         - in: query
-          name: InstanceID
+          name: Id
           description: The ID of the instance that was started
           required: true
           type: integer
@@ -277,7 +277,7 @@ paths:
       operationId: reportStop
       parameters:
         - in: query
-          name: InstanceID
+          name: Id
           description: The ID of the instance that was stopped
           required: true
           type: integer
@@ -309,7 +309,7 @@ paths:
       operationId: reportFailure
       parameters:
         - in: query
-          name: InstanceID
+          name: Id
           description: The ID of the instance that encountered the failure
           required: true
           type: integer
@@ -341,7 +341,7 @@ paths:
       operationId: pause
       parameters:
         - in: query
-          name: InstanceID
+          name: Id
           description: The ID of the instance to be paused
           required: true
           type: integer
@@ -369,7 +369,7 @@ paths:
       operationId: resume
       parameters:
         - in: query
-          name: InstanceID
+          name: Id
           description: The ID of the instance to be resumed
           required: true
           type: integer
@@ -397,7 +397,7 @@ paths:
       operationId: stop
       parameters:
         - in: query
-          name: InstanceID
+          name: Id
           description: The ID of the instance to be stopped
           required: true
           type: integer
@@ -425,7 +425,7 @@ paths:
       operationId: start
       parameters:
         - in: query
-          name: InstanceID
+          name: Id
           description: The ID of the instance to be started
           required: true
           type: integer
@@ -453,7 +453,7 @@ paths:
       operationId: delete
       parameters:
         - in: query
-          name: InstanceID
+          name: Id
           description: The ID of the instance to be deleted
           required: true
           type: integer
