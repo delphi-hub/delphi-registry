@@ -19,6 +19,7 @@ libraryDependencies += "org.scalatest" %% "scalatest" % "3.0.4" % "test"
 libraryDependencies += "org.parboiled" %% "parboiled" % "2.1.4"
 
 
+
 lazy val registry = (project in file(".")).
   enablePlugins(JavaAppPackaging).
   enablePlugins(DockerPlugin).

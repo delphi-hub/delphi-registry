@@ -1,15 +1,19 @@
 package de.upb.cs.swt.delphi.instanceregistry.connection
 
+import akka.NotUsed
 import akka.actor.ActorSystem
+import akka.http.scaladsl.model.ws.{TextMessage, UpgradeToWebSocket}
 import akka.http.scaladsl.model.{HttpResponse, StatusCodes}
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.HttpApp
 import akka.stream.ActorMaterializer
-import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.ComponentType
+import akka.stream.scaladsl.{Sink, Source}
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.{ComponentType, InstanceState}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.{Instance, JsonSupport}
 import de.upb.cs.swt.delphi.instanceregistry.{AppLogging, Registry, RequestHandler}
 import spray.json._
 
+import scala.collection.immutable.HashSet
 import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Success}
 
@@ -42,8 +46,9 @@ object Server extends HttpApp with JsonSupport with AppLogging {
       path("resume") { resume()} ~
       path("stop") { stop()} ~
       path("start") { start()} ~
-      path("delete") { deleteContainer()}
-
+      path("delete") { deleteContainer()} ~
+      /****************EVENT OPERATIONS****************/
+      path("events") { streamEvents()}
 
    def register(InstanceString: String) : server.Route = {
     post
@@ -333,6 +338,20 @@ object Server extends HttpApp with JsonSupport with AppLogging {
           complete{HttpResponse(StatusCodes.InternalServerError, entity = s"Internal server error")}
       }
     }
+  }
+
+  def streamEvents() : server.Route =  {
+
+      val set = HashSet(Instance(Some(42), "",42,"",ComponentType.Crawler, None, InstanceState.Paused))
+      val outSource : Source[TextMessage, NotUsed] = Source(set).map(instance => TextMessage(instance.toJson(instanceFormat).toString))
+      extractRequest { r =>
+        r.header[UpgradeToWebSocket] match {
+          case Some(upgrade) => complete(upgrade.handleMessagesWithSinkSource(Sink.ignore, outSource))
+          case None          => complete(HttpResponse(400, entity = "Not a valid websocket request!"))
+
+        }
+      }
+
   }
 
 
