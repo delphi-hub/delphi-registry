@@ -2,6 +2,7 @@ package de.upb.cs.swt.delphi.instanceregistry
 
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
+import de.upb.cs.swt.delphi.instanceregistry.Docker.{DockerClient, DockerConnection}
 import de.upb.cs.swt.delphi.instanceregistry.connection.Server
 
 import scala.concurrent.ExecutionContext
@@ -12,7 +13,10 @@ object Registry extends AppLogging{
   implicit val ec : ExecutionContext = system.dispatcher
 
   val configuration = new Configuration()
-  val requestHandler = new RequestHandler(configuration)
+  val dockerClient = new DockerClient(DockerConnection.fromEnvironment())
+  val requestHandler = new RequestHandler(configuration, dockerClient)
+
+
 
   def main(args: Array[String]): Unit = {
     requestHandler.initialize()
