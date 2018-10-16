@@ -3,7 +3,7 @@ package de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
 import spray.json.{DefaultJsonProtocol, DeserializationException, JsString, JsValue, JsonFormat}
 
-trait JsonSupport extends SprayJsonSupport with DefaultJsonProtocol {
+trait InstanceJsonSupport extends SprayJsonSupport with DefaultJsonProtocol {
 
   implicit val componentTypeFormat : JsonFormat[InstanceEnums.ComponentType] = new JsonFormat[InstanceEnums.ComponentType] {
 

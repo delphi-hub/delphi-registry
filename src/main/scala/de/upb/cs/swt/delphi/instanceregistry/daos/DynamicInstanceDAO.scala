@@ -5,7 +5,7 @@ import java.io.{File, IOException, PrintWriter}
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import de.upb.cs.swt.delphi.instanceregistry.{AppLogging, Configuration, Registry}
-import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.{Instance, JsonSupport}
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.{Instance, InstanceJsonSupport}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.{ComponentType, InstanceState}
 
 import scala.collection.mutable
@@ -19,7 +19,7 @@ import scala.io.Source
   * Implementation of the instance data access object that keeps its data in memory
   * instead of using a persistent storage.
   */
-class DynamicInstanceDAO (configuration : Configuration) extends InstanceDAO with AppLogging with JsonSupport {
+class DynamicInstanceDAO (configuration : Configuration) extends InstanceDAO with AppLogging with InstanceJsonSupport {
 
   private val instances : mutable.Set[Instance] = new mutable.HashSet[Instance]()
   private val instanceMatchingResults : mutable.Map[Long, mutable.MutableList[Boolean]] = new mutable.HashMap[Long,mutable.MutableList[Boolean]]()
