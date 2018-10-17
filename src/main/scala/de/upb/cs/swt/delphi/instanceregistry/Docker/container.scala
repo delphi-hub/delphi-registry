@@ -319,7 +319,10 @@ case class ContainerConfig(
                             Entrypoint: Option[Seq[String]] = None,
                             Cmd: Seq[String] = Seq.empty,
                             Env: Seq[String] = Seq.empty)
-                           // ExposedPorts: Seq[String] = Seq.empty)
+                            //Id: Seq[String] = Seq.empty,
+                            //IPAddress: Seq[String] = Seq.empty)
+
+// ExposedPorts: Seq[String] = Seq.empty)
 
 object PortBinding {
   def apply(HostPort: Int): PortBinding = new PortBinding(HostPort = HostPort)

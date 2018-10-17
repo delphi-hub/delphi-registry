@@ -34,7 +34,7 @@ class ContainerCommands(connection: DockerConnection) extends JsonSupport with C
 
   def create(
               containerConfig: ContainerConfig,
-              hostConfig: HostConfig,
+              //  hostConfig: HostConfig,
               containerName: Option[ContainerName]
             )(implicit ec: ExecutionContext): Future[CreateContainerResponse] = {
     val configJson = containerConfig //+ hostConfig.toString
@@ -45,6 +45,7 @@ class ContainerCommands(connection: DockerConnection) extends JsonSupport with C
     Await.result(Http(system).singleRequest(request) map { response =>
       response.status match {
         case StatusCodes.Created =>
+          println("response entity is" + Unmarshal(response.entity).to[String])
           Unmarshal(response).to[CreateContainerResponse]
         case _ =>
           unknownResponseFuture(response)
@@ -89,6 +90,7 @@ class ContainerCommands(connection: DockerConnection) extends JsonSupport with C
       }
     }
   }
+
   def remove(
               containerId: String,
               force: Boolean,
