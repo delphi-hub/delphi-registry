@@ -230,7 +230,7 @@ case class RestartOnFailure(maximumRetryCount: Int = 0) extends RestartPolicy {
 
 case class DeviceMapping(pathOnHost: String, pathInContainer: String, cgroupPermissions: String)
 
-case class CreateContainerResponse(Id: String)
+case class CreateContainerResponse(Id: String, Warnings: Option[String])
 
 //, Warnings: Seq[String])
 

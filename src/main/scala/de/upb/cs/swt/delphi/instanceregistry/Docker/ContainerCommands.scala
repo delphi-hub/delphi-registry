@@ -45,7 +45,6 @@ class ContainerCommands(connection: DockerConnection) extends JsonSupport with C
     Await.result(Http(system).singleRequest(request) map { response =>
       response.status match {
         case StatusCodes.Created =>
-          println("response entity is" + Unmarshal(response.entity).to[String])
           Unmarshal(response).to[CreateContainerResponse]
         case _ =>
           unknownResponseFuture(response)

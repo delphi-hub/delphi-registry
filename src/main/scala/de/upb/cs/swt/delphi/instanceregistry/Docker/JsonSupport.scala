@@ -33,7 +33,7 @@ trait JsonSupport extends SprayJsonSupport with DefaultJsonProtocol {
 
     def read(value: JsValue): ContainerResponseEnums.CommandType = value match {
       case JsString(s) => s match {
-        //  case "Warnings" => ContainerResponseEnums.CommandType.Warnings
+        case "Warnings" => ContainerResponseEnums.CommandType.Warnings
         case "Id" => ContainerResponseEnums.CommandType.Id
         case x => throw new RuntimeException(s"Unexpected Container Response value $x.")
       }
@@ -58,7 +58,7 @@ trait JsonSupport extends SprayJsonSupport with DefaultJsonProtocol {
     }
   }
   implicit val StatusFormat = jsonFormat6(ContainerStatus)
-  implicit val ResponseFormat = jsonFormat1(CreateContainerResponse)
+  implicit val ResponseFormat = jsonFormat2(CreateContainerResponse)
   implicit val ConfigFormat = jsonFormat4(ContainerConfig)
 }
 
@@ -86,7 +86,7 @@ object ContainerResponseEnums {
 
   object CommandType extends Enumeration {
     val Id: Value = Value("Id")
-    // val Warnings: Value = Value("Warnings")
+    val Warnings: Value = Value("Warnings")
   }
 
 }

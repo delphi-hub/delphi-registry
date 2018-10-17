@@ -28,10 +28,15 @@ object Registry extends AppLogging {
     val dockerActor = system.actorOf(DockerActor.props(DockerConnection.fromEnvironment()))
 
     implicit val timeout = Timeout(10 seconds)
+  //  val dockerId
+
     //  val future = dockerActor ? create(ContainerConfig("registry_test"))
 
     //    val future: Future[Any] = dockerActor ? create(ContainerConfig("registry"))
-    //val future: Future[Any] = ask(dockerActor, create(ContainerConfig("24santoshr/delphi-registry")))
+//     ask(dockerActor, create(ContainerConfig("24santoshr/delphi-registry")))
+
+
+
 
 
     dockerActor ! create(ContainerConfig("24santoshr/delphi-registry"))
