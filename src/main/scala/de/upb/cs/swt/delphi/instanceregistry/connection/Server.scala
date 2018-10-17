@@ -110,7 +110,6 @@ object Server extends HttpApp with InstanceJsonSupport with EventJsonSupport wit
       val compType : ComponentType = ComponentType.values.find(v => v.toString == compTypeString).orNull
 
       if(compType != null) {
-        handler.eventActor ! NumbersChangedEvent(1,2,3) //TODO: Remove test call
         complete{handler.getNumberOfInstances(compType).toString()}
       } else {
         log.error(s"Failed to deserialize parameter string $compTypeString to ComponentType.")
@@ -364,8 +363,6 @@ object Server extends HttpApp with InstanceJsonSupport with EventJsonSupport wit
     }
 
   }
-
-
 
 }
 

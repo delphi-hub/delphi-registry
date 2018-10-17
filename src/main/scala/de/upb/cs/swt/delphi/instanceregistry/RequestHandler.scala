@@ -1,6 +1,6 @@
 package de.upb.cs.swt.delphi.instanceregistry
 
-import akka.actor.ActorSystem
+import akka.actor.{ActorSystem, PoisonPill}
 import akka.http.scaladsl.model.StatusCodes
 import akka.stream.{ActorMaterializer, Materializer, OverflowStrategy}
 import akka.stream.scaladsl.{Keep, Sink, Source}
@@ -36,6 +36,7 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
   }
 
   def shutdown() : Unit = {
+    eventActor ! PoisonPill
     instanceDao.shutdown()
   }
 
@@ -75,8 +76,9 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
     } else if(isInstanceDockerContainer(instanceId)){
       OperationResult.IsDockerContainer
     } else {
-      fireNumbersChangedEvent()
+      fireInstanceRemovedEvent(instanceDao.getInstance(instanceId).get)
       instanceDao.removeInstance(instanceId)
+      fireNumbersChangedEvent()
       OperationResult.Ok
     }
   }
@@ -150,8 +152,10 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
       instanceDao.addMatchingResult(id, result)
       if(result && instance.instanceState == InstanceState.NotReachable) {
         instanceDao.setStateFor(instance.id.get, InstanceState.Running)
+        fireStateChangedEvent(instanceDao.getInstance(id).get)
       } else if (!result && instance.instanceState == InstanceState.Running) {
         instanceDao.setStateFor(instance.id.get, InstanceState.NotReachable)
+        fireStateChangedEvent(instanceDao.getInstance(id).get)
       }
       log.info(s"Applied matching result $result to instance with id $id.")
       OperationResult.Ok
@@ -208,6 +212,7 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
           instanceDao.setStateFor(instance.id.get, InstanceState.Running)
       }
       log.info(s"Instance with id $id has reported start.")
+      fireStateChangedEvent(instanceDao.getInstance(id).get)
       OperationResult.Ok
     }
   }
@@ -240,6 +245,7 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
           instanceDao.setStateFor(instance.id.get, InstanceState.NotReachable)
       }
       log.info(s"Instance with id $id has reported stop.")
+      fireStateChangedEvent(instanceDao.getInstance(id).get)
       OperationResult.Ok
     }
   }
@@ -272,6 +278,7 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
           instanceDao.setStateFor(instance.id.get, InstanceState.Failed)
       }
       log.info(s"Instance with id $id has reported failure.")
+      fireStateChangedEvent(instanceDao.getInstance(id).get)
       OperationResult.Ok
     }
 
@@ -294,6 +301,7 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
         log.info(s"Handling /pause for instance with id $id...")
         //TODO: execute pause command (async?)
         instanceDao.setStateFor(instance.id.get, InstanceState.Paused)//TODO: Move state update to async block?
+        fireStateChangedEvent(instanceDao.getInstance(id).get)
         OperationResult.Ok
       } else {
         OperationResult.InvalidStateForOperation
@@ -317,7 +325,8 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
       if(instance.instanceState == InstanceState.Paused) {
         log.info(s"Handling /resume for instance with id $id...")
         //TODO: Pause the container (async?)
-        instanceDao.setStateFor(instance.id.get, InstanceState.Running) //TODO: Move state update to async block?
+        instanceDao.setStateFor(instance.id.get, InstanceState.Running) //
+        fireStateChangedEvent(instanceDao.getInstance(id).get)
         OperationResult.Ok
       } else {
         OperationResult.InvalidStateForOperation
@@ -365,6 +374,7 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
       log.info("Stopping container...")
       //TODO: Stop the container (async?)
       instanceDao.setStateFor(instance.id.get, InstanceState.Stopped) //TODO: Move state update to async block?
+      fireStateChangedEvent(instanceDao.getInstance(id).get)
 
       OperationResult.Ok
     }
@@ -415,6 +425,7 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
         instanceDao.removeInstance(id) match {
           case Success(_) =>
             fireNumbersChangedEvent()
+            fireInstanceRemovedEvent(instance)
             OperationResult.Ok
           case Failure(_) => OperationResult.InternalError
         }
@@ -454,6 +465,14 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
 
   private def fireInstanceAddedEvent(addedInstance: Instance): Unit = {
     eventActor ! InstanceAddedEvent(addedInstance)
+  }
+
+  private def fireInstanceRemovedEvent(removedInstance: Instance): Unit = {
+    eventActor ! InstanceRemovedEvent(removedInstance)
+  }
+
+  private def fireStateChangedEvent(updatedInstance: Instance): Unit = {
+    eventActor ! StateChangedEvent(updatedInstance)
   }
 
   private def countConsecutivePositiveMatchingResults(id : Long) : Int = {

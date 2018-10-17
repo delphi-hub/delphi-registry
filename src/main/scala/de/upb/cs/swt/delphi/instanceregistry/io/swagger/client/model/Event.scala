@@ -3,7 +3,7 @@ package de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
 import spray.json.{DefaultJsonProtocol, DeserializationException, JsObject, JsString, JsValue, JsonFormat}
 
-trait EventJsonSupport extends SprayJsonSupport with DefaultJsonProtocol {
+trait EventJsonSupport extends SprayJsonSupport with DefaultJsonProtocol with InstanceJsonSupport {
 
   implicit val eventTypeFormat  : JsonFormat[EventEnums.EventType] = new JsonFormat[EventEnums.EventType] {
 
@@ -26,6 +26,8 @@ trait EventJsonSupport extends SprayJsonSupport with DefaultJsonProtocol {
     override def write(event: Event): JsValue = event match {
       case nce: NumbersChangedEvent => numbersChangedEventFormat.write(nce)
       case iae: InstanceAddedEvent => instanceAddedEventFormat.write(iae)
+      case ire: InstanceRemovedEvent => instanceRemovedEventFormat.write(ire)
+      case sce: StateChangedEvent => stateChangedEventFormat.write(sce)
       case unrecognized => throw new RuntimeException(s"Unexpected type for event: $unrecognized")
     }
 
@@ -34,6 +36,8 @@ trait EventJsonSupport extends SprayJsonSupport with DefaultJsonProtocol {
         known.fields("eventType") match {
           case JsString("NumbersChangedEvent") => numbersChangedEventFormat.read(known)
           case JsString("InstanceAddedEvent") => instanceAddedEventFormat.read(known)
+          case JsString("InstanceRemovedEvent") => instanceRemovedEventFormat.read(known)
+          case JsString("StateChangedEvent") => stateChangedEventFormat.read(known)
           case unknown => throw DeserializationException(s"Unknown event type $unknown while deserializing.")
         }
       case _ => throw DeserializationException(s"Unknown event object, no type present.")
@@ -42,6 +46,8 @@ trait EventJsonSupport extends SprayJsonSupport with DefaultJsonProtocol {
 
   implicit val numbersChangedEventFormat: JsonFormat[NumbersChangedEvent] = jsonFormat4(NumbersChangedEvent)
   implicit val instanceAddedEventFormat: JsonFormat[InstanceAddedEvent] = jsonFormat2(InstanceAddedEvent)
+  implicit val instanceRemovedEventFormat: JsonFormat[InstanceRemovedEvent] = jsonFormat2(InstanceRemovedEvent)
+  implicit val stateChangedEventFormat: JsonFormat[StateChangedEvent] = jsonFormat2(StateChangedEvent)
 
 }
 
@@ -60,6 +66,17 @@ final case class InstanceAddedEvent (
    instanceAdded: Instance,
    override val eventType: EventEnums.EventType.Value = EventEnums.EventType.InstanceAddedEvent
 ) extends Event
+
+final case class InstanceRemovedEvent (
+   instanceRemoved: Instance,
+   override val eventType: EventEnums.EventType.Value = EventEnums.EventType.InstanceRemovedEvent
+) extends Event
+
+final case class StateChangedEvent (
+    instanceChanged: Instance,
+    override val eventType: EventEnums.EventType.Value = EventEnums.EventType.StateChangedEvent
+) extends Event
+
 
 object EventEnums {
 
