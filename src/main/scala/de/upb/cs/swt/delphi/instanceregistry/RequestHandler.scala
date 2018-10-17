@@ -2,9 +2,11 @@ package de.upb.cs.swt.delphi.instanceregistry
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
+import akka.stream.{ActorMaterializer, Materializer, OverflowStrategy}
+import akka.stream.scaladsl.{Keep, Sink, Source}
 import de.upb.cs.swt.delphi.instanceregistry.connection.RestClient
 import de.upb.cs.swt.delphi.instanceregistry.daos.{DynamicInstanceDAO, InstanceDAO}
-import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.{Instance, InstanceEnums}
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model._
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.{ComponentType, InstanceState}
 
 import scala.concurrent.duration.Duration
@@ -14,9 +16,14 @@ import scala.util.{Failure, Success, Try}
 class RequestHandler (configuration: Configuration) extends AppLogging {
 
   implicit val system : ActorSystem = Registry.system
+  implicit val materializer : Materializer = ActorMaterializer()
   implicit val ec : ExecutionContext = system.dispatcher
 
   private[instanceregistry] val instanceDao : InstanceDAO = new DynamicInstanceDAO(configuration)
+
+  val (eventActor, eventPublisher) = Source.actorRef[Event](0, OverflowStrategy.dropNew)
+    .toMat(Sink.asPublisher(fanout = false))(Keep.both)
+    .run()
 
   def initialize() : Unit = {
     log.info("Initializing request handler...")
@@ -48,7 +55,10 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
       dockerId = None, instanceState = InstanceState.Running)
 
     instanceDao.addInstance(newInstance) match {
-      case Success(_) => Success(newID)
+      case Success(_) =>
+        fireNumbersChangedEvent()
+        fireInstanceAddedEvent(newInstance)
+        Success(newID)
       case Failure(x) => Failure(x)
     }
   }
@@ -65,6 +75,7 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
     } else if(isInstanceDockerContainer(instanceId)){
       OperationResult.IsDockerContainer
     } else {
+      fireNumbersChangedEvent()
       instanceDao.removeInstance(instanceId)
       OperationResult.Ok
     }
@@ -163,6 +174,8 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
     instanceDao.addInstance(newInstance) match {
       case Success(_) =>
         log.info("Successfully registered.")
+        fireInstanceAddedEvent(newInstance)
+        fireNumbersChangedEvent()
         Success(newId)
       case Failure(x) =>
         log.info(s"Failed to register. Exception: $x")
@@ -400,7 +413,9 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
         log.info("Deleting container...")
         //TODO: Delete container (async?)
         instanceDao.removeInstance(id) match {
-          case Success(_) => OperationResult.Ok
+          case Success(_) =>
+            fireNumbersChangedEvent()
+            OperationResult.Ok
           case Failure(_) => OperationResult.InternalError
         }
       } else {
@@ -427,6 +442,18 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
 
   def isInstanceDockerContainer(id: Long) : Boolean = {
     instanceDao.getDockerIdFor(id).isSuccess
+  }
+
+  private def fireNumbersChangedEvent(): Unit = {
+    val noOfCrawlers = instanceDao.getInstancesOfType(ComponentType.Crawler).size
+    val noOfApis = instanceDao.getInstancesOfType(ComponentType.WebApi).size
+    val noOfApps = instanceDao.getInstancesOfType(ComponentType.WebApp).size
+
+    eventActor ! NumbersChangedEvent(noOfCrawlers, noOfApis, noOfApps)
+  }
+
+  private def fireInstanceAddedEvent(addedInstance: Instance): Unit = {
+    eventActor ! InstanceAddedEvent(addedInstance)
   }
 
   private def countConsecutivePositiveMatchingResults(id : Long) : Int = {

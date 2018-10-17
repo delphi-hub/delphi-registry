@@ -1,15 +1,14 @@
 package de.upb.cs.swt.delphi.instanceregistry.connection
 
 import akka.actor.ActorSystem
-import akka.http.scaladsl.model.ws.{TextMessage, UpgradeToWebSocket}
+import akka.http.scaladsl.model.ws.{Message, TextMessage}
 import akka.http.scaladsl.model.{HttpResponse, StatusCodes}
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.HttpApp
-import akka.stream.{ActorMaterializer, OverflowStrategy}
-import akka.stream.scaladsl.{Keep, Sink, Source}
-import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.EventEnums.EventType
+import akka.stream.ActorMaterializer
+import akka.stream.scaladsl.{Flow, Sink, Source}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.ComponentType
-import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.{Event, EventJsonSupport, Instance, InstanceJsonSupport}
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model._
 import de.upb.cs.swt.delphi.instanceregistry.{AppLogging, Registry, RequestHandler}
 import spray.json._
 
@@ -25,10 +24,6 @@ object Server extends HttpApp with InstanceJsonSupport with EventJsonSupport wit
   implicit val system : ActorSystem = Registry.system
   implicit val materializer : ActorMaterializer = ActorMaterializer()
   implicit val ec : ExecutionContext = system.dispatcher
-
-  val (eventActor, eventPublisher) = Source.actorRef[Event](100, OverflowStrategy.fail)
-    .toMat(Sink.asPublisher(fanout = true))(Keep.both)
-    .run()
 
   private val handler : RequestHandler = Registry.requestHandler
 
@@ -62,8 +57,6 @@ object Server extends HttpApp with InstanceJsonSupport with EventJsonSupport wit
         val paramInstance : Instance = InstanceString.parseJson.convertTo[Instance](instanceFormat)
         handler.handleRegister(paramInstance) match {
           case Success(id) =>
-            fireInstanceAddedEvent(handler.getInstance(id).get)
-            fireNumbersChangedEvent()
             complete{id.toString}
           case Failure(_) =>  complete(HttpResponse(StatusCodes.InternalServerError, entity = "An internal server error occurred."))
         }
@@ -89,7 +82,6 @@ object Server extends HttpApp with InstanceJsonSupport with EventJsonSupport wit
           complete{HttpResponse(StatusCodes.BadRequest, entity = s"Cannot remove instance with id $Id, this instance is " +
             s"running inside a docker container. Call /delete to remove it from the server and delete the container.")}
         case handler.OperationResult.Ok =>
-          fireNumbersChangedEvent()
           log.info(s"Successfully removed instance with id $Id")
           complete {s"Successfully removed instance with id $Id"}
       }
@@ -118,7 +110,7 @@ object Server extends HttpApp with InstanceJsonSupport with EventJsonSupport wit
       val compType : ComponentType = ComponentType.values.find(v => v.toString == compTypeString).orNull
 
       if(compType != null) {
-        fireNumbersChangedEvent() //TODO:Remove test call
+        handler.eventActor ! NumbersChangedEvent(1,2,3) //TODO: Remove test call
         complete{handler.getNumberOfInstances(compType).toString()}
       } else {
         log.error(s"Failed to deserialize parameter string $compTypeString to ComponentType.")
@@ -177,8 +169,6 @@ object Server extends HttpApp with InstanceJsonSupport with EventJsonSupport wit
         log.info(s"Trying to deploy container of type $compType" + (if(name.isDefined){s" with name ${name.get}..."}else {"..."}))
         handler.handleDeploy(compType, name) match {
           case Success(id) =>
-            fireInstanceAddedEvent(handler.getInstance(id).get)
-            fireNumbersChangedEvent()
             complete{HttpResponse(StatusCodes.Accepted, entity = id.toString)}
           case Failure(x) =>
             complete{HttpResponse(StatusCodes.InternalServerError, entity = s"Internal server error. Message: ${x.getMessage}")}
@@ -344,7 +334,6 @@ object Server extends HttpApp with InstanceJsonSupport with EventJsonSupport wit
           log.warning(s"Cannot delete id $id, that instance is not stopped.")
           complete {HttpResponse(StatusCodes.BadRequest, entity = s"Id $id is not stopped.")}
         case handler.OperationResult.Ok =>
-          fireNumbersChangedEvent()
           complete{HttpResponse(StatusCodes.Accepted, entity = "Operation accepted.")}
         case handler.OperationResult.InternalError =>
           complete{HttpResponse(StatusCodes.InternalServerError, entity = s"Internal server error")}
@@ -353,24 +342,27 @@ object Server extends HttpApp with InstanceJsonSupport with EventJsonSupport wit
   }
 
   def streamEvents() : server.Route = {
-    val source = Source.fromPublisher(eventPublisher).map(event => TextMessage(event.toJson(eventFormat).toString))
-
-    //eventActor ! Event(EventType.StateChangedEvent, "DemoEvent")
-
-    extractRequest { r =>
-      r.header[UpgradeToWebSocket] match {
-        case Some(upgrade) => complete(upgrade.handleMessagesWithSinkSource(Sink.foreach(println), source))
-        case None => complete(HttpResponse(400, entity = "Not a valid websocket request!"))
+    handleWebSocketMessages{
+      Flow[Message]
+        .map{
+          case TextMessage.Strict(msg: String) => msg
+          case _ => println("Ignored non-text message.")
+        }
+        .via(
+          Flow.fromSinkAndSource(Sink.foreach(println), Source.fromPublisher(handler.eventPublisher)
+        .map(event => event.toJson(eventFormat).toString))
+        )
+        .map{msg: String => TextMessage.Strict(msg + "\n")}
+        .watchTermination() { (_, done) =>
+        done.onComplete {
+          case Success(_) =>
+            log.info("Stream route completed successfully")
+          case Failure(ex) =>
+            log.error(s"Stream route completed with failure : $ex")
+        }
       }
     }
-  }
 
-  private def fireInstanceAddedEvent(instanceAdded: Instance) : Unit = {
-    eventActor ! Event(EventType.InstanceAddedEvent, instanceAdded.toJson(instanceFormat).toString)
-  }
-
-  private def fireNumbersChangedEvent() : Unit = {
-    eventActor ! Event(EventType.NumbersChangedEvent, "Demo Data")
   }
 
 
