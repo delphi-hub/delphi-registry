@@ -109,5 +109,22 @@ class ContainerCommands(connection: DockerConnection) extends JsonSupport with C
     }
   }
 
+  def get(
+           containerId: String
+         )(implicit ec: ExecutionContext): Future[NetworkSettings] = {
+    val request = Get(buildUri(containersPath / containerId / "json"))
+    Await.result(Http(system).singleRequest(request) map { response =>
+
+      // connection.sendRequest(request).flatMap { response =>
+      response.status match {
+        case StatusCodes.OK =>
+          Unmarshal(response).to[NetworkSettings]
+        case StatusCodes.NotFound =>
+          throw new ContainerNotFoundException(containerId)
+        case _ =>
+          unknownResponseFuture(response)
+      }
+    }, Duration.Inf)
+  }
 
 }

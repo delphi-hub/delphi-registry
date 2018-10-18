@@ -27,6 +27,8 @@ class DockerActor(connection: DockerConnection) extends Actor with ActorLogging 
       val createContainer = Await.result(container.create(containerConfig, containerName), Duration.Inf)
       val startContainer = Await.result(container.start(createContainer.Id), Duration.Inf)
       log.info(s"Docker Instance created and started")
+      val getInfo = Await.result(container.get(createContainer.Id), Duration.Inf)
+      log.info("ip address is" + getInfo.IPAddress)
       sender ! (createContainer.Id, createContainer.Warnings)
 
     }
