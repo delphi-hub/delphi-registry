@@ -28,18 +28,27 @@ object Registry extends AppLogging {
     val dockerActor = system.actorOf(DockerActor.props(DockerConnection.fromEnvironment()))
 
     implicit val timeout = Timeout(10 seconds)
-  //  val dockerId
+
+    val dockerImage = new DockerImage()
+    val componentType = "DelphiManagement"
+
+    log.info("image is " + dockerImage.getImageName(componentType))
+
+    //  val dockerId
 
     //  val future = dockerActor ? create(ContainerConfig("registry_test"))
 
     //    val future: Future[Any] = dockerActor ? create(ContainerConfig("registry"))
-//     ask(dockerActor, create(ContainerConfig("24santoshr/delphi-registry")))
+    //     ask(dockerActor, create(ContainerConfig("24santoshr/delphi-registry")))
+
+    //    dockerActor ! ContainerConfig(dockerImage.getImageName(componentType)))
+
+    //    log.info("image name is "+DockerImage())
+
+    dockerActor ! create(ContainerConfig(dockerImage.getImageName(componentType)))
 
 
-dockerActor ! create(ContainerConfig(DockerImage.ComponentType.toString()))
-
-
-    dockerActor ! create(ContainerConfig("24santoshr/delphi-registry"))
+    //  dockerActor ! create(ContainerConfig("24santoshr/delphi-registry"))
 
     //val result = Await.result(future, Duration.Inf).asInstanceOf[Any]
 
