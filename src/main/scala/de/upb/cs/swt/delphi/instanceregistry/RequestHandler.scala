@@ -2,7 +2,8 @@ package de.upb.cs.swt.delphi.instanceregistry
 
 import akka.actor._
 import akka.http.scaladsl.model.StatusCodes
-import de.upb.cs.swt.delphi.instanceregistry.Docker.DockerConnection
+import de.upb.cs.swt.delphi.instanceregistry.Docker.DockerActor.{delete, start}
+import de.upb.cs.swt.delphi.instanceregistry.Docker.{DockerActor, DockerConnection}
 import de.upb.cs.swt.delphi.instanceregistry.connection.RestClient
 import de.upb.cs.swt.delphi.instanceregistry.daos.{DynamicInstanceDAO, InstanceDAO}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.{ComponentType, InstanceState}
@@ -15,12 +16,11 @@ import scala.util.{Failure, Success, Try}
 
 class RequestHandler(configuration: Configuration, connection: DockerConnection) extends AppLogging {
 
-  //val dockerConnection = new
 
   implicit val system: ActorSystem = Registry.system
   implicit val ec: ExecutionContext = system.dispatcher
 
-  // val dockerActor = system.actorOf(DockerActor.props(connection))
+  val dockerActor = system.actorOf(DockerActor.props(connection))
 
 
   private[instanceregistry] val instanceDao: InstanceDAO = new DynamicInstanceDAO(configuration)
@@ -175,7 +175,9 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
 
     //TODO: Fetch the docker image from the list based on condition? (to be discussed)
 
-    //dockerActor ? create(ContainerConfig("String"))
+    // val future: Future[Any] = dockerActor ? create(ContainerConfig("registry"))
+    //     ask(dockerActor, create(ContainerConfig("24santoshr/delphi-registry")))
+    //dockerActor ! create(ContainerConfig(ComponentType.toString()))
 
     log.info(s"Deployed new container with id $dockerId.")
 
@@ -404,8 +406,7 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
       val instance = instanceDao.getInstance(id).get
       if (instance.instanceState == InstanceState.Stopped) {
         log.info("Starting container...")
-        // dockerActor ! start(instance.dockerId.get)
-        // dockerClient.start(instance.dockerId.get)
+         dockerActor ! start(instance.dockerId.get)
         //TODO: Start container (async?)
         OperationResult.Ok
       } else {
@@ -431,8 +432,8 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
       val instance = instanceDao.getInstance(id).get
       if (instance.instanceState == InstanceState.Stopped) {
         log.info("Deleting container...")
-        // dockerClient.removeContainer(instance.dockerId.get)
         //TODO: Delete container (async?)
+        dockerActor ! delete(instance.dockerId.get)
         instanceDao.removeInstance(id) match {
           case Success(_) => OperationResult.Ok
           case Failure(_) => OperationResult.InternalError
