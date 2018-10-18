@@ -374,7 +374,7 @@ object Server extends HttpApp with InstanceJsonSupport with EventJsonSupport wit
       Flow[Message]
         .map{
           case TextMessage.Strict(msg: String) => msg
-          case _ => println("Ignored non-text message.") 
+          case _ => println("Ignored non-text message.")
         }
         .via(
           Flow.fromSinkAndSource(Sink.foreach(println), Source.fromPublisher(handler.eventPublisher)
