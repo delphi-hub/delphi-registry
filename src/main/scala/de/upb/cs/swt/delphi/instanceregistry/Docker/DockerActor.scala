@@ -18,18 +18,18 @@ class DockerActor(connection: DockerConnection) extends Actor with ActorLogging 
   log.info(s"DockerActor started")
 
   def receive: PartialFunction[Any, Unit] = {
+
     case start(containerId) => {
-      log.info(s"Docker Container started")
-      container.start(containerId)
+      log.info(s"Docker Container stopped")
+      container.stop(containerId)
     }
     case create(containerConfig, containerName) => {
       val s = Await.result(container.create(containerConfig, containerName), Duration.Inf)
       log.info(s"Docker Instance created" + s.Id)
-      //      val f = Future[Seq[CreateContainerResponse]]  {s.Id, s.Warnings}
 
-      
+      container.start(s.Id)
+      sender ! (s.Id, s.Warnings)
 
-      //system.terminate()
     }
     case stop(containerId) => {
       log.info(s"Docker Container stopped")
@@ -47,7 +47,6 @@ object DockerActor {
 
 
   def props(connection: DockerConnection) = Props(new DockerActor(connection: DockerConnection))
-
 
   case class start(containerId: String)
 

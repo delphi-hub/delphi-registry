@@ -17,7 +17,7 @@ object DockerConnection {
     val host = env("DOCKER_HOST").getOrElse {
       "http://localhost:9095"
     }
-    DockerHttpConnection(host.replaceFirst("tcp:", "http:"))
+    DockerHttpConnection(host)
   }
 }
 

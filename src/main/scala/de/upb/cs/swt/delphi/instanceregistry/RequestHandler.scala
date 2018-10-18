@@ -2,7 +2,9 @@ package de.upb.cs.swt.delphi.instanceregistry
 
 import akka.actor._
 import akka.http.scaladsl.model.StatusCodes
-import de.upb.cs.swt.delphi.instanceregistry.Docker.DockerActor.{create, start}
+import akka.pattern.ask
+import akka.util.Timeout
+import de.upb.cs.swt.delphi.instanceregistry.Docker.DockerActor.{create, start, stop}
 import de.upb.cs.swt.delphi.instanceregistry.Docker.{ContainerConfig, DockerActor, DockerConnection, DockerImage}
 import de.upb.cs.swt.delphi.instanceregistry.connection.RestClient
 import de.upb.cs.swt.delphi.instanceregistry.daos.{DynamicInstanceDAO, InstanceDAO}
@@ -10,7 +12,7 @@ import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnu
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.{Instance, InstanceEnums}
 
 import scala.concurrent.duration._
-import scala.concurrent.{Await, ExecutionContext}
+import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
 
@@ -169,15 +171,12 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
     val dockerId: String = ???
     log.info(s"Initializing Docker")
 
+
+    implicit val timeout = Timeout(10 seconds)
+
     val dockerImage = new DockerImage()
 
-    //implicit val timeout = Timeout(10 seconds)
-    //  val future = dockerActor ? create(ContainerConfig("registry_test"))
-
-
-    // val future: Future[Any] = dockerActor ? create(ContainerConfig("registry"))
-    //     ask(dockerActor, create(ContainerConfig("24santoshr/delphi-registry")))
-    dockerActor ! create(ContainerConfig(dockerImage.getImageName(componentType)))
+    val future: Future[Any] = dockerActor ? create(ContainerConfig(dockerImage.getImageName(componentType)))
 
     log.info(s"Deployed new container with id $dockerId.")
 
@@ -379,8 +378,8 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
       }
       log.info("Stopping container...")
 
-      //  dockerClient.stop(instance.dockerId.get)
-
+      implicit val timeout = Timeout(10 seconds)
+      val future: Future[Any] = dockerActor ? stop(instance.dockerId.get)
       //TODO: Stop the container (async?)
       instanceDao.setStateFor(instance.id.get, InstanceState.Stopped) //TODO: Move state update to async block?
 
@@ -406,7 +405,8 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
       val instance = instanceDao.getInstance(id).get
       if (instance.instanceState == InstanceState.Stopped) {
         log.info("Starting container...")
-            dockerActor ! start(instance.dockerId.get)
+        implicit val timeout = Timeout(10 seconds)
+        val future: Future[Any] = dockerActor ? start(instance.dockerId.get)
         //TODO: Start container (async?)
         OperationResult.Ok
       } else {
