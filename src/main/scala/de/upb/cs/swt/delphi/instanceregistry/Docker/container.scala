@@ -245,11 +245,11 @@ case class ContainerState(
                          )
 
 case class NetworkSettings(
-                            ipAddress: String,
-                            ipPrefixLength: Int,
-                            gateway: String,
-                            bridge: String,
-                            ports: Map[Port, Seq[PortBinding]]
+                            IPAddress: String
+                            // ipPrefixLength: Int,
+                            //gateway: String,
+                            //bridge: String,
+                            //ports: Map[Port, Seq[PortBinding]]
                           )
 
 case class ContainerInfo(
@@ -319,8 +319,9 @@ case class ContainerConfig(
                             Entrypoint: Option[Seq[String]] = None,
                             Cmd: Seq[String] = Seq.empty,
                             Env: Seq[String] = Seq.empty)
-                            //Id: Seq[String] = Seq.empty,
-                            //IPAddress: Seq[String] = Seq.empty)
+
+//Id: Seq[String] = Seq.empty,
+//IPAddress: Seq[String] = Seq.empty)
 
 // ExposedPorts: Seq[String] = Seq.empty)
 

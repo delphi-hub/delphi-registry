@@ -57,9 +57,23 @@ trait JsonSupport extends SprayJsonSupport with DefaultJsonProtocol {
       case y => throw new RuntimeException(s"Unexpected type $y while deserializing")
     }
   }
+
+  implicit val NetworkSettingsFormat = new JsonFormat[NetworkSettingsEnums.CommandType] {
+
+    def write(compType: NetworkSettingsEnums.CommandType) = JsString(compType.toString)
+
+    def read(value: JsValue): NetworkSettingsEnums.CommandType = value match {
+      case JsString(s) => s match {
+        case "Image" => NetworkSettingsEnums.CommandType.host
+        case x => throw new RuntimeException(s"Unexpected string value $x.")
+      }
+      case y => throw new RuntimeException(s"Unexpected type $y while deserializing")
+    }
+  }
   implicit val StatusFormat = jsonFormat6(ContainerStatus)
   implicit val ResponseFormat = jsonFormat2(CreateContainerResponse)
   implicit val ConfigFormat = jsonFormat4(ContainerConfig)
+  implicit val NetworkFormat = jsonFormat1(NetworkSettings)
 }
 
 
@@ -105,3 +119,12 @@ object ContainerConfigEnums {
 
 }
 
+object NetworkSettingsEnums {
+  type CommandType = CommandType.Value
+
+  object CommandType extends Enumeration {
+    val host: Value = Value("IPAddress")
+
+  }
+
+}
