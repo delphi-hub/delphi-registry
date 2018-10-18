@@ -143,8 +143,9 @@ object Server extends HttpApp with InstanceJsonSupport with EventJsonSupport wit
   }
 
   /**
-    *
-    * @return
+    * Returns an instance of the specified ComponentType that can be used to resolve dependencies. The ComponentType must
+    * be passed as an query argument named 'ComponentType' (so the call is /matchingInstance?ComponentType=Crawler).
+    * @return Server route that either maps to 200 OK response containing the instance, or the resp. error codes.
     */
   def matchingInstance() : server.Route = parameters('ComponentType.as[String]){ compTypeString =>
     get{
@@ -169,6 +170,11 @@ object Server extends HttpApp with InstanceJsonSupport with EventJsonSupport wit
     }
   }
 
+  /**
+    * Applies a matching result to the instance with the specified id. The matching result and id are passed as query
+    * parameters named 'Id' and 'MatchingSuccessful' (so the call is /matchingResult?Id=42&MatchingSuccessful=True).
+    * @return Server route that either maps to 200 OK or to the respective error codes
+    */
   def matchInstance() : server.Route = parameters('Id.as[Long], 'MatchingSuccessful.as[Boolean]){ (id, matchingResult) =>
     post {
       log.debug(s"POST /matchingResult?Id=$id&MatchingSuccessful=$matchingResult has been called")
@@ -183,6 +189,12 @@ object Server extends HttpApp with InstanceJsonSupport with EventJsonSupport wit
     }
   }
 
+  /**
+    * Deploys a new container of the specified type. Also adds the resulting instance to the database. The mandatory
+    * parameter 'ComponentType' is passed as a query argument. The optional parameter 'InstanceName' may also be passed as
+    * query argument (so the resulting call may be /deploy?ComponentType=Crawler&InstanceName=MyCrawler).
+    * @return Server route that either maps to 202 ACCEPTED and the generated id of the instance, or the resp. error codes.
+    */
   def deployContainer() : server.Route = parameters('ComponentType.as[String], 'InstanceName.as[String].?) { (compTypeString, name) =>
     post {
       if(name.isEmpty){
@@ -208,6 +220,11 @@ object Server extends HttpApp with InstanceJsonSupport with EventJsonSupport wit
     }
   }
 
+  /**
+    * Called to report that the instance with the specified id was started successfully. The Id is passed as query
+    * parameter named 'Id' (so the resulting call is /reportStart?Id=42)
+    * @return Server route that either maps to 200 OK or the respective error codes
+    */
   def reportStart() : server.Route = parameters('Id.as[Long]) {id =>
     post{
       handler.handleReportStart(id) match {
@@ -226,6 +243,11 @@ object Server extends HttpApp with InstanceJsonSupport with EventJsonSupport wit
     }
   }
 
+  /**
+    * Called to report that the instance with the specified id was stopped successfully. The Id is passed as query
+    * parameter named 'Id' (so the resulting call is /reportStop?Id=42)
+    * @return Server route that either maps to 200 OK or the respective error codes
+    */
   def reportStop() : server.Route = parameters('Id.as[Long]) {id =>
     post{
       handler.handleReportStop(id) match {
@@ -243,6 +265,11 @@ object Server extends HttpApp with InstanceJsonSupport with EventJsonSupport wit
     }
   }
 
+  /**
+    * Called to report that the instance with the specified id encountered a failure. The Id is passed as query
+    * parameter named 'Id' (so the resulting call is /reportFailure?Id=42)
+    * @return Server route that either maps to 200 OK or the respective error codes
+    */
   def reportFailure() : server.Route = parameters('Id.as[Long], 'ErrorLog.as[String].?) {(id, errorLog) =>
     post{
       if(errorLog.isEmpty){
@@ -266,6 +293,11 @@ object Server extends HttpApp with InstanceJsonSupport with EventJsonSupport wit
     }
   }
 
+  /**
+    * Called to pause the instance with the specified id. The associated docker container is paused. The Id is passed
+    * as a query argument named 'Id' (so the resulting call is /pause?Id=42).
+    * @return Server route that either maps to 202 ACCEPTED or the expected error codes.
+    */
   def pause() : server.Route = parameters('Id.as[Long]) { id =>
     post{
       log.debug(s"POST /pause?Id=$id has been called")
@@ -287,6 +319,11 @@ object Server extends HttpApp with InstanceJsonSupport with EventJsonSupport wit
     }
   }
 
+  /**
+    * Called to resume the instance with the specified id. The associated docker container is resumed. The Id is passed
+    * as a query argument named 'Id' (so the resulting call is /resume?Id=42).
+    * @return Server route that either maps to 202 ACCEPTED or the expected error codes.
+    */
   def resume() : server.Route = parameters('Id.as[Long]) { id =>
     post {
       log.debug(s"POST /resume?Id=$id has been called")
@@ -308,6 +345,11 @@ object Server extends HttpApp with InstanceJsonSupport with EventJsonSupport wit
     }
   }
 
+  /**
+    * Called to stop the instance with the specified id. The associated docker container is stopped. The Id is passed
+    * as a query argument named 'Id' (so the resulting call is /stop?Id=42).
+    * @return Server route that either maps to 202 ACCEPTED or the expected error codes.
+    */
   def stop() : server.Route = parameters('Id.as[Long]) { id =>
     post {
       log.debug(s"POST /stop?Id=$id has been called")
@@ -326,6 +368,11 @@ object Server extends HttpApp with InstanceJsonSupport with EventJsonSupport wit
     }
   }
 
+  /**
+    * Called to start the instance with the specified id. The associated docker container is started. The Id is passed
+    * as a query argument named 'Id' (so the resulting call is /start?Id=42).
+    * @return Server route that either maps to 202 ACCEPTED or the expected error codes.
+    */
   def start() : server.Route = parameters('Id.as[Long]) { id =>
     post{
       log.debug(s"POST /start?Id=$id has been called")
@@ -347,6 +394,11 @@ object Server extends HttpApp with InstanceJsonSupport with EventJsonSupport wit
     }
   }
 
+  /**
+    * Called to delete the instance with the specified id as well as the associated docker container. The Id is passed
+    * as a query argument named 'Id' (so the resulting call is /delete?Id=42).
+    * @return Server route that either maps to 202 ACCEPTED or the respective error codes.
+    */
   def deleteContainer() : server.Route = parameters('Id.as[Long]) { id =>
     post{
       log.debug(s"POST /delete?Id=$id has been called")
@@ -368,9 +420,15 @@ object Server extends HttpApp with InstanceJsonSupport with EventJsonSupport wit
     }
   }
 
+  /**
+    * Creates a WebSocketConnection that streams events that are issued by the registry to all connected clients.
+    * @return Server route that maps to the WebSocketConnection
+    */
   def streamEvents() : server.Route = {
     handleWebSocketMessages{
+      //Flush pending messages from publisher
       Source.fromPublisher(handler.eventPublisher).to(Sink.ignore).run()
+      //Create flow from publisher
       Flow[Message]
         .map{
           case TextMessage.Strict(msg: String) => msg
