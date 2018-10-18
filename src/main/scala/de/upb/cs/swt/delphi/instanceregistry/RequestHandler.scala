@@ -7,7 +7,7 @@ import akka.stream.scaladsl.{Keep, Sink, Source}
 import de.upb.cs.swt.delphi.instanceregistry.connection.RestClient
 import de.upb.cs.swt.delphi.instanceregistry.daos.{DynamicInstanceDAO, InstanceDAO}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model._
-import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.{ComponentType, InstanceState, State}
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.{ComponentType, InstanceState}
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext}
@@ -22,7 +22,7 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
   private[instanceregistry] val instanceDao : InstanceDAO = new DynamicInstanceDAO(configuration)
 
   val (eventActor, eventPublisher) = Source.actorRef[RegistryEvent](0, OverflowStrategy.dropNew)
-    .toMat(Sink.asPublisher(fanout = false))(Keep.both)
+    .toMat(Sink.asPublisher(fanout = true))(Keep.both)
     .run()
 
   def initialize() : Unit = {
@@ -445,7 +445,7 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
     instanceDao.getInstance(id)
   }
 
-  def instanceHasState(id: Long, state : State ) : Boolean = {
+  def instanceHasState(id: Long, state : InstanceState ) : Boolean = {
     instanceDao.getInstance(id) match {
       case Some(instance) => instance.instanceState == state
       case None => false

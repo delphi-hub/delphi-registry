@@ -27,6 +27,7 @@ object Server extends HttpApp with InstanceJsonSupport with EventJsonSupport wit
 
   private val handler : RequestHandler = Registry.requestHandler
 
+  //Routes that map http endpoints to methods in this object
   override def routes : server.Route =
       /****************BASIC OPERATIONS****************/
       path("register") {entity(as[String]) { jsonString => register(jsonString) }} ~
@@ -48,7 +49,14 @@ object Server extends HttpApp with InstanceJsonSupport with EventJsonSupport wit
       /****************EVENT OPERATIONS****************/
       path("events") { streamEvents()}
 
-   def register(InstanceString: String) : server.Route = {
+
+  /**
+    * Registers a new instance at the registry. This endpoint is intended for instances that are not running inside
+    * a docker container, as the Id, DockerId and InstanceState are being ignored.
+    * @param InstanceString String containing the serialized instance that is registering
+    * @return Server route that either maps to a 200 OK response if successful, or to the respective error codes
+    */
+  def register(InstanceString: String) : server.Route = {
     post
     {
       log.debug(s"POST /register has been called, parameter is: $InstanceString")
@@ -69,7 +77,13 @@ object Server extends HttpApp with InstanceJsonSupport with EventJsonSupport wit
     }
   }
 
-   def deregister() : server.Route = parameters('Id.as[Long]){ Id =>
+  /**
+    * Removes an instance. The id of the instance that is calling deregister must be passed as an query argument named
+    * 'Id' (so the call is /deregister?Id=42). This endpoint is intended for instances that are not running inside
+    * a docker container, as the respective instance will be permanently deleted from the registry.
+    * @return Server route that either maps to a 200 OK response if successful, or to the respective error codes.
+    */
+  def deregister() : server.Route = parameters('Id.as[Long]){ Id =>
     post {
       log.debug(s"POST /deregister?Id=$Id has been called")
 
@@ -88,6 +102,11 @@ object Server extends HttpApp with InstanceJsonSupport with EventJsonSupport wit
     }
   }
 
+  /**
+    * Returns a list of instances with the specified ComponentType. The ComponentType must be passed as an query argument
+    * named 'ComponentType' (so the call is /instances?ComponentType=Crawler).
+    * @return Server route that either maps to a 200 OK response containing the list of instances, or the resp. error codes.
+    */
   def fetchInstancesOfType () : server.Route = parameters('ComponentType.as[String]) { compTypeString =>
     get {
       log.debug(s"GET /instances?ComponentType=$compTypeString has been called")
@@ -103,6 +122,11 @@ object Server extends HttpApp with InstanceJsonSupport with EventJsonSupport wit
     }
   }
 
+  /**
+    * Returns the number of instances for the specified ComponentType. The ComponentType must be passed as an query
+    * argument named 'ComponentType' (so the call is /numberOfInstances?ComponentType=Crawler).
+    * @return Server route that either maps to a 200 OK response containing the number of instance, or the resp. error codes.
+    */
   def numberOfInstances() : server.Route = parameters('ComponentType.as[String]) { compTypeString =>
     get {
       log.debug(s"GET /numberOfInstances?ComponentType=$compTypeString has been called")
@@ -118,6 +142,10 @@ object Server extends HttpApp with InstanceJsonSupport with EventJsonSupport wit
     }
   }
 
+  /**
+    *
+    * @return
+    */
   def matchingInstance() : server.Route = parameters('ComponentType.as[String]){ compTypeString =>
     get{
       log.debug(s"GET /matchingInstance?ComponentType=$compTypeString has been called")
@@ -342,10 +370,11 @@ object Server extends HttpApp with InstanceJsonSupport with EventJsonSupport wit
 
   def streamEvents() : server.Route = {
     handleWebSocketMessages{
+      Source.fromPublisher(handler.eventPublisher).to(Sink.ignore).run()
       Flow[Message]
         .map{
           case TextMessage.Strict(msg: String) => msg
-          case _ => println("Ignored non-text message.")
+          case _ => println("Ignored non-text message.") 
         }
         .via(
           Flow.fromSinkAndSource(Sink.foreach(println), Source.fromPublisher(handler.eventPublisher)
