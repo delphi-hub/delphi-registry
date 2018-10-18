@@ -18,7 +18,7 @@ trait InstanceJsonSupport extends SprayJsonSupport with DefaultJsonProtocol {
         case "ElasticSearch" => InstanceEnums.ComponentType.ElasticSearch
         case x => throw DeserializationException(s"Unexpected string value $x for component type.")
       }
-      case y => throw DeserializationException(s"Unexpected type $y while deserializing component type.")
+      case y => throw DeserializationException(s"Unexpected type $y during deserialization component type.")
     }
   }
 
@@ -35,7 +35,7 @@ trait InstanceJsonSupport extends SprayJsonSupport with DefaultJsonProtocol {
         case "NotReachable" => InstanceEnums.InstanceState.NotReachable
         case x => throw DeserializationException(s"Unexpected string value $x for instance state.")
       }
-      case y => throw DeserializationException(s"Unexpected type $y while deserializing instance state.")
+      case y => throw DeserializationException(s"Unexpected type $y during deserialization instance state.")
     }
   }
 

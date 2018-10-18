@@ -1,81 +1,81 @@
 package de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model
 
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.EventEnums.EventType
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.ComponentType
 import spray.json.{DefaultJsonProtocol, DeserializationException, JsObject, JsString, JsValue, JsonFormat}
 
 trait EventJsonSupport extends SprayJsonSupport with DefaultJsonProtocol with InstanceJsonSupport {
 
-  implicit val eventTypeFormat  : JsonFormat[EventEnums.EventType] = new JsonFormat[EventEnums.EventType] {
+  implicit val eventTypeFormat  : JsonFormat[EventType] = new JsonFormat[EventType] {
 
-    def write(eventType : EventEnums.EventType) = JsString(eventType.toString)
+    def write(eventType : EventType) = JsString(eventType.toString)
 
-    def read(value: JsValue) : EventEnums.EventType = value match {
+    def read(value: JsValue) : EventType = value match {
       case JsString(s) => s match {
-        case "StateChangedEvent" => EventEnums.EventType.StateChangedEvent
-        case "InstanceAddedEvent" => EventEnums.EventType.InstanceAddedEvent
-        case "InstanceRemovedEvent" => EventEnums.EventType.InstanceRemovedEvent
-        case "NumbersChangedEvent" => EventEnums.EventType.NumbersChangedEvent
+        case "StateChangedEvent" => EventType.StateChangedEvent
+        case "InstanceAddedEvent" => EventType.InstanceAddedEvent
+        case "InstanceRemovedEvent" => EventType.InstanceRemovedEvent
+        case "NumbersChangedEvent" => EventType.NumbersChangedEvent
         case x => throw DeserializationException(s"Unexpected string value $x for event type.")
       }
-      case y => throw DeserializationException(s"Unexpected type $y while deserializing event type.")
+      case y => throw DeserializationException(s"Unexpected type $y during deserialization event type.")
     }
   }
 
-  implicit val eventFormat : JsonFormat[Event] = new JsonFormat[Event] {
+  implicit val registryEventPayloadFormat: JsonFormat[RegistryEventPayload] = new JsonFormat[RegistryEventPayload] {
 
-    override def write(event: Event): JsValue = event match {
-      case nce: NumbersChangedEvent => numbersChangedEventFormat.write(nce)
-      case iae: InstanceAddedEvent => instanceAddedEventFormat.write(iae)
-      case ire: InstanceRemovedEvent => instanceRemovedEventFormat.write(ire)
-      case sce: StateChangedEvent => stateChangedEventFormat.write(sce)
-      case unrecognized => throw new RuntimeException(s"Unexpected type for event: $unrecognized")
+    def write(payload: RegistryEventPayload) : JsValue = payload match {
+      case ncp: NumbersChangedPayload => numbersChangedPayloadFormat.write(ncp)
+      case ip:  InstancePayload => instancePayloadFormat.write(ip)
+      case _ => throw new RuntimeException("Unsupported type of payload!")
     }
 
-    override def read(json: JsValue): Event = json match {
-      case known:JsObject if known.fields.contains("eventType") =>
-        known.fields("eventType") match {
-          case JsString("NumbersChangedEvent") => numbersChangedEventFormat.read(known)
-          case JsString("InstanceAddedEvent") => instanceAddedEventFormat.read(known)
-          case JsString("InstanceRemovedEvent") => instanceRemovedEventFormat.read(known)
-          case JsString("StateChangedEvent") => stateChangedEventFormat.read(known)
-          case unknown => throw DeserializationException(s"Unknown event type $unknown while deserializing.")
-        }
-      case _ => throw DeserializationException(s"Unknown event object, no type present.")
+    def read(json: JsValue): RegistryEventPayload = json match{
+      case jso: JsObject => if(jso.fields.isDefinedAt("instance")){
+        instancePayloadFormat.read(jso)
+      } else if(jso.fields.isDefinedAt("noOfCrawlers")){
+        numbersChangedPayloadFormat.read(jso)
+      } else {
+        throw DeserializationException("Unexpected type for event payload!")
+      }
+      case _ => throw DeserializationException("Unexpected type for event payload!")
     }
+
   }
 
-  implicit val numbersChangedEventFormat: JsonFormat[NumbersChangedEvent] = jsonFormat4(NumbersChangedEvent)
-  implicit val instanceAddedEventFormat: JsonFormat[InstanceAddedEvent] = jsonFormat2(InstanceAddedEvent)
-  implicit val instanceRemovedEventFormat: JsonFormat[InstanceRemovedEvent] = jsonFormat2(InstanceRemovedEvent)
-  implicit val stateChangedEventFormat: JsonFormat[StateChangedEvent] = jsonFormat2(StateChangedEvent)
+  implicit val eventFormat : JsonFormat[RegistryEvent] = jsonFormat2(RegistryEvent)
+  implicit val numbersChangedPayloadFormat: JsonFormat[NumbersChangedPayload] = jsonFormat2(NumbersChangedPayload)
+  implicit val instancePayloadFormat: JsonFormat[InstancePayload] = jsonFormat1(InstancePayload)
 
 }
 
-abstract class Event {
-  val eventType: EventEnums.EventType.Value
+final case class RegistryEvent (
+  eventType: EventType.Value,
+  payload: RegistryEventPayload
+)
+
+object RegistryEventFactory {
+
+  def createNumbersChangedEvent(componentType: ComponentType, newNumber: Int) : RegistryEvent =
+    RegistryEvent(EventType.NumbersChangedEvent, NumbersChangedPayload(componentType, newNumber))
+
+  def createInstanceAddedEvent(instance: Instance) : RegistryEvent =
+    RegistryEvent(EventType.InstanceAddedEvent, InstancePayload(instance))
+
+  def createInstanceRemovedEvent(instance: Instance) : RegistryEvent =
+    RegistryEvent(EventType.InstanceRemovedEvent, InstancePayload(instance))
+
+  def createStateChangedEvent(instance: Instance) : RegistryEvent =
+    RegistryEvent(EventType.StateChangedEvent, InstancePayload(instance))
+
 }
 
-final case class NumbersChangedEvent (
-  noOfCrawlers: Int,
-  noOfApis: Int,
-  noOfWebApps: Int,
-  override val eventType: EventEnums.EventType.Value = EventEnums.EventType.NumbersChangedEvent
-) extends Event
 
-final case class InstanceAddedEvent (
-   instanceAdded: Instance,
-   override val eventType: EventEnums.EventType.Value = EventEnums.EventType.InstanceAddedEvent
-) extends Event
+abstract class RegistryEventPayload
 
-final case class InstanceRemovedEvent (
-   instanceRemoved: Instance,
-   override val eventType: EventEnums.EventType.Value = EventEnums.EventType.InstanceRemovedEvent
-) extends Event
-
-final case class StateChangedEvent (
-    instanceChanged: Instance,
-    override val eventType: EventEnums.EventType.Value = EventEnums.EventType.StateChangedEvent
-) extends Event
+final case class NumbersChangedPayload (componentType: ComponentType, newNumber: Int) extends RegistryEventPayload
+final case class InstancePayload(instance: Instance) extends RegistryEventPayload
 
 
 object EventEnums {

@@ -7,7 +7,7 @@ import akka.stream.scaladsl.{Keep, Sink, Source}
 import de.upb.cs.swt.delphi.instanceregistry.connection.RestClient
 import de.upb.cs.swt.delphi.instanceregistry.daos.{DynamicInstanceDAO, InstanceDAO}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model._
-import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.{ComponentType, InstanceState}
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.{ComponentType, InstanceState, State}
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext}
@@ -21,7 +21,7 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
 
   private[instanceregistry] val instanceDao : InstanceDAO = new DynamicInstanceDAO(configuration)
 
-  val (eventActor, eventPublisher) = Source.actorRef[Event](0, OverflowStrategy.dropNew)
+  val (eventActor, eventPublisher) = Source.actorRef[RegistryEvent](0, OverflowStrategy.dropNew)
     .toMat(Sink.asPublisher(fanout = false))(Keep.both)
     .run()
 
@@ -57,7 +57,7 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
 
     instanceDao.addInstance(newInstance) match {
       case Success(_) =>
-        fireNumbersChangedEvent()
+        fireNumbersChangedEvent(newInstance.componentType)
         fireInstanceAddedEvent(newInstance)
         Success(newID)
       case Failure(x) => Failure(x)
@@ -76,9 +76,10 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
     } else if(isInstanceDockerContainer(instanceId)){
       OperationResult.IsDockerContainer
     } else {
-      fireInstanceRemovedEvent(instanceDao.getInstance(instanceId).get)
+      val instanceToRemove = instanceDao.getInstance(instanceId).get
+      fireInstanceRemovedEvent(instanceToRemove)
       instanceDao.removeInstance(instanceId)
-      fireNumbersChangedEvent()
+      fireNumbersChangedEvent(instanceToRemove.componentType)
       OperationResult.Ok
     }
   }
@@ -179,7 +180,7 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
       case Success(_) =>
         log.info("Successfully registered.")
         fireInstanceAddedEvent(newInstance)
-        fireNumbersChangedEvent()
+        fireNumbersChangedEvent(newInstance.componentType)
         Success(newId)
       case Failure(x) =>
         log.info(s"Failed to register. Exception: $x")
@@ -424,7 +425,7 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
         //TODO: Delete container (async?)
         instanceDao.removeInstance(id) match {
           case Success(_) =>
-            fireNumbersChangedEvent()
+            fireNumbersChangedEvent(instance.componentType)
             fireInstanceRemovedEvent(instance)
             OperationResult.Ok
           case Failure(_) => OperationResult.InternalError
@@ -444,7 +445,7 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
     instanceDao.getInstance(id)
   }
 
-  def instanceHasState(id: Long, state : InstanceEnums.State ) : Boolean = {
+  def instanceHasState(id: Long, state : State ) : Boolean = {
     instanceDao.getInstance(id) match {
       case Some(instance) => instance.instanceState == state
       case None => false
@@ -455,24 +456,21 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
     instanceDao.getDockerIdFor(id).isSuccess
   }
 
-  private def fireNumbersChangedEvent(): Unit = {
-    val noOfCrawlers = instanceDao.getInstancesOfType(ComponentType.Crawler).size
-    val noOfApis = instanceDao.getInstancesOfType(ComponentType.WebApi).size
-    val noOfApps = instanceDao.getInstancesOfType(ComponentType.WebApp).size
-
-    eventActor ! NumbersChangedEvent(noOfCrawlers, noOfApis, noOfApps)
+  private def fireNumbersChangedEvent(componentType: ComponentType): Unit = {
+    val newNumber = instanceDao.getInstancesOfType(componentType).size
+    eventActor ! RegistryEventFactory.createNumbersChangedEvent(componentType, newNumber)
   }
 
   private def fireInstanceAddedEvent(addedInstance: Instance): Unit = {
-    eventActor ! InstanceAddedEvent(addedInstance)
+    eventActor ! RegistryEventFactory.createInstanceAddedEvent(addedInstance)
   }
 
   private def fireInstanceRemovedEvent(removedInstance: Instance): Unit = {
-    eventActor ! InstanceRemovedEvent(removedInstance)
+    eventActor ! RegistryEventFactory.createInstanceRemovedEvent(removedInstance)
   }
 
   private def fireStateChangedEvent(updatedInstance: Instance): Unit = {
-    eventActor ! StateChangedEvent(updatedInstance)
+    eventActor ! RegistryEventFactory.createStateChangedEvent(updatedInstance)
   }
 
   private def countConsecutivePositiveMatchingResults(id : Long) : Int = {
