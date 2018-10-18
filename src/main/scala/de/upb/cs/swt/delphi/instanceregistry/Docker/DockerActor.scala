@@ -23,8 +23,12 @@ class DockerActor(connection: DockerConnection) extends Actor with ActorLogging 
       container.start(containerId)
     }
     case create(containerConfig, containerName) => {
-      Await.result(container.create(containerConfig, containerName), Duration.Inf)
-      log.info(s"Docker Instance created")
+      val s = Await.result(container.create(containerConfig, containerName), Duration.Inf)
+      log.info(s"Docker Instance created" + s.Id)
+      //      val f = Future[Seq[CreateContainerResponse]]  {s.Id, s.Warnings}
+
+      
+
       //system.terminate()
     }
     case stop(containerId) => {

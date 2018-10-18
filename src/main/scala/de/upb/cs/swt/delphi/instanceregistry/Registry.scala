@@ -4,7 +4,7 @@ import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import de.upb.cs.swt.delphi.instanceregistry.Docker.DockerActor.create
-import de.upb.cs.swt.delphi.instanceregistry.Docker.{ContainerConfig, DockerActor, DockerConnection, DockerImage}
+import de.upb.cs.swt.delphi.instanceregistry.Docker._
 import de.upb.cs.swt.delphi.instanceregistry.connection.Server
 
 import scala.concurrent.ExecutionContext
@@ -46,7 +46,6 @@ object Registry extends AppLogging {
     //    log.info("image name is "+DockerImage())
 
     dockerActor ! create(ContainerConfig(dockerImage.getImageName(componentType)))
-
 
     //  dockerActor ! create(ContainerConfig("24santoshr/delphi-registry"))
 

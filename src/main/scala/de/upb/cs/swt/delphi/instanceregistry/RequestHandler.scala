@@ -2,7 +2,7 @@ package de.upb.cs.swt.delphi.instanceregistry
 
 import akka.actor._
 import akka.http.scaladsl.model.StatusCodes
-import de.upb.cs.swt.delphi.instanceregistry.Docker.DockerActor.create
+import de.upb.cs.swt.delphi.instanceregistry.Docker.DockerActor.{create, start}
 import de.upb.cs.swt.delphi.instanceregistry.Docker.{ContainerConfig, DockerActor, DockerConnection, DockerImage}
 import de.upb.cs.swt.delphi.instanceregistry.connection.RestClient
 import de.upb.cs.swt.delphi.instanceregistry.daos.{DynamicInstanceDAO, InstanceDAO}
@@ -406,7 +406,7 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
       val instance = instanceDao.getInstance(id).get
       if (instance.instanceState == InstanceState.Stopped) {
         log.info("Starting container...")
-        //    dockerActor ! start(instance.dockerId.get)
+            dockerActor ! start(instance.dockerId.get)
         //TODO: Start container (async?)
         OperationResult.Ok
       } else {
