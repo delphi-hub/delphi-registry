@@ -5,7 +5,7 @@ import java.io.{File, IOException, PrintWriter}
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import de.upb.cs.swt.delphi.instanceregistry.{AppLogging, Configuration, Registry}
-import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.{Instance, InstanceJsonSupport}
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.{Instance, InstanceJsonSupport, RegistryEvent}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.{ComponentType, InstanceState}
 
 import scala.collection.mutable
@@ -23,6 +23,7 @@ class DynamicInstanceDAO (configuration : Configuration) extends InstanceDAO wit
 
   private val instances : mutable.Set[Instance] = new mutable.HashSet[Instance]()
   private val instanceMatchingResults : mutable.Map[Long, mutable.MutableList[Boolean]] = new mutable.HashMap[Long,mutable.MutableList[Boolean]]()
+  private val instanceEvents : mutable.Map[Long, mutable.MutableList[RegistryEvent]] = new mutable.HashMap[Long, mutable.MutableList[RegistryEvent]]()
 
   implicit val system : ActorSystem = Registry.system
   implicit val materializer : ActorMaterializer = ActorMaterializer()
@@ -40,6 +41,7 @@ class DynamicInstanceDAO (configuration : Configuration) extends InstanceDAO wit
       if(!hasInstance(instance.id.get)){
         instances.add(instance)
         instanceMatchingResults.put(instance.id.get, mutable.MutableList())
+        instanceEvents.put(instance.id.get, mutable.MutableList())
         dumpToRecoveryFile()
         Success(log.info(s"Added instance ${instance.name} with id ${instance.id} to database."))
       } else {
@@ -61,6 +63,7 @@ class DynamicInstanceDAO (configuration : Configuration) extends InstanceDAO wit
       //AddInstance verifies that id is always present, hasInstance verifies that find will return an instance
       instances.remove(instances.find(i => i.id.get == id).get)
       instanceMatchingResults.remove(id)
+      instanceEvents.remove(id)
       dumpToRecoveryFile()
       Success(log.info(s"Successfully removed instance with id $id."))
     } else {
@@ -91,6 +94,7 @@ class DynamicInstanceDAO (configuration : Configuration) extends InstanceDAO wit
   override def removeAll() : Unit = {
     instances.clear()
     instanceMatchingResults.clear()
+    instanceEvents.clear()
     dumpToRecoveryFile()
   }
 
@@ -143,7 +147,7 @@ class DynamicInstanceDAO (configuration : Configuration) extends InstanceDAO wit
     }
   }
 
-  override def setStateFor(id: Long, state: InstanceState.Value): Try[Unit] ={
+  override def setStateFor(id: Long, state: InstanceState.Value): Try[Unit] = {
     if(hasInstance(id)){
       val instance = getInstance(id).get
       val newInstance = Instance(instance.id, instance.host, instance.portNumber, instance.name, instance.componentType, instance.dockerId, state)
@@ -155,9 +159,28 @@ class DynamicInstanceDAO (configuration : Configuration) extends InstanceDAO wit
     }
   }
 
+  override def addEventFor(id: Long, event: RegistryEvent) : Try[Unit] = {
+    if(hasInstance(id)){
+      instanceEvents(id) += event
+      Success()
+    } else {
+      Failure(new RuntimeException(s"Instance with id $id was not found."))
+    }
+  }
+
+  override def getEventsFor(id: Long) : Try[List[RegistryEvent]] = {
+    if(hasInstance(id) && instanceEvents.contains(id)){
+      Success(List() ++ instanceEvents(id))
+    } else {
+      log.warning(s"Cannot get events, id $id not present!")
+      Failure(new RuntimeException(s"Cannot get events, id $id not present!"))
+    }
+  }
+
   private[daos] def clearData() : Unit = {
     instances.clear()
     instanceMatchingResults.clear()
+    instanceEvents.clear()
   }
 
   private[daos] def dumpToRecoveryFile() : Unit = {

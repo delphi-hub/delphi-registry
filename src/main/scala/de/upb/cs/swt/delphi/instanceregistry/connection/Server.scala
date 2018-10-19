@@ -36,6 +36,7 @@ object Server extends HttpApp with InstanceJsonSupport with EventJsonSupport wit
       path("numberOfInstances") { numberOfInstances() } ~
       path("matchingInstance") { matchingInstance()} ~
       path("matchingResult") { matchInstance()} ~
+      path("eventList") { eventList()} ~
       /****************DOCKER OPERATIONS****************/
       path("deploy") { deployContainer()} ~
       path("reportStart") { reportStart()} ~
@@ -187,6 +188,22 @@ object Server extends HttpApp with InstanceJsonSupport with EventJsonSupport wit
           complete{s"Matching result $matchingResult processed."}
       }
     }
+  }
+
+  /**
+    * Returns a list of registry events that are associated to the instance with the specified id. The id is passed as
+    * query argument named 'Id' (so the resulting call is /eventList?Id=42).
+    * @return Server route mapping to either 200 OK and the list of event, or the resp. error codes.
+    */
+  def eventList() : server.Route = parameters('Id.as[Long]){id =>
+      get {
+        log.debug(s"GET /eventList?Id=$id has been called")
+
+        handler.getEventList(id) match {
+          case Success(list) => complete{list}
+          case Failure(_) => complete{HttpResponse(StatusCodes.NotFound, entity = s"Id $id not found.")}
+        }
+      }
   }
 
   /**

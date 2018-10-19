@@ -92,6 +92,10 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
     instanceDao.allInstances().count(i => i.componentType == compType)
   }
 
+  def getEventList(id: Long) : Try[List[RegistryEvent]] = {
+    instanceDao.getEventsFor(id)
+  }
+
   def getMatchingInstanceOfType(compType : ComponentType ) : Try[Instance] = {
     log.info(s"Trying to match to instance of type $compType ...")
     getNumberOfInstances(compType) match {
@@ -462,15 +466,20 @@ class RequestHandler (configuration: Configuration) extends AppLogging {
   }
 
   private def fireInstanceAddedEvent(addedInstance: Instance): Unit = {
-    eventActor ! RegistryEventFactory.createInstanceAddedEvent(addedInstance)
+    val event = RegistryEventFactory.createInstanceAddedEvent(addedInstance)
+    eventActor ! event
+    instanceDao.addEventFor(addedInstance.id.get, event)
   }
 
   private def fireInstanceRemovedEvent(removedInstance: Instance): Unit = {
+    //Do not add removed event, instance will not be present in DAO anymore
     eventActor ! RegistryEventFactory.createInstanceRemovedEvent(removedInstance)
   }
 
   private def fireStateChangedEvent(updatedInstance: Instance): Unit = {
-    eventActor ! RegistryEventFactory.createStateChangedEvent(updatedInstance)
+    val event = RegistryEventFactory.createStateChangedEvent(updatedInstance)
+    eventActor ! event
+    instanceDao.addEventFor(updatedInstance.id.get, event)
   }
 
   private def countConsecutivePositiveMatchingResults(id : Long) : Int = {
