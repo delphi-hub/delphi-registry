@@ -2,13 +2,14 @@ package de.upb.cs.swt.delphi.instanceregistry
 
 import java.io.File
 
+import de.upb.cs.swt.delphi.instanceregistry.Docker.DockerConnection
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.Instance
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.{ComponentType, InstanceState}
 import org.scalatest.{BeforeAndAfterEach, FlatSpec, Matchers}
 
 class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach{
 
-  val handler : RequestHandler = new RequestHandler(new Configuration())
+  val handler : RequestHandler = new RequestHandler(new Configuration(), DockerConnection.fromEnvironment())
 
   private def buildInstance(id : Long, dockerId: Option[String] = None, state: InstanceState.Value = InstanceState.Stopped) : Instance = {
     Instance(Some(id), "https://localhost", 12345, "TestInstance", ComponentType.ElasticSearch, dockerId, state)
