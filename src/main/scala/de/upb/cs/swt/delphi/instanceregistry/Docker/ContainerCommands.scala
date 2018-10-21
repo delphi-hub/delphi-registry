@@ -62,6 +62,41 @@ class ContainerCommands(connection: DockerConnection) extends JsonSupport with C
     }
   }
 
+
+  def pause(
+             containerId: String,
+           )(implicit ec: ExecutionContext): Future[String] = {
+    val request = Post(buildUri(containersPath / containerId / "pause"))
+    connection.sendRequest(request).flatMap { response =>
+      response.status match {
+        case StatusCodes.NoContent =>
+          Future.successful(containerId)
+        case StatusCodes.NotModified =>
+          throw new ContainerAlreadyStoppedException(containerId)
+        case StatusCodes.NotFound =>
+          throw new ContainerNotFoundException(containerId)
+        case _ =>
+          unknownResponseFuture(response)
+      }
+    }
+  }
+
+  def restart(
+               containerId: String,
+             )(implicit ec: ExecutionContext): Future[String] = {
+    val request = Post(buildUri(containersPath / containerId / "stop"))
+    connection.sendRequest(request).flatMap { response =>
+      response.status match {
+        case StatusCodes.NoContent =>
+          Future.successful(containerId)
+        case StatusCodes.NotFound =>
+          throw new ContainerNotFoundException(containerId)
+        case _ =>
+          unknownResponseFuture(response)
+      }
+    }
+  }
+
   def stop(
             containerId: String,
           )(implicit ec: ExecutionContext): Future[String] = {
@@ -71,7 +106,7 @@ class ContainerCommands(connection: DockerConnection) extends JsonSupport with C
         case StatusCodes.NoContent =>
           Future.successful(containerId)
         case StatusCodes.NotModified =>
-          throw  new ContainerAlreadyStoppedException(containerId)
+          throw new ContainerAlreadyStoppedException(containerId)
         case StatusCodes.NotFound =>
           throw new ContainerNotFoundException(containerId)
         case _ =>
@@ -106,7 +141,7 @@ class ContainerCommands(connection: DockerConnection) extends JsonSupport with C
     connection.sendRequest(request).flatMap { response =>
       response.status match {
         case StatusCodes.OK =>
-        Unmarshal(response).to[Networks]
+          Unmarshal(response).to[Networks]
         case StatusCodes.NotFound =>
           throw new ContainerNotFoundException(containerId)
         case _ =>

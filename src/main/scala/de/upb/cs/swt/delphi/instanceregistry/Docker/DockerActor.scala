@@ -28,7 +28,7 @@ class DockerActor(connection: DockerConnection) extends Actor with ActorLogging 
       container.start(containerId)
 
     case create(componentType, instanceId, containerName) =>
-      val containerConfig  = ContainerConfig(Image = DockerImage.getImageName(componentType), Env = Seq(s"INSTANCE_ID=$instanceId"))
+      val containerConfig = ContainerConfig(Image = DockerImage.getImageName(componentType), Env = Seq(s"INSTANCE_ID=$instanceId"))
       val createContainer = {
         Await.result(container.create(containerConfig, containerName), Duration.Inf)
       }
@@ -56,6 +56,11 @@ class DockerActor(connection: DockerConnection) extends Actor with ActorLogging 
       log.info(s"Docker Container removed")
       container.remove(containerId, force = false, removeVolumes = false)
 
+    case pause(containerId) =>
+      Await.ready(container.pause(containerId), Duration.Inf)
+
+    case restart(containerId) =>
+      Await.ready(container.restart(containerId), Duration.Inf)
     case x => log.warning("Received unknown message: [{}] ", x)
   }
 }
@@ -72,5 +77,8 @@ object DockerActor {
 
   case class delete(containerId: String)
 
+  case class pause(containerId: String)
+
+  case class restart(containerId: String)
 
 }

@@ -294,7 +294,7 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
       val instance = instanceDao.getInstance(id).get
       if (instance.instanceState == InstanceState.Running) {
         log.info(s"Handling /pause for instance with id $id...")
-        //  dockerActor ! PauseMessage(instance.dockerId.get, instanceHasState())
+        dockerActor ! pause(instance.dockerId.get)
         //TODO: execute pause command (async?)
         instanceDao.setStateFor(instance.id.get, InstanceState.Paused) //TODO: Move state update to async block?
         OperationResult.Ok
@@ -320,7 +320,7 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
       val instance = instanceDao.getInstance(id).get
       if (instance.instanceState == InstanceState.Paused) {
         log.info(s"Handling /resume for instance with id $id...")
-        //TODO: Pause the container (async?)
+        dockerActor ! restart(instance.dockerId.get)
         instanceDao.setStateFor(instance.id.get, InstanceState.Running) //TODO: Move state update to async block?
         OperationResult.Ok
       } else {
