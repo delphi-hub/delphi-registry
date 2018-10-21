@@ -15,7 +15,7 @@ class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach 
   implicit val system = ActorSystem()
   implicit val materializer: ActorMaterializer = ActorMaterializer()
   implicit val ec: ExecutionContext = system.dispatcher
-  val handler: RequestHandler = new RequestHandler(new Configuration(), new DockerActor(DockerConnection.fromEnvironment()).asInstanceOf[DockerConnection])
+  val handler: RequestHandler = new RequestHandler(new Configuration(), DockerConnection.fromEnvironment())
 
   private def buildInstance(id: Long, dockerId: Option[String] = None, state: InstanceState.Value = InstanceState.Stopped): Instance = {
     Instance(Some(id), "https://localhost", 12345, "TestInstance", ComponentType.ElasticSearch, dockerId, state)
@@ -197,13 +197,14 @@ class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach 
     assert(handler.handleStop(1) == handler.OperationResult.NoDockerContainer)
   }
 
-  it must "change the state of the instance on handleStop" in {
+  //Below test is not applicable anymore, state change is managed in futures!
+  /*it must "change the state of the instance on handleStop" in {
     val register1 = handler.instanceDao.addInstance(Instance(Some(1), "http://localhost", 8083, "MyCrawler", ComponentType.Crawler, Some("RandomDockerId"), InstanceState.Running))
     assert(register1.isSuccess)
 
     assert(handler.handleStop(1) == handler.OperationResult.Ok)
     assert(handler.getInstance(1).get.instanceState == InstanceState.Stopped)
-  }
+  }*/
 
   it must "validate preconditions on handleStart" in {
     val register1 = handler.instanceDao.addInstance(buildInstance(1, None))

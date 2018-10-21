@@ -5,7 +5,7 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.pattern.ask
 import akka.util.Timeout
 import de.upb.cs.swt.delphi.instanceregistry.Docker.DockerActor._
-import de.upb.cs.swt.delphi.instanceregistry.Docker.{ContainerConfig, DockerActor, DockerConnection, DockerImage}
+import de.upb.cs.swt.delphi.instanceregistry.Docker.{DockerActor, DockerConnection}
 import de.upb.cs.swt.delphi.instanceregistry.connection.RestClient
 import de.upb.cs.swt.delphi.instanceregistry.daos.{DynamicInstanceDAO, InstanceDAO}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.{ComponentType, InstanceState}
@@ -22,7 +22,7 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
   implicit val system: ActorSystem = Registry.system
   implicit val ec: ExecutionContext = system.dispatcher
 
-  val dockerActor = system.actorOf(DockerActor.props(connection))
+  val dockerActor: ActorRef = system.actorOf(DockerActor.props(connection))
 
   private[instanceregistry] val instanceDao: InstanceDAO = new DynamicInstanceDAO(configuration)
 
@@ -40,14 +40,6 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
   def shutdown(): Unit = {
     instanceDao.shutdown()
   }
-//TODO: Add shutdown hook for docker actor
-/*  def dockerShutdown(): Unit = {
-    log.warning("Received shutdown signal for docker.")
-    implicit val timeout = Timeout(100 seconds)
-    val future: Future[Any] = dockerActor ? terminate
-
-    Await.result(future, timeout.duration)
-  }*/
 
   /**
     * Called when a new instance registers itself, meaning it is not running in a docker container. Will ignore the
@@ -169,19 +161,15 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
   def handleDeploy(componentType: ComponentType, name: Option[String]): Try[Long] = {
     val newId = generateNextId()
     //TODO: Deploy container (async?), set env var 'INSTANCE_ID' to newId
-    //TODO: Get below values for container!
-    val host: String = ???
-    val port: Int = ???
 
     log.info(s"Initializing Docker")
 
-    implicit val timeout = Timeout(10 seconds)
+    implicit val timeout: Timeout = Timeout(10 seconds)
 
-    val dockerImage = new DockerImage()
-    val future: Future[Any] = dockerActor ? create(ContainerConfig(dockerImage.getImageName(componentType)))
-    val dockerId = Await.result(future, timeout.duration).asInstanceOf[String]
+    val future: Future[Any] = dockerActor ? create(componentType, newId)
+    val (dockerId, host, port) = Await.result(future, timeout.duration).asInstanceOf[(String, String, Int)]
 
-    log.info(s"Deployed new container with id $dockerId.")
+    log.info(s"Deployed new container with id $dockerId, host $host and port $port.")
 
     val newInstance = Instance(Some(newId), host, port, name.getOrElse(s"Generic $componentType"), componentType, Some(dockerId), InstanceState.Stopped)
     log.info(s"Registering instance $newInstance....")
@@ -381,9 +369,9 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
       }
       log.info("Stopping container...")
 
-      implicit val timeout = Timeout(10 seconds)
+      implicit val timeout: Timeout = Timeout(10 seconds)
       val future: Future[Any] = dockerActor ? stop(instance.dockerId.get)
-      instanceDao.setStateFor(instance.id.get, InstanceState.Stopped) //TODO: Move state update to async block?
+      future.onComplete{case Success(_) => instanceDao.setStateFor(instance.id.get, InstanceState.Stopped)}
 
       OperationResult.Ok
     }
@@ -407,8 +395,8 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
       val instance = instanceDao.getInstance(id).get
       if (instance.instanceState == InstanceState.Stopped) {
         log.info("Starting container...")
-        implicit val timeout = Timeout(10 seconds)
-        val future: Future[Any] = dockerActor ? start(instance.dockerId.get)
+        implicit val timeout: Timeout = Timeout(10 seconds)
+        dockerActor ! start(instance.dockerId.get)
         OperationResult.Ok
       } else {
         OperationResult.InvalidStateForOperation
