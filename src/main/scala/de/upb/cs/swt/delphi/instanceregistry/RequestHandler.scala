@@ -4,7 +4,7 @@ import akka.actor._
 import akka.http.scaladsl.model.StatusCodes
 import akka.pattern.ask
 import akka.util.Timeout
-import de.upb.cs.swt.delphi.instanceregistry.Docker.DockerActor.{create, start, stop}
+import de.upb.cs.swt.delphi.instanceregistry.Docker.DockerActor._
 import de.upb.cs.swt.delphi.instanceregistry.Docker.{ContainerConfig, DockerActor, DockerConnection, DockerImage}
 import de.upb.cs.swt.delphi.instanceregistry.connection.RestClient
 import de.upb.cs.swt.delphi.instanceregistry.daos.{DynamicInstanceDAO, InstanceDAO}
@@ -27,10 +27,6 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
   private[instanceregistry] val instanceDao: InstanceDAO = new DynamicInstanceDAO(configuration)
 
 
-  log.info("Fetching  Docker Images")
-  // val list = Await.result(dockerClient.ps(), Duration.Inf)
-
-
   def initialize(): Unit = {
     log.info("Initializing request handler...")
     instanceDao.initialize()
@@ -44,6 +40,14 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
   def shutdown(): Unit = {
     instanceDao.shutdown()
   }
+//TODO: Add shutdown hook for docker actor
+/*  def dockerShutdown(): Unit = {
+    log.warning("Received shutdown signal for docker.")
+    implicit val timeout = Timeout(100 seconds)
+    val future: Future[Any] = dockerActor ? terminate
+
+    Await.result(future, timeout.duration)
+  }*/
 
   /**
     * Called when a new instance registers itself, meaning it is not running in a docker container. Will ignore the
@@ -168,15 +172,14 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
     //TODO: Get below values for container!
     val host: String = ???
     val port: Int = ???
-    val dockerId: String = ???
-    log.info(s"Initializing Docker")
 
+    log.info(s"Initializing Docker")
 
     implicit val timeout = Timeout(10 seconds)
 
     val dockerImage = new DockerImage()
-
     val future: Future[Any] = dockerActor ? create(ContainerConfig(dockerImage.getImageName(componentType)))
+    val dockerId = Await.result(future, timeout.duration).asInstanceOf[String]
 
     log.info(s"Deployed new container with id $dockerId.")
 
@@ -380,7 +383,6 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
 
       implicit val timeout = Timeout(10 seconds)
       val future: Future[Any] = dockerActor ? stop(instance.dockerId.get)
-      //TODO: Stop the container (async?)
       instanceDao.setStateFor(instance.id.get, InstanceState.Stopped) //TODO: Move state update to async block?
 
       OperationResult.Ok
@@ -407,7 +409,6 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
         log.info("Starting container...")
         implicit val timeout = Timeout(10 seconds)
         val future: Future[Any] = dockerActor ? start(instance.dockerId.get)
-        //TODO: Start container (async?)
         OperationResult.Ok
       } else {
         OperationResult.InvalidStateForOperation
@@ -432,8 +433,7 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
       val instance = instanceDao.getInstance(id).get
       if (instance.instanceState == InstanceState.Stopped) {
         log.info("Deleting container...")
-        //TODO: Delete container (async?)
-        //  dockerActor ! delete(instance.dockerId.get)
+        dockerActor ! delete(instance.dockerId.get)
         instanceDao.removeInstance(id) match {
           case Success(_) => OperationResult.Ok
           case Failure(_) => OperationResult.InternalError
@@ -501,3 +501,4 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
   }
 
 }
+
