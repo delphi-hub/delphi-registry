@@ -2,16 +2,22 @@ package de.upb.cs.swt.delphi.instanceregistry
 
 import java.io.File
 
+import akka.actor.ActorSystem
+import akka.stream.ActorMaterializer
 import de.upb.cs.swt.delphi.instanceregistry.Docker._
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.Instance
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.{ComponentType, InstanceState}
 import org.scalatest.{BeforeAndAfterEach, FlatSpec, Matchers}
 
-class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach{
+import scala.concurrent.ExecutionContext
 
-  val handler : RequestHandler = new RequestHandler(new Configuration(), new DockerActor(DockerConnection.fromEnvironment()).asInstanceOf[DockerConnection] )
+class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach {
+  implicit val system = ActorSystem()
+  implicit val materializer: ActorMaterializer = ActorMaterializer()
+  implicit val ec: ExecutionContext = system.dispatcher
+  val handler: RequestHandler = new RequestHandler(new Configuration(), new DockerActor(DockerConnection.fromEnvironment()).asInstanceOf[DockerConnection])
 
-  private def buildInstance(id : Long, dockerId: Option[String] = None, state: InstanceState.Value = InstanceState.Stopped) : Instance = {
+  private def buildInstance(id: Long, dockerId: Option[String] = None, state: InstanceState.Value = InstanceState.Stopped): Instance = {
     Instance(Some(id), "https://localhost", 12345, "TestInstance", ComponentType.ElasticSearch, dockerId, state)
   }
 
@@ -250,10 +256,10 @@ class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach{
 
     assert(handler.handleMatchingResult(0, result = false) == handler.OperationResult.Ok)
     assert(handler.handleMatchingResult(0, result = true) == handler.OperationResult.Ok)
-    assert(handler.handleMatchingResult(0,result = true) == handler.OperationResult.Ok)
+    assert(handler.handleMatchingResult(0, result = true) == handler.OperationResult.Ok)
 
-    assert(handler.handleMatchingResult(1,result = true) == handler.OperationResult.Ok)
-    assert(handler.handleMatchingResult(1,result = false) == handler.OperationResult.Ok)
+    assert(handler.handleMatchingResult(1, result = true) == handler.OperationResult.Ok)
+    assert(handler.handleMatchingResult(1, result = false) == handler.OperationResult.Ok)
 
     val matchingInstance = handler.getMatchingInstanceOfType(ComponentType.ElasticSearch)
     assert(matchingInstance.isSuccess)
@@ -268,11 +274,11 @@ class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach{
     assert(esInstance.get == 1)
 
     assert(handler.handleMatchingResult(0, result = true) == handler.OperationResult.Ok)
-    assert(handler.handleMatchingResult(0,result = true) == handler.OperationResult.Ok)
+    assert(handler.handleMatchingResult(0, result = true) == handler.OperationResult.Ok)
     assert(handler.handleMatchingResult(0, result = false) == handler.OperationResult.Ok)
 
-    assert(handler.handleMatchingResult(1,result = false) == handler.OperationResult.Ok)
-    assert(handler.handleMatchingResult(1,result = false) == handler.OperationResult.Ok)
+    assert(handler.handleMatchingResult(1, result = false) == handler.OperationResult.Ok)
+    assert(handler.handleMatchingResult(1, result = false) == handler.OperationResult.Ok)
 
     val matchingInstance = handler.getMatchingInstanceOfType(ComponentType.ElasticSearch)
     assert(matchingInstance.isSuccess)

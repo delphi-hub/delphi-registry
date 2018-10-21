@@ -14,6 +14,9 @@ class DockerActor(connection: DockerConnection) extends Actor with ActorLogging 
   implicit val ec: ExecutionContext = system.dispatcher
   val container = new ContainerCommands(connection)
 
+  case class DockerClient(connection: DockerConnection)
+
+
   log.info(s"DockerActor started")
 
   def receive: PartialFunction[Any, Unit] = {
