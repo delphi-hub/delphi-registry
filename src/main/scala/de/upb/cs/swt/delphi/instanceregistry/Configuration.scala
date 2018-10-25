@@ -9,9 +9,9 @@ class Configuration( ) {
   val defaultWebApiPort: Int = 8080
   val defaultWepAppPort: Int  = 8085
 
-  val crawlerDockerImageName: String = "24santoshr/delphi_crawler"
-  val webApiDockerImageName: String = "24santoshr/webapi"
-  val webAppDockerImageName: String = "24santoshr/webapp"
+  val crawlerDockerImageName: String = "delphi-crawler:1.0.0-SNAPSHOT"
+  val webApiDockerImageName: String = "delphi-webapi:1.0.0-SNAPSHOT"
+  val webAppDockerImageName: String = "delphi-webapp:1.0.0-SNAPSHOT"
 
 
 

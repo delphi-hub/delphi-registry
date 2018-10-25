@@ -16,6 +16,6 @@ object RestClient extends AppLogging{
 
 
   def getUri(instance: Instance) : String = {
-    instance.host + ":" + instance.portNumber.toString
+    "http://" + instance.host + ":" + instance.portNumber.toString
   }
 }

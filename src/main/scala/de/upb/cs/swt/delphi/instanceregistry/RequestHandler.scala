@@ -32,7 +32,7 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
     instanceDao.initialize()
     if (!instanceDao.allInstances().exists(instance => instance.name.equals("Default ElasticSearch Instance"))) {
       //Add default ES instance
-      handleRegister(Instance(None, "elasticsearch://localhost", 9200, "Default ElasticSearch Instance", ComponentType.ElasticSearch, None, InstanceState.Running))
+      handleRegister(Instance(None, "elasticsearch://172.17.0.1", 9200, "Default ElasticSearch Instance", ComponentType.ElasticSearch, None, InstanceState.Running))
     }
     log.info("Done initializing request handler.")
   }
@@ -160,27 +160,33 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
 
   def handleDeploy(componentType: ComponentType, name: Option[String]): Try[Long] = {
     val newId = generateNextId()
-    //TODO: Deploy container (async?), set env var 'INSTANCE_ID' to newId
 
-    log.info(s"Initializing Docker")
+    log.info(s"Deploying container of type $componentType")
 
     implicit val timeout: Timeout = Timeout(10 seconds)
 
     val future: Future[Any] = dockerActor ? create(componentType, newId)
-    val (dockerId, host, port) = Await.result(future, timeout.duration).asInstanceOf[(String, String, Int)]
+    val deployResult = Await.result(future, timeout.duration).asInstanceOf[Try[(String, String, Int)]]
 
-    log.info(s"Deployed new container with id $dockerId, host $host and port $port.")
+    deployResult match {
+      case Failure(ex) =>
+        log.error(s"Failed to deploy container, exception $ex")
+        Failure(ex)
+      case Success((dockerId, host, port)) =>
+        val normalizedHost = host.substring(1,host.length - 1)
+        log.info(s"Deployed new container with id $dockerId, host $normalizedHost and port $port.")
 
-    val newInstance = Instance(Some(newId), host, port, name.getOrElse(s"Generic $componentType"), componentType, Some(dockerId), InstanceState.Stopped)
-    log.info(s"Registering instance $newInstance....")
+        val newInstance = Instance(Some(newId), normalizedHost, port, name.getOrElse(s"Generic $componentType"), componentType, Some(dockerId), InstanceState.Stopped)
+        log.info(s"Registering instance $newInstance....")
 
-    instanceDao.addInstance(newInstance) match {
-      case Success(_) =>
-        log.info("Successfully registered.")
-        Success(newId)
-      case Failure(x) =>
-        log.info(s"Failed to register. Exception: $x")
-        Failure(x)
+        instanceDao.addInstance(newInstance) match {
+          case Success(_) =>
+            log.info("Successfully registered.")
+            Success(newId)
+          case Failure(x) =>
+            log.info(s"Failed to register. Exception: $x")
+            Failure(x)
+        }
     }
   }
 
@@ -320,7 +326,7 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
       val instance = instanceDao.getInstance(id).get
       if (instance.instanceState == InstanceState.Paused) {
         log.info(s"Handling /resume for instance with id $id...")
-        dockerActor ! restart(instance.dockerId.get)
+        dockerActor ! unpause(instance.dockerId.get)
         instanceDao.setStateFor(instance.id.get, InstanceState.Running) //TODO: Move state update to async block?
         OperationResult.Ok
       } else {
