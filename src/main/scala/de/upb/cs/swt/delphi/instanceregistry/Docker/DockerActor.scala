@@ -66,6 +66,12 @@ class DockerActor(connection: DockerConnection) extends Actor with ActorLogging 
 
     case restart(containerId) =>
       Await.ready(container.restart(containerId), Duration.Inf)
+
+    case logs(containerId: String) =>
+     log.info(s"Fetching Container logs")
+      container.logs(containerId)
+
+
     case x => log.warning("Received unknown message: [{}] ", x)
   }
 }
@@ -87,5 +93,7 @@ object DockerActor {
   case class unpause(containerId: String)
 
   case class restart(containerId: String)
+
+  case class logs(containerId: String)
 
 }

@@ -1,18 +1,20 @@
 package de.upb.cs.swt.delphi.instanceregistry.Docker
 
+
+import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.http.scaladsl.client.RequestBuilding._
-import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.Uri.{Path, Query}
+import akka.http.scaladsl.model.{HttpEntity, HttpResponse, StatusCodes}
 import akka.http.scaladsl.unmarshalling.Unmarshal
+import akka.stream.scaladsl.{Flow, Source}
 import de.upb.cs.swt.delphi.instanceregistry.{AppLogging, Registry}
 import spray.json._
 
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.Success
 
 
-class ContainerCommands(connection: DockerConnection) extends JsonSupport with Commands with AppLogging{
+class ContainerCommands(connection: DockerConnection) extends JsonSupport with Commands with AppLogging {
 
   import connection._
 
@@ -87,8 +89,8 @@ class ContainerCommands(connection: DockerConnection) extends JsonSupport with C
   }
 
   def unpause(
-             containerId: String,
-           )(implicit ec: ExecutionContext): Future[String] = {
+               containerId: String,
+             )(implicit ec: ExecutionContext): Future[String] = {
     val request = Post(buildUri(containersPath / containerId / "unpause"))
     connection.sendRequest(request).flatMap { response =>
       response.status match {
@@ -178,6 +180,26 @@ class ContainerCommands(connection: DockerConnection) extends JsonSupport with C
           unknownResponseFuture(response)
       }
     }
+  }
+
+  def logs(
+            containerId: String
+          )(implicit ec: ExecutionContext): Source[String, NotUsed] = {
+    val query = Query("all")
+    val request = Get(buildUri(containersPath / containerId / "logs", query))
+
+    val flow =
+      Flow[HttpResponse].map {
+        case HttpResponse(StatusCodes.OK, _, HttpEntity.Chunked(_, chunks), _) =>
+          chunks.map(_.data().utf8String)
+        case HttpResponse(StatusCodes.NotFound, _, _, _) =>
+          throw ContainerNotFoundException(containerId)
+        case response =>
+          unknownResponse(response)
+      }.flatMapConcat(identity)
+
+    Source.fromFuture(connection.sendRequest(request))
+      .via(flow)
   }
 
 }
