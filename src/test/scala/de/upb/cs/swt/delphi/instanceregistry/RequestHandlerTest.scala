@@ -12,7 +12,7 @@ import org.scalatest.{BeforeAndAfterEach, FlatSpec, Matchers}
 import scala.concurrent.ExecutionContext
 
 class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach {
-  implicit val system = ActorSystem()
+  implicit val system: ActorSystem = ActorSystem()
   implicit val materializer: ActorMaterializer = ActorMaterializer()
   implicit val ec: ExecutionContext = system.dispatcher
   val handler: RequestHandler = new RequestHandler(new Configuration(), DockerConnection.fromEnvironment())
@@ -134,7 +134,7 @@ class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach 
     assert(register2.isSuccess)
 
     assert(handler.handleReportStop(42) == handler.OperationResult.Ok)
-    assert(handler.getInstance(42).get.instanceState == InstanceState.NotReachable)
+    assert(handler.getInstance(42).get.instanceState == InstanceState.Stopped)
     assert(handler.handleReportStop(43) == handler.OperationResult.Ok)
     assert(handler.getInstance(43).get.instanceState == InstanceState.Failed)
   }
@@ -162,13 +162,14 @@ class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach 
     assert(handler.handlePause(2) == handler.OperationResult.InvalidStateForOperation)
   }
 
-  it must "change the state on handlePause" in {
+  //Below test is not applicable anymore, state change is managed in futures!
+  /*it must "change the state on handlePause" in {
     val register1 = handler.instanceDao.addInstance(buildInstance(1, Some("RandomDockerId"), InstanceState.Running))
     assert(register1.isSuccess)
 
     assert(handler.handlePause(1) == handler.OperationResult.Ok)
     assert(handler.getInstance(1).get.instanceState == InstanceState.Paused)
-  }
+  }*/
 
   it must "validate preconditions on handleResume" in {
     val register1 = handler.instanceDao.addInstance(buildInstance(1, None))
@@ -181,13 +182,15 @@ class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach 
     assert(handler.handleResume(2) == handler.OperationResult.InvalidStateForOperation)
   }
 
+  //Below test is not applicable anymore, state change is managed in futures!
+  /*
   it must "change the state on handleResume" in {
     val register1 = handler.instanceDao.addInstance(buildInstance(1, Some("RandomDockerId"), InstanceState.Paused))
     assert(register1.isSuccess)
 
     assert(handler.handleResume(1) == handler.OperationResult.Ok)
     assert(handler.getInstance(1).get.instanceState == InstanceState.Running)
-  }
+  }*/
 
   it must "validate preconditions on handleStop" in {
     val register1 = handler.instanceDao.addInstance(buildInstance(1, None))
@@ -227,7 +230,7 @@ class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach 
 
   it must "validate preconditions on handleDeleteContainer" in {
     val register1 = handler.instanceDao.addInstance(buildInstance(1, None))
-    val register2 = handler.instanceDao.addInstance(buildInstance(2, Some("RandomDockerId"), InstanceState.Paused))
+    val register2 = handler.instanceDao.addInstance(buildInstance(2, Some("RandomDockerId"), InstanceState.Running))
     assert(register1.isSuccess)
     assert(register2.isSuccess)
 
