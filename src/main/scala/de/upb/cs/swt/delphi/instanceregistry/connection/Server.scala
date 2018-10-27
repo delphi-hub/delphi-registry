@@ -427,7 +427,7 @@ object Server extends HttpApp with InstanceJsonSupport with EventJsonSupport wit
           log.warning(s"Cannot delete id $id, that instance is not running in a docker container.")
           complete{HttpResponse(StatusCodes.BadRequest, entity = s"Id $id is not running in a docker container.")}
         case handler.OperationResult.InvalidStateForOperation =>
-          log.warning(s"Cannot delete id $id, that instance is not stopped.")
+          log.warning(s"Cannot delete id $id, that instance is still running.")
           complete {HttpResponse(StatusCodes.BadRequest, entity = s"Id $id is not stopped.")}
         case handler.OperationResult.Ok =>
           complete{HttpResponse(StatusCodes.Accepted, entity = "Operation accepted.")}
