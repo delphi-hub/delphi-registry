@@ -6,7 +6,7 @@ import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import de.upb.cs.swt.delphi.instanceregistry.{AppLogging, Configuration, Registry}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.{Instance, JsonSupport}
-import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.ComponentType
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.{ComponentType, InstanceState}
 
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext
@@ -121,6 +121,7 @@ class DynamicInstanceDAO (configuration : Configuration) extends InstanceDAO wit
 
   override def initialize(): Unit = {
     log.info("Initializing dynamic instance DAO...")
+    clearData()
     tryInitFromRecoveryFile()
     log.info("Successfully initialized.")
   }
@@ -130,6 +131,28 @@ class DynamicInstanceDAO (configuration : Configuration) extends InstanceDAO wit
     clearData()
     deleteRecoveryFile()
     log.info("Shutdown complete.")
+  }
+
+  override def getDockerIdFor(id: Long) : Try[String] = {
+    getInstance(id) match {
+      case Some(instance) => instance.dockerId match {
+        case Some(dockerId) => Success(dockerId)
+        case None => Failure(new RuntimeException(s"Instance with id $id is not running inside a docker container."))
+      }
+      case None => Failure(new RuntimeException(s"An instance with id $id was not found."))
+    }
+  }
+
+  override def setStateFor(id: Long, state: InstanceState.Value): Try[Unit] ={
+    if(hasInstance(id)){
+      val instance = getInstance(id).get
+      val newInstance = Instance(instance.id, instance.host, instance.portNumber, instance.name, instance.componentType, instance.dockerId, state)
+      instances.remove(instance)
+      instances.add(newInstance)
+      Success()
+    } else {
+      Failure(new RuntimeException(s"Instance with id $id was not found."))
+    }
   }
 
   private[daos] def clearData() : Unit = {

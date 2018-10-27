@@ -2,7 +2,7 @@ package de.upb.cs.swt.delphi.instanceregistry.daos
 
 import de.upb.cs.swt.delphi.instanceregistry.Configuration
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.Instance
-import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.ComponentType
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.{ComponentType, InstanceState}
 import org.scalatest.{BeforeAndAfterEach, FlatSpec, Matchers}
 
 class DynamicInstanceDAOTest extends FlatSpec with Matchers with BeforeAndAfterEach{
@@ -10,7 +10,7 @@ class DynamicInstanceDAOTest extends FlatSpec with Matchers with BeforeAndAfterE
   val dao : DynamicInstanceDAO = new DynamicInstanceDAO(new Configuration())
 
   private def buildInstance(id : Int) : Instance = {
-    Instance(Some(id), "https://localhost", 12345, "TestInstance", ComponentType.Crawler)
+    Instance(Some(id), "https://localhost", 12345, "TestInstance", ComponentType.Crawler, None, InstanceState.Stopped)
   }
 
   override protected def beforeEach() : Unit = {
@@ -102,6 +102,32 @@ class DynamicInstanceDAOTest extends FlatSpec with Matchers with BeforeAndAfterE
   it must "remove the matching results when the instance is removed" in {
     assert(dao.removeInstance(3).isSuccess)
     assert(dao.getMatchingResultsFor(3).isFailure)
+  }
+
+  it must "be able to change the state for arbitrary state transitions" in {
+    assert(dao.getInstance(1).get.instanceState == InstanceState.Stopped)
+    assert(dao.setStateFor(1, InstanceState.Failed).isSuccess)
+    assert(dao.getInstance(1).get.instanceState == InstanceState.Failed)
+    assert(dao.setStateFor(1, InstanceState.Running).isSuccess)
+    assert(dao.getInstance(1).get.instanceState == InstanceState.Running)
+  }
+
+  it must "fail when setting state for invalid ids" in {
+    assert(dao.setStateFor(42, InstanceState.Failed).isFailure)
+    assert(dao.setStateFor(Int.MaxValue, InstanceState.Running).isFailure)
+  }
+
+  it must "fail to get docker ids from instances without any docker id" in {
+    assert(dao.getDockerIdFor(1).isFailure)
+    assert(dao.getDockerIdFor(2).isFailure)
+  }
+
+  it must "return the correct docker ids for instances with a docker id" in {
+    assert(dao.addInstance
+    (Instance(Some(42), "http://localhost", 33449, "AnyName",
+      ComponentType.WebApi, Some("dockerId"), InstanceState.Running )).isSuccess)
+    assert(dao.getDockerIdFor(42).isSuccess)
+    assert(dao.getDockerIdFor(42).get.equals("dockerId"))
   }
 
   "The DAO" must "be able to read multiple instances from the recovery file" in {
