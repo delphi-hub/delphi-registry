@@ -1,13 +1,13 @@
 package de.upb.cs.swt.delphi.instanceregistry.Docker
 
-import akka.actor.{Actor, ActorLogging, ActorSystem, Props}
+import akka.actor.{Actor, ActorLogging, ActorSystem, Props, Status}
 import akka.stream.ActorMaterializer
 import de.upb.cs.swt.delphi.instanceregistry.Docker.DockerActor._
 import de.upb.cs.swt.delphi.instanceregistry.Registry
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.ComponentType
 
 import scala.concurrent.duration._
-import scala.concurrent.{Await, ExecutionContext}
+import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
 class DockerActor(connection: DockerConnection) extends Actor with ActorLogging {
@@ -26,7 +26,12 @@ class DockerActor(connection: DockerConnection) extends Actor with ActorLogging 
 
     case start(containerId) =>
       log.info(s"Docker Container started")
-      container.start(containerId)
+     Try(Await.result(container.start(containerId), Duration.Inf)) match {
+       case Success(_) =>
+         sender ! Status.Success
+       case Failure(ex) =>
+         sender ! Status.Failure(ex)
+     }
 
     case create(componentType, instanceId, containerName) =>
       val containerConfig = ContainerConfig(Image = DockerImage.getImageName(componentType), Env = Seq(s"INSTANCE_ID=$instanceId", "DELPHI_IR_URI=http://172.17.0.1:8087"))
@@ -49,28 +54,58 @@ class DockerActor(connection: DockerConnection) extends Actor with ActorLogging 
           log.info("ip address is " + containerInfo.IPAddress)
           sender ! Success(containerResult.Id, containerInfo.IPAddress, instancePort)
       }
+
     case stop(containerId) =>
-      log.info(s"Docker Container stopped")
-      Await.ready(container.stop(containerId), Duration.Inf)
-      sender ! {}
+      log.info(s"Stopping docker container..")
+
+      Try(Await.result(container.stop(containerId), Duration.Inf)) match {
+        case Success(_) =>
+          sender ! Status.Success
+        case Failure(ex) =>
+          sender ! Status.Failure(ex)
+      }
+
+
 
     case delete(containerId) =>
-      log.info(s"Docker Container removed")
-      Await.ready(container.remove(containerId, force = false, removeVolumes = false), Duration.Inf)
+      log.info(s"Deleting docker container..")
+      Try(Await.result(container.remove(containerId, force = false, removeVolumes = false), Duration.Inf)) match {
+        case Success(_) =>
+          sender ! Status.Success
+        case Failure(ex) =>
+          sender ! Status.Failure(ex)
+      }
 
     case pause(containerId) =>
-      Await.ready(container.pause(containerId), Duration.Inf)
+      log.info(s"Pausing docker container..")
+      Try(Await.result(container.pause(containerId), Duration.Inf)) match {
+        case Success(_) =>
+          sender ! Status.Success
+        case Failure(ex) =>
+          sender ! Status.Failure(ex)
+      }
 
     case unpause(containerId) =>
-      Await.ready(container.unpause(containerId), Duration.Inf)
+      log.info(s"Unpausing docker container..")
+      Try(Await.result(container.unpause(containerId), Duration.Inf)) match {
+        case Success(_) =>
+          sender ! Status.Success
+        case Failure(ex) =>
+          sender ! Status.Failure(ex)
+      }
 
     case restart(containerId) =>
-      Await.ready(container.restart(containerId), Duration.Inf)
+      log.info(s"Restarting docker container..")
+      Try(Await.result(container.restart(containerId), Duration.Inf)) match {
+        case Success(_) =>
+          sender ! Status.Success
+        case Failure(ex) =>
+          sender ! Status.Failure(ex)
+      }
 
     case logs(containerId: String) =>
      log.info(s"Fetching Container logs")
       container.logs(containerId)
-
 
     case x => log.warning("Received unknown message: [{}] ", x)
   }

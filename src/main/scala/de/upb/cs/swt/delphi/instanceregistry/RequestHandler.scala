@@ -1,12 +1,10 @@
 package de.upb.cs.swt.delphi.instanceregistry
 
 import akka.actor._
-import akka.http.scaladsl.model.StatusCodes
 import akka.pattern.ask
 import akka.util.Timeout
 import de.upb.cs.swt.delphi.instanceregistry.Docker.DockerActor._
 import de.upb.cs.swt.delphi.instanceregistry.Docker.{DockerActor, DockerConnection}
-import de.upb.cs.swt.delphi.instanceregistry.connection.RestClient
 import de.upb.cs.swt.delphi.instanceregistry.daos.{DynamicInstanceDAO, InstanceDAO}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.{ComponentType, InstanceState}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.{Instance, InstanceEnums}
@@ -170,8 +168,8 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
 
     deployResult match {
       case Failure(ex) =>
-        log.error(s"Failed to deploy container, exception $ex")
-        Failure(ex)
+        log.error(s"Failed to deploy container, docker host not reachable.")
+        Failure(new RuntimeException(s"Failed to deploy container, docker host not reachable (${ex.getMessage})."))
       case Success((dockerId, host, port)) =>
         val normalizedHost = host.substring(1,host.length - 1)
         log.info(s"Deployed new container with id $dockerId, host $normalizedHost and port $port.")
@@ -242,7 +240,7 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
         case InstanceState.Paused =>
           log.warning(s"Instance with id $id reported stop but state already was 'Paused'.")
         case InstanceState.Running | InstanceState.NotReachable =>
-          instanceDao.setStateFor(instance.id.get, InstanceState.NotReachable)
+          instanceDao.setStateFor(instance.id.get, InstanceState.Stopped)
         case _ =>
           instanceDao.setStateFor(instance.id.get, InstanceState.NotReachable)
       }
@@ -289,7 +287,7 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
     * and running. Will pause the container and set state accordingly.
     *
     * @param id Id of the instance to pause
-    * @return OperationRsult indicating either success or the reason for failure (which preconditions failed)
+    * @return OperationResult indicating either success or the reason for failure (which preconditions failed)
     */
   def handlePause(id: Long): OperationResult.Value = {
     if (!instanceDao.hasInstance(id)) {
@@ -300,9 +298,16 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
       val instance = instanceDao.getInstance(id).get
       if (instance.instanceState == InstanceState.Running) {
         log.info(s"Handling /pause for instance with id $id...")
-        dockerActor ! pause(instance.dockerId.get)
-        //TODO: execute pause command (async?)
-        instanceDao.setStateFor(instance.id.get, InstanceState.Paused) //TODO: Move state update to async block?
+        implicit val timeout : Timeout = Timeout(10 seconds)
+
+        (dockerActor ? pause(instance.dockerId.get)).map{
+          _ => log.info(s"Instance $id paused.")
+            instanceDao.setStateFor(instance.id.get, InstanceState.Paused)
+        }.recover {
+          case ex: Exception =>
+            log.warning(s"Failed to pause container with id $id. Message is: ${ex.getMessage}")
+        }
+
         OperationResult.Ok
       } else {
         OperationResult.InvalidStateForOperation
@@ -326,8 +331,16 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
       val instance = instanceDao.getInstance(id).get
       if (instance.instanceState == InstanceState.Paused) {
         log.info(s"Handling /resume for instance with id $id...")
-        dockerActor ! unpause(instance.dockerId.get)
-        instanceDao.setStateFor(instance.id.get, InstanceState.Running) //TODO: Move state update to async block?
+        implicit val timeout : Timeout = Timeout(10 seconds)
+
+        (dockerActor ? unpause(instance.dockerId.get)).map{
+          _ => log.info(s"Instance $id resumed.")
+            instanceDao.setStateFor(instance.id.get, InstanceState.Running)
+        }.recover {
+          case ex: Exception =>
+            log.warning(s"Failed to resume container with id $id. Message is: ${ex.getMessage}")
+        }
+
         OperationResult.Ok
       } else {
         OperationResult.InvalidStateForOperation
@@ -349,35 +362,19 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
       OperationResult.NoDockerContainer
     } else {
       log.info(s"Handling /stop for instance with id $id...")
+
       val instance = instanceDao.getInstance(id).get
-      if (instance.instanceState == InstanceState.Running) {
-        //Only call /stop when instance is crawler, webapi or webapp
-        if (instance.componentType == ComponentType.Crawler ||
-          instance.componentType == ComponentType.WebApi ||
-          instance.componentType == ComponentType.WebApp) {
-          log.info(s"Shutting instance down gracefully...")
 
-          val shutdownFuture = RestClient.executePost(RestClient.getUri(instance) + "/stop")
-          shutdownFuture.onComplete {
-            case Success(response) =>
-              if (response.status == StatusCodes.OK) {
-                log.info(s"Successfully shut down instance with id $id.")
-              } else {
-                log.warning(s"Failed to shut down instance with id $id, server returned ${response.status}.")
-              }
-            case Failure(x) =>
-              log.warning(s"Failed to shut down instance with id $id, exception occurred: $x")
-          }
-          Await.ready(shutdownFuture, Duration.Inf)
-        }
-      } else {
-        log.warning(s"Instance with id $id is in state ${instance.instanceState}, so it will not be gracefully shut down.")
-      }
       log.info("Stopping container...")
-
       implicit val timeout: Timeout = Timeout(10 seconds)
-      val future: Future[Any] = dockerActor ? stop(instance.dockerId.get)
-      future.onComplete{case Success(_) => instanceDao.setStateFor(instance.id.get, InstanceState.Stopped)}
+
+      (dockerActor ? stop(instance.dockerId.get)).map{
+        _ => log.info(s"Instance $id stopped.")
+          instanceDao.setStateFor(instance.id.get, InstanceState.Stopped)
+      }.recover {
+        case ex: Exception =>
+          log.warning(s"Failed to stop container with id $id. Message is: ${ex.getMessage}")
+      }
 
       OperationResult.Ok
     }
@@ -402,7 +399,14 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
       if (instance.instanceState == InstanceState.Stopped) {
         log.info("Starting container...")
         implicit val timeout: Timeout = Timeout(10 seconds)
-        dockerActor ! start(instance.dockerId.get)
+
+        (dockerActor ? start(instance.dockerId.get)).map{
+          _ => log.info(s"Instance $id started.")
+        }.recover {
+          case ex: Exception =>
+            log.warning(s"Failed to start container with id $id. Message is: ${ex.getMessage}")
+        }
+
         OperationResult.Ok
       } else {
         OperationResult.InvalidStateForOperation
@@ -425,9 +429,20 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
     } else {
       log.info(s"Handling /delete for instance with id $id...")
       val instance = instanceDao.getInstance(id).get
-      if (instance.instanceState == InstanceState.Stopped) {
+      if (instance.instanceState != InstanceState.Running) {
         log.info("Deleting container...")
-        dockerActor ! delete(instance.dockerId.get)
+
+        implicit val timeout: Timeout = Timeout(10 seconds)
+
+        (dockerActor ? delete(instance.dockerId.get)).map{
+          _ => log.info(s"Container for instance $id deleted.")
+            instanceDao.setStateFor(instance.id.get, InstanceState.Stopped)
+        }.recover {
+          case ex: Exception =>
+            log.warning(s"Failed to delete container for instance with id $id. Message is: ${ex.getMessage}")
+        }
+
+        //Delete data either way
         instanceDao.removeInstance(id) match {
           case Success(_) => OperationResult.Ok
           case Failure(_) => OperationResult.InternalError
