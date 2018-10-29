@@ -32,6 +32,7 @@ trait EventJsonSupport extends SprayJsonSupport with DefaultJsonProtocol with In
         case "InstanceAddedEvent" => EventType.InstanceAddedEvent
         case "InstanceRemovedEvent" => EventType.InstanceRemovedEvent
         case "NumbersChangedEvent" => EventType.NumbersChangedEvent
+        case "DockerOperationErrorEvent" => EventType.DockerOperationErrorEvent
         case x => throw DeserializationException(s"Unexpected string value $x for event type.")
       }
       case y => throw DeserializationException(s"Unexpected type $y during deserialization event type.")
@@ -49,6 +50,7 @@ trait EventJsonSupport extends SprayJsonSupport with DefaultJsonProtocol with In
     def write(payload: RegistryEventPayload) : JsValue = payload match {
       case ncp: NumbersChangedPayload => numbersChangedPayloadFormat.write(ncp)
       case ip:  InstancePayload => instancePayloadFormat.write(ip)
+      case doep: DockerOperationErrorPayload => dockerOperationErrorPayloadFormat.write(doep)
       case _ => throw new RuntimeException("Unsupported type of payload!")
     }
 
@@ -63,6 +65,8 @@ trait EventJsonSupport extends SprayJsonSupport with DefaultJsonProtocol with In
         instancePayloadFormat.read(jso)
       } else if(jso.fields.isDefinedAt("noOfCrawlers")){
         numbersChangedPayloadFormat.read(jso)
+      } else if(jso.fields.isDefinedAt("errorMessage")) {
+        dockerOperationErrorPayloadFormat.read(jso)
       } else {
         throw DeserializationException("Unexpected type for event payload!")
       }
@@ -79,6 +83,10 @@ trait EventJsonSupport extends SprayJsonSupport with DefaultJsonProtocol with In
 
   //JSON format for an InstancePayload
   implicit val instancePayloadFormat: JsonFormat[InstancePayload] = jsonFormat1(InstancePayload)
+
+  //JSON format for an DockerOperationErrorPayload
+  implicit val dockerOperationErrorPayloadFormat: JsonFormat[DockerOperationErrorPayload] =
+    jsonFormat2(DockerOperationErrorPayload)
 
 }
 
@@ -130,6 +138,15 @@ object RegistryEventFactory {
   def createStateChangedEvent(instance: Instance) : RegistryEvent =
     RegistryEvent(EventType.StateChangedEvent, InstancePayload(instance))
 
+  /**
+    * Creates a new DockerOperationErrorEvent. Sets EventType and payload accordingly.
+    * @param affectedInstance Option[Instance] containing the instance that may be affected
+    * @param message Error message
+    * @return RegistryEvent with the respective type and payload.
+    */
+  def createDockerOperationErrorEvent(affectedInstance: Option[Instance], message: String) : RegistryEvent =
+    RegistryEvent(EventType.DockerOperationErrorEvent, DockerOperationErrorPayload(affectedInstance, message))
+
 }
 
 /**
@@ -153,6 +170,15 @@ final case class NumbersChangedPayload (componentType: ComponentType, newNumber:
   */
 final case class InstancePayload(instance: Instance) extends RegistryEventPayload
 
+/**
+  * This InstancePayload is sent with events of type DockerOperationErrorEvent. It contains an error message an optionally
+  * the instance that was affected by the error.
+  * @param affectedInstance Option[Instance] which may contain the instance affected
+  * @param errorMessage ErrorMessage that was issued
+  */
+final case class DockerOperationErrorPayload(affectedInstance: Option[Instance], errorMessage: String)
+  extends RegistryEventPayload
+
 
 /**
   * Enumerations concerning Events
@@ -170,5 +196,6 @@ object EventEnums {
     val InstanceAddedEvent: Value = Value("InstanceAddedEvent")
     val InstanceRemovedEvent: Value = Value("InstanceRemovedEvent")
     val NumbersChangedEvent: Value = Value("NumbersChangedEvent")
+    val DockerOperationErrorEvent: Value = Value("DockerOperationErrorEvent")
   }
 }

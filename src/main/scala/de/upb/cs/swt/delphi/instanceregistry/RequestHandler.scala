@@ -188,6 +188,7 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
     deployResult match {
       case Failure(ex) =>
         log.error(s"Failed to deploy container, docker host not reachable.")
+        fireDockerOperationErrorEvent(None, s"Deploy failed with message: ${ex.getMessage}")
         Failure(new RuntimeException(s"Failed to deploy container, docker host not reachable (${ex.getMessage})."))
       case Success((dockerId, host, port)) =>
         val normalizedHost = host.substring(1,host.length - 1)
@@ -331,6 +332,7 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
         }.recover {
           case ex: Exception =>
             log.warning(s"Failed to pause container with id $id. Message is: ${ex.getMessage}")
+            fireDockerOperationErrorEvent(Some(instance), s"Pause failed with message: ${ex.getMessage}")
         }
 
         OperationResult.Ok
@@ -365,6 +367,7 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
         }.recover {
           case ex: Exception =>
             log.warning(s"Failed to resume container with id $id. Message is: ${ex.getMessage}")
+            fireDockerOperationErrorEvent(Some(instance), s"Resume failed with message: ${ex.getMessage}")
         }
 
         OperationResult.Ok
@@ -401,6 +404,7 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
       }.recover {
         case ex: Exception =>
           log.warning(s"Failed to stop container with id $id. Message is: ${ex.getMessage}")
+          fireDockerOperationErrorEvent(Some(instance), s"Stop failed with message: ${ex.getMessage}")
       }
 
       OperationResult.Ok
@@ -432,6 +436,7 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
         }.recover {
           case ex: Exception =>
             log.warning(s"Failed to start container with id $id. Message is: ${ex.getMessage}")
+            fireDockerOperationErrorEvent(Some(instance), s"Start failed with message: ${ex.getMessage}")
         }
 
         OperationResult.Ok
@@ -466,6 +471,7 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
         }.recover {
           case ex: Exception =>
             log.warning(s"Failed to delete container for instance with id $id. Message is: ${ex.getMessage}")
+            fireDockerOperationErrorEvent(Some(instance), s"Delete failed with message: ${ex.getMessage}")
         }
 
         //Delete data either way
@@ -522,6 +528,14 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
     val event = RegistryEventFactory.createStateChangedEvent(updatedInstance)
     eventActor ! event
     instanceDao.addEventFor(updatedInstance.id.get, event)
+  }
+
+  private def fireDockerOperationErrorEvent(affectedInstance: Option[Instance], errorMessage: String): Unit = {
+    val event = RegistryEventFactory.createDockerOperationErrorEvent(affectedInstance, errorMessage)
+    eventActor ! event
+    if(affectedInstance.isDefined){
+      instanceDao.addEventFor(affectedInstance.get.id.get, event)
+    }
   }
 
   private def countConsecutivePositiveMatchingResults(id: Long): Int = {
