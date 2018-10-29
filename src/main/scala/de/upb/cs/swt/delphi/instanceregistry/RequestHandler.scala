@@ -194,7 +194,7 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
         val normalizedHost = host.substring(1,host.length - 1)
         log.info(s"Deployed new container with id $dockerId, host $normalizedHost and port $port.")
 
-        val newInstance = Instance(Some(newId), normalizedHost, port, name.getOrElse(s"Generic $componentType"), componentType, Some(dockerId), InstanceState.Stopped)
+        val newInstance = Instance(Some(newId), normalizedHost, port, name.getOrElse(s"Generic $componentType"), componentType, Some(dockerId), InstanceState.Deploying)
         log.info(s"Registering instance $newInstance....")
 
         instanceDao.addInstance(newInstance) match {

@@ -61,6 +61,7 @@ trait InstanceJsonSupport extends SprayJsonSupport with DefaultJsonProtocol {
         case "Failed" => InstanceState.Failed
         case "Paused" => InstanceState.Paused
         case "NotReachable" => InstanceState.NotReachable
+        case "Deploying" => InstanceState.Deploying
         case x => throw DeserializationException(s"Unexpected string value $x for instance state.")
       }
       case y => throw DeserializationException(s"Unexpected type $y during deserialization instance state.")
@@ -117,6 +118,7 @@ object InstanceEnums {
     * InstanceState enumeration defining the valid states for instances of delphi components
     */
   object InstanceState extends Enumeration {
+    val Deploying : Value = Value("Deploying")
     val Running : Value = Value("Running")
     val Stopped : Value = Value("Stopped")
     val Failed : Value = Value("Failed")
