@@ -1,12 +1,14 @@
 package de.upb.cs.swt.delphi.instanceregistry.connection
 
 import akka.actor.ActorSystem
+import akka.http.scaladsl.model.ws.{Message, TextMessage}
 import akka.http.scaladsl.model.{HttpResponse, StatusCodes}
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.HttpApp
 import akka.stream.ActorMaterializer
+import akka.stream.scaladsl.{Flow, Sink, Source}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.ComponentType
-import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.{Instance, JsonSupport}
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model._
 import de.upb.cs.swt.delphi.instanceregistry.{AppLogging, Registry, RequestHandler}
 import spray.json._
 
@@ -17,7 +19,7 @@ import scala.util.{Failure, Success}
 /**
   * Web server configuration for Instance Registry API.
   */
-object Server extends HttpApp with JsonSupport with AppLogging {
+object Server extends HttpApp with InstanceJsonSupport with EventJsonSupport with AppLogging {
 
   implicit val system : ActorSystem = Registry.system
   implicit val materializer : ActorMaterializer = ActorMaterializer()
@@ -25,6 +27,7 @@ object Server extends HttpApp with JsonSupport with AppLogging {
 
   private val handler : RequestHandler = Registry.requestHandler
 
+  //Routes that map http endpoints to methods in this object
   override def routes : server.Route =
       /****************BASIC OPERATIONS****************/
       path("register") {entity(as[String]) { jsonString => register(jsonString) }} ~
@@ -33,6 +36,7 @@ object Server extends HttpApp with JsonSupport with AppLogging {
       path("numberOfInstances") { numberOfInstances() } ~
       path("matchingInstance") { matchingInstance()} ~
       path("matchingResult") { matchInstance()} ~
+      path("eventList") { eventList()} ~
       /****************DOCKER OPERATIONS****************/
       path("deploy") { deployContainer()} ~
       path("reportStart") { reportStart()} ~
@@ -42,10 +46,18 @@ object Server extends HttpApp with JsonSupport with AppLogging {
       path("resume") { resume()} ~
       path("stop") { stop()} ~
       path("start") { start()} ~
-      path("delete") { deleteContainer()}
+      path("delete") { deleteContainer()} ~
+      /****************EVENT OPERATIONS****************/
+      path("events") { streamEvents()}
 
 
-   def register(InstanceString: String) : server.Route = {
+  /**
+    * Registers a new instance at the registry. This endpoint is intended for instances that are not running inside
+    * a docker container, as the Id, DockerId and InstanceState are being ignored.
+    * @param InstanceString String containing the serialized instance that is registering
+    * @return Server route that either maps to a 200 OK response if successful, or to the respective error codes
+    */
+  def register(InstanceString: String) : server.Route = {
     post
     {
       log.debug(s"POST /register has been called, parameter is: $InstanceString")
@@ -53,7 +65,8 @@ object Server extends HttpApp with JsonSupport with AppLogging {
       try {
         val paramInstance : Instance = InstanceString.parseJson.convertTo[Instance](instanceFormat)
         handler.handleRegister(paramInstance) match {
-          case Success(id) => complete{id.toString}
+          case Success(id) =>
+            complete{id.toString}
           case Failure(_) =>  complete(HttpResponse(StatusCodes.InternalServerError, entity = "An internal server error occurred."))
         }
       } catch {
@@ -65,7 +78,13 @@ object Server extends HttpApp with JsonSupport with AppLogging {
     }
   }
 
-   def deregister() : server.Route = parameters('Id.as[Long]){ Id =>
+  /**
+    * Removes an instance. The id of the instance that is calling deregister must be passed as an query argument named
+    * 'Id' (so the call is /deregister?Id=42). This endpoint is intended for instances that are not running inside
+    * a docker container, as the respective instance will be permanently deleted from the registry.
+    * @return Server route that either maps to a 200 OK response if successful, or to the respective error codes.
+    */
+  def deregister() : server.Route = parameters('Id.as[Long]){ Id =>
     post {
       log.debug(s"POST /deregister?Id=$Id has been called")
 
@@ -84,6 +103,11 @@ object Server extends HttpApp with JsonSupport with AppLogging {
     }
   }
 
+  /**
+    * Returns a list of instances with the specified ComponentType. The ComponentType must be passed as an query argument
+    * named 'ComponentType' (so the call is /instances?ComponentType=Crawler).
+    * @return Server route that either maps to a 200 OK response containing the list of instances, or the resp. error codes.
+    */
   def fetchInstancesOfType () : server.Route = parameters('ComponentType.as[String]) { compTypeString =>
     get {
       log.debug(s"GET /instances?ComponentType=$compTypeString has been called")
@@ -99,9 +123,15 @@ object Server extends HttpApp with JsonSupport with AppLogging {
     }
   }
 
+  /**
+    * Returns the number of instances for the specified ComponentType. The ComponentType must be passed as an query
+    * argument named 'ComponentType' (so the call is /numberOfInstances?ComponentType=Crawler).
+    * @return Server route that either maps to a 200 OK response containing the number of instance, or the resp. error codes.
+    */
   def numberOfInstances() : server.Route = parameters('ComponentType.as[String]) { compTypeString =>
     get {
       log.debug(s"GET /numberOfInstances?ComponentType=$compTypeString has been called")
+
       val compType : ComponentType = ComponentType.values.find(v => v.toString == compTypeString).orNull
 
       if(compType != null) {
@@ -113,6 +143,11 @@ object Server extends HttpApp with JsonSupport with AppLogging {
     }
   }
 
+  /**
+    * Returns an instance of the specified ComponentType that can be used to resolve dependencies. The ComponentType must
+    * be passed as an query argument named 'ComponentType' (so the call is /matchingInstance?ComponentType=Crawler).
+    * @return Server route that either maps to 200 OK response containing the instance, or the resp. error codes.
+    */
   def matchingInstance() : server.Route = parameters('ComponentType.as[String]){ compTypeString =>
     get{
       log.debug(s"GET /matchingInstance?ComponentType=$compTypeString has been called")
@@ -136,6 +171,11 @@ object Server extends HttpApp with JsonSupport with AppLogging {
     }
   }
 
+  /**
+    * Applies a matching result to the instance with the specified id. The matching result and id are passed as query
+    * parameters named 'Id' and 'MatchingSuccessful' (so the call is /matchingResult?Id=42&MatchingSuccessful=True).
+    * @return Server route that either maps to 200 OK or to the respective error codes
+    */
   def matchInstance() : server.Route = parameters('Id.as[Long], 'MatchingSuccessful.as[Boolean]){ (id, matchingResult) =>
     post {
       log.debug(s"POST /matchingResult?Id=$id&MatchingSuccessful=$matchingResult has been called")
@@ -150,6 +190,28 @@ object Server extends HttpApp with JsonSupport with AppLogging {
     }
   }
 
+  /**
+    * Returns a list of registry events that are associated to the instance with the specified id. The id is passed as
+    * query argument named 'Id' (so the resulting call is /eventList?Id=42).
+    * @return Server route mapping to either 200 OK and the list of event, or the resp. error codes.
+    */
+  def eventList() : server.Route = parameters('Id.as[Long]){id =>
+      get {
+        log.debug(s"GET /eventList?Id=$id has been called")
+
+        handler.getEventList(id) match {
+          case Success(list) => complete{list}
+          case Failure(_) => complete{HttpResponse(StatusCodes.NotFound, entity = s"Id $id not found.")}
+        }
+      }
+  }
+
+  /**
+    * Deploys a new container of the specified type. Also adds the resulting instance to the database. The mandatory
+    * parameter 'ComponentType' is passed as a query argument. The optional parameter 'InstanceName' may also be passed as
+    * query argument (so the resulting call may be /deploy?ComponentType=Crawler&InstanceName=MyCrawler).
+    * @return Server route that either maps to 202 ACCEPTED and the generated id of the instance, or the resp. error codes.
+    */
   def deployContainer() : server.Route = parameters('ComponentType.as[String], 'InstanceName.as[String].?) { (compTypeString, name) =>
     post {
       if(name.isEmpty){
@@ -175,6 +237,11 @@ object Server extends HttpApp with JsonSupport with AppLogging {
     }
   }
 
+  /**
+    * Called to report that the instance with the specified id was started successfully. The Id is passed as query
+    * parameter named 'Id' (so the resulting call is /reportStart?Id=42)
+    * @return Server route that either maps to 200 OK or the respective error codes
+    */
   def reportStart() : server.Route = parameters('Id.as[Long]) {id =>
     post{
       handler.handleReportStart(id) match {
@@ -193,6 +260,11 @@ object Server extends HttpApp with JsonSupport with AppLogging {
     }
   }
 
+  /**
+    * Called to report that the instance with the specified id was stopped successfully. The Id is passed as query
+    * parameter named 'Id' (so the resulting call is /reportStop?Id=42)
+    * @return Server route that either maps to 200 OK or the respective error codes
+    */
   def reportStop() : server.Route = parameters('Id.as[Long]) {id =>
     post{
       handler.handleReportStop(id) match {
@@ -210,6 +282,11 @@ object Server extends HttpApp with JsonSupport with AppLogging {
     }
   }
 
+  /**
+    * Called to report that the instance with the specified id encountered a failure. The Id is passed as query
+    * parameter named 'Id' (so the resulting call is /reportFailure?Id=42)
+    * @return Server route that either maps to 200 OK or the respective error codes
+    */
   def reportFailure() : server.Route = parameters('Id.as[Long], 'ErrorLog.as[String].?) {(id, errorLog) =>
     post{
       if(errorLog.isEmpty){
@@ -233,6 +310,11 @@ object Server extends HttpApp with JsonSupport with AppLogging {
     }
   }
 
+  /**
+    * Called to pause the instance with the specified id. The associated docker container is paused. The Id is passed
+    * as a query argument named 'Id' (so the resulting call is /pause?Id=42).
+    * @return Server route that either maps to 202 ACCEPTED or the expected error codes.
+    */
   def pause() : server.Route = parameters('Id.as[Long]) { id =>
     post{
       log.debug(s"POST /pause?Id=$id has been called")
@@ -254,6 +336,11 @@ object Server extends HttpApp with JsonSupport with AppLogging {
     }
   }
 
+  /**
+    * Called to resume the instance with the specified id. The associated docker container is resumed. The Id is passed
+    * as a query argument named 'Id' (so the resulting call is /resume?Id=42).
+    * @return Server route that either maps to 202 ACCEPTED or the expected error codes.
+    */
   def resume() : server.Route = parameters('Id.as[Long]) { id =>
     post {
       log.debug(s"POST /resume?Id=$id has been called")
@@ -275,6 +362,11 @@ object Server extends HttpApp with JsonSupport with AppLogging {
     }
   }
 
+  /**
+    * Called to stop the instance with the specified id. The associated docker container is stopped. The Id is passed
+    * as a query argument named 'Id' (so the resulting call is /stop?Id=42).
+    * @return Server route that either maps to 202 ACCEPTED or the expected error codes.
+    */
   def stop() : server.Route = parameters('Id.as[Long]) { id =>
     post {
       log.debug(s"POST /stop?Id=$id has been called")
@@ -293,6 +385,11 @@ object Server extends HttpApp with JsonSupport with AppLogging {
     }
   }
 
+  /**
+    * Called to start the instance with the specified id. The associated docker container is started. The Id is passed
+    * as a query argument named 'Id' (so the resulting call is /start?Id=42).
+    * @return Server route that either maps to 202 ACCEPTED or the expected error codes.
+    */
   def start() : server.Route = parameters('Id.as[Long]) { id =>
     post{
       log.debug(s"POST /start?Id=$id has been called")
@@ -314,6 +411,11 @@ object Server extends HttpApp with JsonSupport with AppLogging {
     }
   }
 
+  /**
+    * Called to delete the instance with the specified id as well as the associated docker container. The Id is passed
+    * as a query argument named 'Id' (so the resulting call is /delete?Id=42).
+    * @return Server route that either maps to 202 ACCEPTED or the respective error codes.
+    */
   def deleteContainer() : server.Route = parameters('Id.as[Long]) { id =>
     post{
       log.debug(s"POST /delete?Id=$id has been called")
@@ -335,7 +437,36 @@ object Server extends HttpApp with JsonSupport with AppLogging {
     }
   }
 
+  /**
+    * Creates a WebSocketConnection that streams events that are issued by the registry to all connected clients.
+    * @return Server route that maps to the WebSocketConnection
+    */
+  def streamEvents() : server.Route = {
+    handleWebSocketMessages{
+      //Flush pending messages from publisher
+      Source.fromPublisher(handler.eventPublisher).to(Sink.ignore).run()
+      //Create flow from publisher
+      Flow[Message]
+        .map{
+          case TextMessage.Strict(msg: String) => msg
+          case _ => println("Ignored non-text message.")
+        }
+        .via(
+          Flow.fromSinkAndSource(Sink.foreach(println), Source.fromPublisher(handler.eventPublisher)
+        .map(event => event.toJson(eventFormat).toString))
+        )
+        .map{msg: String => TextMessage.Strict(msg + "\n")}
+        .watchTermination() { (_, done) =>
+        done.onComplete {
+          case Success(_) =>
+            log.info("Stream route completed successfully")
+          case Failure(ex) =>
+            log.error(s"Stream route completed with failure : $ex")
+        }
+      }
+    }
 
+  }
 
 }
 

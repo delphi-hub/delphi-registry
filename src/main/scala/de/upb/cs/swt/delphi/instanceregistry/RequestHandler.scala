@@ -5,9 +5,11 @@ import akka.pattern.ask
 import akka.util.Timeout
 import de.upb.cs.swt.delphi.instanceregistry.Docker.DockerActor._
 import de.upb.cs.swt.delphi.instanceregistry.Docker.{DockerActor, DockerConnection}
+import akka.stream.scaladsl.{Keep, Sink, Source}
+import akka.stream.{ActorMaterializer, Materializer, OverflowStrategy}
 import de.upb.cs.swt.delphi.instanceregistry.daos.{DynamicInstanceDAO, InstanceDAO}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.{ComponentType, InstanceState}
-import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.{Instance, InstanceEnums}
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model._
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
@@ -17,13 +19,17 @@ import scala.util.{Failure, Success, Try}
 class RequestHandler(configuration: Configuration, connection: DockerConnection) extends AppLogging {
 
 
-  implicit val system: ActorSystem = Registry.system
-  implicit val ec: ExecutionContext = system.dispatcher
 
-  val dockerActor: ActorRef = system.actorOf(DockerActor.props(connection))
+  implicit val system: ActorSystem = Registry.system
+  implicit val materializer : Materializer = ActorMaterializer()
+  implicit val ec: ExecutionContext = system.dispatcher
 
   private[instanceregistry] val instanceDao: InstanceDAO = new DynamicInstanceDAO(configuration)
 
+  val (eventActor, eventPublisher) = Source.actorRef[RegistryEvent](0, OverflowStrategy.dropNew)
+    .toMat(Sink.asPublisher(fanout = true))(Keep.both)
+    .run()
+  val dockerActor: ActorRef = system.actorOf(DockerActor.props(connection))
 
   def initialize(): Unit = {
     log.info("Initializing request handler...")
@@ -35,7 +41,8 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
     log.info("Done initializing request handler.")
   }
 
-  def shutdown(): Unit = {
+  def shutdown() : Unit = {
+    eventActor ! PoisonPill
     instanceDao.shutdown()
   }
 
@@ -56,7 +63,10 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
       dockerId = None, instanceState = InstanceState.Running)
 
     instanceDao.addInstance(newInstance) match {
-      case Success(_) => Success(newID)
+      case Success(_) =>
+        fireNumbersChangedEvent(newInstance.componentType)
+        fireInstanceAddedEvent(newInstance)
+        Success(newID)
       case Failure(x) => Failure(x)
     }
   }
@@ -74,7 +84,10 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
     } else if (isInstanceDockerContainer(instanceId)) {
       OperationResult.IsDockerContainer
     } else {
+      val instanceToRemove = instanceDao.getInstance(instanceId).get
+      fireInstanceRemovedEvent(instanceToRemove)
       instanceDao.removeInstance(instanceId)
+      fireNumbersChangedEvent(instanceToRemove.componentType)
       OperationResult.Ok
     }
   }
@@ -85,6 +98,10 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
 
   def getNumberOfInstances(compType: ComponentType): Int = {
     instanceDao.allInstances().count(i => i.componentType == compType)
+  }
+
+  def getEventList(id: Long) : Try[List[RegistryEvent]] = {
+    instanceDao.getEventsFor(id)
   }
 
   def getMatchingInstanceOfType(compType: ComponentType): Try[Instance] = {
@@ -148,8 +165,10 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
       instanceDao.addMatchingResult(id, result)
       if (result && instance.instanceState == InstanceState.NotReachable) {
         instanceDao.setStateFor(instance.id.get, InstanceState.Running)
+        fireStateChangedEvent(instanceDao.getInstance(id).get)
       } else if (!result && instance.instanceState == InstanceState.Running) {
         instanceDao.setStateFor(instance.id.get, InstanceState.NotReachable)
+        fireStateChangedEvent(instanceDao.getInstance(id).get)
       }
       log.info(s"Applied matching result $result to instance with id $id.")
       OperationResult.Ok
@@ -169,17 +188,20 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
     deployResult match {
       case Failure(ex) =>
         log.error(s"Failed to deploy container, docker host not reachable.")
+        fireDockerOperationErrorEvent(None, s"Deploy failed with message: ${ex.getMessage}")
         Failure(new RuntimeException(s"Failed to deploy container, docker host not reachable (${ex.getMessage})."))
       case Success((dockerId, host, port)) =>
         val normalizedHost = host.substring(1,host.length - 1)
         log.info(s"Deployed new container with id $dockerId, host $normalizedHost and port $port.")
 
-        val newInstance = Instance(Some(newId), normalizedHost, port, name.getOrElse(s"Generic $componentType"), componentType, Some(dockerId), InstanceState.Stopped)
+        val newInstance = Instance(Some(newId), normalizedHost, port, name.getOrElse(s"Generic $componentType"), componentType, Some(dockerId), InstanceState.Deploying)
         log.info(s"Registering instance $newInstance....")
 
         instanceDao.addInstance(newInstance) match {
           case Success(_) =>
             log.info("Successfully registered.")
+            fireInstanceAddedEvent(newInstance)
+            fireNumbersChangedEvent(newInstance.componentType)
             Success(newId)
           case Failure(x) =>
             log.info(s"Failed to register. Exception: $x")
@@ -213,6 +235,7 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
           instanceDao.setStateFor(instance.id.get, InstanceState.Running)
       }
       log.info(s"Instance with id $id has reported start.")
+      fireStateChangedEvent(instanceDao.getInstance(id).get)
       OperationResult.Ok
     }
   }
@@ -245,6 +268,7 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
           instanceDao.setStateFor(instance.id.get, InstanceState.NotReachable)
       }
       log.info(s"Instance with id $id has reported stop.")
+      fireStateChangedEvent(instanceDao.getInstance(id).get)
       OperationResult.Ok
     }
   }
@@ -277,6 +301,7 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
           instanceDao.setStateFor(instance.id.get, InstanceState.Failed)
       }
       log.info(s"Instance with id $id has reported failure.")
+      fireStateChangedEvent(instanceDao.getInstance(id).get)
       OperationResult.Ok
     }
 
@@ -303,9 +328,11 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
         (dockerActor ? pause(instance.dockerId.get)).map{
           _ => log.info(s"Instance $id paused.")
             instanceDao.setStateFor(instance.id.get, InstanceState.Paused)
+            fireStateChangedEvent(instanceDao.getInstance(id).get)
         }.recover {
           case ex: Exception =>
             log.warning(s"Failed to pause container with id $id. Message is: ${ex.getMessage}")
+            fireDockerOperationErrorEvent(Some(instance), s"Pause failed with message: ${ex.getMessage}")
         }
 
         OperationResult.Ok
@@ -336,9 +363,11 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
         (dockerActor ? unpause(instance.dockerId.get)).map{
           _ => log.info(s"Instance $id resumed.")
             instanceDao.setStateFor(instance.id.get, InstanceState.Running)
+            fireStateChangedEvent(instanceDao.getInstance(id).get)
         }.recover {
           case ex: Exception =>
             log.warning(s"Failed to resume container with id $id. Message is: ${ex.getMessage}")
+            fireDockerOperationErrorEvent(Some(instance), s"Resume failed with message: ${ex.getMessage}")
         }
 
         OperationResult.Ok
@@ -371,9 +400,11 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
       (dockerActor ? stop(instance.dockerId.get)).map{
         _ => log.info(s"Instance $id stopped.")
           instanceDao.setStateFor(instance.id.get, InstanceState.Stopped)
+          fireStateChangedEvent(instance)
       }.recover {
         case ex: Exception =>
           log.warning(s"Failed to stop container with id $id. Message is: ${ex.getMessage}")
+          fireDockerOperationErrorEvent(Some(instance), s"Stop failed with message: ${ex.getMessage}")
       }
 
       OperationResult.Ok
@@ -405,6 +436,7 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
         }.recover {
           case ex: Exception =>
             log.warning(s"Failed to start container with id $id. Message is: ${ex.getMessage}")
+            fireDockerOperationErrorEvent(Some(instance), s"Start failed with message: ${ex.getMessage}")
         }
 
         OperationResult.Ok
@@ -436,15 +468,18 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
 
         (dockerActor ? delete(instance.dockerId.get)).map{
           _ => log.info(s"Container for instance $id deleted.")
-            instanceDao.setStateFor(instance.id.get, InstanceState.Stopped)
         }.recover {
           case ex: Exception =>
             log.warning(s"Failed to delete container for instance with id $id. Message is: ${ex.getMessage}")
+            fireDockerOperationErrorEvent(Some(instance), s"Delete failed with message: ${ex.getMessage}")
         }
 
         //Delete data either way
         instanceDao.removeInstance(id) match {
-          case Success(_) => OperationResult.Ok
+          case Success(_) =>
+            fireNumbersChangedEvent(instance.componentType)
+            fireInstanceRemovedEvent(instance)
+            OperationResult.Ok
           case Failure(_) => OperationResult.InternalError
         }
       } else {
@@ -462,7 +497,7 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
     instanceDao.getInstance(id)
   }
 
-  def instanceHasState(id: Long, state: InstanceEnums.State): Boolean = {
+  def instanceHasState(id: Long, state: InstanceState): Boolean = {
     instanceDao.getInstance(id) match {
       case Some(instance) => instance.instanceState == state
       case None => false
@@ -471,6 +506,36 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
 
   def isInstanceDockerContainer(id: Long): Boolean = {
     instanceDao.getDockerIdFor(id).isSuccess
+  }
+
+  private def fireNumbersChangedEvent(componentType: ComponentType): Unit = {
+    val newNumber = instanceDao.getInstancesOfType(componentType).size
+    eventActor ! RegistryEventFactory.createNumbersChangedEvent(componentType, newNumber)
+  }
+
+  private def fireInstanceAddedEvent(addedInstance: Instance): Unit = {
+    val event = RegistryEventFactory.createInstanceAddedEvent(addedInstance)
+    eventActor ! event
+    instanceDao.addEventFor(addedInstance.id.get, event)
+  }
+
+  private def fireInstanceRemovedEvent(removedInstance: Instance): Unit = {
+    //Do not add removed event, instance will not be present in DAO anymore
+    eventActor ! RegistryEventFactory.createInstanceRemovedEvent(removedInstance)
+  }
+
+  private def fireStateChangedEvent(updatedInstance: Instance): Unit = {
+    val event = RegistryEventFactory.createStateChangedEvent(updatedInstance)
+    eventActor ! event
+    instanceDao.addEventFor(updatedInstance.id.get, event)
+  }
+
+  private def fireDockerOperationErrorEvent(affectedInstance: Option[Instance], errorMessage: String): Unit = {
+    val event = RegistryEventFactory.createDockerOperationErrorEvent(affectedInstance, errorMessage)
+    eventActor ! event
+    if(affectedInstance.isDefined){
+      instanceDao.addEventFor(affectedInstance.get.id.get, event)
+    }
   }
 
   private def countConsecutivePositiveMatchingResults(id: Long): Int = {

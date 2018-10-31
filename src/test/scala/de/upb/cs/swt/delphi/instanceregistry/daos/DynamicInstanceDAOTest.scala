@@ -130,40 +130,6 @@ class DynamicInstanceDAOTest extends FlatSpec with Matchers with BeforeAndAfterE
     assert(dao.getDockerIdFor(42).get.equals("dockerId"))
   }
 
-  "The DAO" must "be able to read multiple instances from the recovery file" in {
-    dao.dumpToRecoveryFile()
-    dao.clearData()
-    assert(dao.allInstances().isEmpty)
-    dao.tryInitFromRecoveryFile()
-    assert(dao.allInstances().size == 3)
-  }
-
-  it must "fail to load from recovery file if it is not present" in {
-    dao.dumpToRecoveryFile()
-    assert(dao.allInstances().size == 3)
-    dao.deleteRecoveryFile()
-    dao.clearData()
-    assert(dao.allInstances().isEmpty)
-    dao.tryInitFromRecoveryFile()
-    assert(dao.allInstances().isEmpty)
-  }
-
-  it must "contain the correct instance data after loading from recovery file" in {
-    assert(dao.addInstance(buildInstance(4)).isSuccess)
-    dao.dumpToRecoveryFile()
-    assert(dao.allInstances().size == 4)
-    dao.clearData()
-    assert(dao.allInstances().isEmpty)
-    dao.tryInitFromRecoveryFile()
-    assert(dao.allInstances().size == 4)
-    val instance = dao.getInstance(4)
-    assert(instance.isDefined)
-    assert(instance.get.id.get == 4)
-  }
-
-
-
-
   override protected def afterEach() : Unit = {
     dao.removeAll()
     dao.deleteRecoveryFile()

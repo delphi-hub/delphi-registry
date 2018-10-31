@@ -67,7 +67,7 @@ paths:
       operationId: deleteInstance
       parameters:
         - in: query
-          name: InstanceID
+          name: Id
           description: The ID of the instance to be deregistered.
           required: true
           type: integer
@@ -185,7 +185,7 @@ paths:
       operationId: matchInstance
       parameters:
         - in: query
-          name: InstanceID
+          name: Id
           description: The ID of the instance that the sender was matched to.
           required: true
           type: integer
@@ -202,6 +202,30 @@ paths:
           description: Invalid ID supplied
         '404':
           description: No match found
+  /eventList:
+    get:
+      tags:
+        - Basic Operations
+      summary: Gets the list of events associated to the specified instance
+      description: >-
+        This command retrieves a list of events that are associated to the instance with the specified id.
+      operationId: eventList
+      parameters:
+        - name: Id
+          in: query
+          description: Id of the instance
+          required: true
+          type: integer
+          format: int64
+      responses:
+        '200':
+          description: List of events for the specified instance
+          schema:
+            type: array
+            items:
+              $ref: '#/definitions/Event'
+        '404':
+          description: Instance not found
   /deploy:
     post:
       tags:
@@ -272,8 +296,10 @@ paths:
         - Docker Operations
       summary: Reports the manual stop of an instances to the registry
       description: >-
-        This command informs the registry about an instance that was stopped manually, meaning not via calling /stop on the instance registry. This is only applicable to instances
-        running inside a docker container, as non-container instances would deregister themselves when stopped. 
+        This command informs the registry about an instance that was stopped
+        manually, meaning not via calling /stop on the instance registry. This
+        is only applicable to instances running inside a docker container, as
+        non-container instances would deregister themselves when stopped. 
       operationId: reportStop
       parameters:
         - in: query
@@ -470,6 +496,23 @@ paths:
         '500':
           description: Internal server error
 definitions:
+  Event:
+    type: object
+    required:
+      - eventType
+      - payload
+    properties:
+      eventType:
+        type: string
+        description: Valid types for events
+        example: NumbersChangedEvent
+        enum:
+          - NumbersChangedEvent
+          - InstanceAddedEvent
+          - InstanceRemovedEvent
+          - StateChangedEvent
+      payload:
+        type: object
   Instance:
     type: object
     required:

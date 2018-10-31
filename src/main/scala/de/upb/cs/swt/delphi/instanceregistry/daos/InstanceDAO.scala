@@ -1,6 +1,6 @@
 package de.upb.cs.swt.delphi.instanceregistry.daos
 
-import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.Instance
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.{Instance, RegistryEvent}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.{ComponentType, InstanceState}
 
 import scala.util.Try
@@ -92,5 +92,20 @@ trait InstanceDAO {
     * @param state New state to set
     */
   def setStateFor(id: Long, state: InstanceState.Value) : Try[Unit]
+
+  /**
+    * Add an event to the specified instance
+    * @param id Id of the instance that the event should be added to
+    * @param event Event to add
+    * @return Success if instance is present, Failure otherwise
+    */
+  def addEventFor(id: Long, event: RegistryEvent) : Try[Unit]
+
+  /**
+    * Gets the list of events for the instance with the specified id
+    * @param id Id of the instance
+    * @return List of events if instance is present, Failure otherwise
+    */
+  def getEventsFor(id: Long) : Try[List[RegistryEvent]]
 
 }
