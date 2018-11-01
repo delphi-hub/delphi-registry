@@ -9,6 +9,7 @@ import akka.stream.scaladsl.{Keep, Sink, Source}
 import akka.stream.{ActorMaterializer, Materializer, OverflowStrategy}
 import de.upb.cs.swt.delphi.instanceregistry.daos.{DynamicInstanceDAO, InstanceDAO}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.{ComponentType, InstanceState}
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.LinkEnums.LinkState
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model._
 
 import scala.concurrent.duration._
@@ -161,9 +162,10 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
     if(!instanceDao.hasInstance(instanceIdFrom) || !instanceDao.hasInstance(instanceIdTo)){
       OperationResult.IdUnknown
     } else {
-      //TODO: Verify there is no link present that is not failed!
-      //TODO: Insert Link into database, state should be 'Assigned'
-      OperationResult.Ok
+      instanceDao.addLink(InstanceLink(instanceIdFrom, instanceIdTo, LinkState.Assigned)) match {
+        case Success(_) => OperationResult.Ok
+        case Failure(_) => OperationResult.InternalError //Should not happen, as ids are being verified above!
+      }
     }
   }
 
@@ -177,20 +179,23 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
       val dependency = instanceDao.getInstance(instanceId).get
 
       if(assignmentAllowed(instance.componentType) && compatibleTypes(instance.componentType, dependency.componentType)){
-        //TODO: Update database with assignment. Verify there is only one link present, remove it and replace it with new one
-        implicit val timeout : Timeout = Timeout(10 seconds)
+        if(instanceDao.addLink(InstanceLink(instanceId, newDependencyId, LinkState.Assigned)).isFailure){
+          //This should not happen, as ids are being verified above!
+          OperationResult.InternalError
+        } else {
+          implicit val timeout : Timeout = Timeout(10 seconds)
 
-        (dockerActor ? restart(instance.dockerId.get)).map{
-          _ => log.info(s"Instance $instanceId restarted.")
-            instanceDao.setStateFor(instance.id.get, InstanceState.Stopped) //Set to stopped, will report start automatically
-            fireStateChangedEvent(instanceDao.getInstance(instanceId).get)
-        }.recover {
-          case ex: Exception =>
-            log.warning(s"Failed to restart container with id $instanceId. Message is: ${ex.getMessage}")
-            fireDockerOperationErrorEvent(Some(instance), s"Pause failed with message: ${ex.getMessage}")
+          (dockerActor ? restart(instance.dockerId.get)).map{
+            _ => log.info(s"Instance $instanceId restarted.")
+              instanceDao.setStateFor(instance.id.get, InstanceState.Stopped) //Set to stopped, will report start automatically
+              fireStateChangedEvent(instanceDao.getInstance(instanceId).get)
+          }.recover {
+            case ex: Exception =>
+              log.warning(s"Failed to restart container with id $instanceId. Message is: ${ex.getMessage}")
+              fireDockerOperationErrorEvent(Some(instance), s"Pause failed with message: ${ex.getMessage}")
+          }
+          OperationResult.Ok
         }
-
-        OperationResult.Ok
       } else {
         OperationResult.InvalidTypeForOperation
       }
@@ -199,27 +204,34 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
     }
   }
 
-  def handleMatchingResult(callerId: Long, matchedInstanceId: Long, result: Boolean): OperationResult.Value = {
+  def handleMatchingResult(callerId: Long, matchedInstanceId: Long, matchingSuccess: Boolean): OperationResult.Value = {
     if (!instanceDao.hasInstance(callerId) || !instanceDao.hasInstance(matchedInstanceId)) {
       OperationResult.IdUnknown
     } else {
-      val callingInstance = instanceDao.getInstance(callerId).get
       val matchedInstance = instanceDao.getInstance(matchedInstanceId).get
 
       //Update list of matching results
-      instanceDao.addMatchingResult(matchedInstanceId, result)
+      instanceDao.addMatchingResult(matchedInstanceId, matchingSuccess)
       //Update state of matchedInstance accordingly
-      if (result && matchedInstance.instanceState == InstanceState.NotReachable) {
+      if (matchingSuccess && matchedInstance.instanceState == InstanceState.NotReachable) {
         instanceDao.setStateFor(matchedInstanceId, InstanceState.Running)
         fireStateChangedEvent(instanceDao.getInstance(matchedInstanceId).get) //Re-retrieve instance bc reference was invalidated by 'setStateFor'
-      } else if (!result && matchedInstance.instanceState == InstanceState.Running) {
+      } else if (!matchingSuccess && matchedInstance.instanceState == InstanceState.Running) {
         instanceDao.setStateFor(matchedInstanceId, InstanceState.NotReachable)
         fireStateChangedEvent(instanceDao.getInstance(matchedInstanceId).get)//Re-retrieve instance bc reference was invalidated by 'setStateFor'
       }
-      log.info(s"Applied matching result $result to instance with id $matchedInstanceId.")
+      log.info(s"Applied matching result $matchingSuccess to instance with id $matchedInstanceId.")
 
-      //TODO: Handle Link state, set it to failed if needed.
-      OperationResult.Ok
+      //Update link state
+      if(!matchingSuccess){
+        instanceDao.updateLink(InstanceLink(callerId, matchedInstanceId, LinkState.Failed)) match {
+          case Success(_) => OperationResult.Ok
+          case Failure(_) => OperationResult.InternalError //Should not happen
+        }
+      } else {
+        OperationResult.Ok
+      }
+
     }
   }
 

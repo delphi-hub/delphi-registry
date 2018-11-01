@@ -165,6 +165,8 @@ object Server extends HttpApp with InstanceJsonSupport with EventJsonSupport wit
                 complete(HttpResponse(StatusCodes.NotFound, entity = s"Could not find instance with id $id."))
               case handler.OperationResult.Ok =>
                 complete(matchedInstance.toJson(instanceFormat))
+              case handler.OperationResult.InternalError =>
+                complete{HttpResponse(StatusCodes.InternalServerError, entity = s"An internal error occurred")}
             }
           case Failure(x) =>
             log.warning(s"Could not find matching instance for type $compType, message was ${x.getMessage}.")

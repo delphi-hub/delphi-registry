@@ -1,6 +1,6 @@
 package de.upb.cs.swt.delphi.instanceregistry.daos
 
-import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.{Instance, RegistryEvent}
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.{Instance, InstanceLink, RegistryEvent}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.{ComponentType, InstanceState}
 
 import scala.util.Try
@@ -107,5 +107,19 @@ trait InstanceDAO {
     * @return List of events if instance is present, Failure otherwise
     */
   def getEventsFor(id: Long) : Try[List[RegistryEvent]]
+
+  /**
+    * Adds a new instance link to the dao. Will fail if the ids referenced in the link object are not present.
+    * @param link Link to add
+    * @return Success if both ids are present, Failure otherwise
+    */
+  def addLink(link: InstanceLink) : Try[Unit]
+
+  /**
+    * Update the link between the two instances specified by the parameter.
+    * @param link Link to update
+    * @return Success if link is present, Failure otherwise
+    */
+  def updateLink(link: InstanceLink) : Try[Unit]
 
 }
