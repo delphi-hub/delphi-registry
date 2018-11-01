@@ -92,6 +92,12 @@ paths:
         on the server.
       operationId: matchingInstance
       parameters:
+        - in: query
+          name: Id
+          description: Id of the instance that is requesting a dependency
+          required: true
+          type: integer
+          format: int64
         - name: ComponentType
           in: query
           description: Type of the instance to be retrieved
@@ -185,7 +191,13 @@ paths:
       operationId: matchInstance
       parameters:
         - in: query
-          name: Id
+          name: callerId
+          description: The ID of the instance that is calling this endpoint
+          required: true
+          type: integer
+          format: int64
+        - in: query
+          name: matchedInstanceId
           description: The ID of the instance that the sender was matched to.
           required: true
           type: integer
@@ -208,7 +220,8 @@ paths:
         - Basic Operations
       summary: Gets the list of events associated to the specified instance
       description: >-
-        This command retrieves a list of events that are associated to the instance with the specified id.
+        This command retrieves a list of events that are associated to the
+        instance with the specified id.
       operationId: eventList
       parameters:
         - name: Id
@@ -493,6 +506,38 @@ paths:
             stopped or not deployed as a docker container at all.
         '404':
           description: ID not found on server
+        '500':
+          description: Internal server error
+  /assignInstance:
+    post:
+      tags:
+        - Docker Operations
+      summary: Assignes a new dependency to the specified instance
+      description: >-
+        This command assignes a new dependency to the instance with the specified id. Internally, this will
+        stop the instance, assign the new dependency and start the instance again. This is why this is only 
+        applicable to docker instances.
+      operationId: assignInstance
+      parameters:
+        - in: query
+          name: Id
+          description: The ID of the instance whichs dependency should be updated
+          required: true
+          type: integer
+          format: int64
+        - in: query
+          name: assignedInstanceId
+          description: The ID of the instance that should be assigned as dependency
+          required: true
+          type: integer
+          format: int64
+      responses:
+        '202' :
+          description: 'Accepted, the operation will be completed in the future.'
+        '400' :
+          description: 'Bad request, the instance with the specified ID is no running inside a docker container or the assigned instance is of the wrong component type.'
+        '404':
+          description: 'One of the ids was not found on the server'
         '500':
           description: Internal server error
 definitions:

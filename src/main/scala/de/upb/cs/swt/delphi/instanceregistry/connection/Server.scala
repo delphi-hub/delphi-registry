@@ -148,9 +148,9 @@ object Server extends HttpApp with InstanceJsonSupport with EventJsonSupport wit
     * be passed as an query argument named 'ComponentType' (so the call is /matchingInstance?ComponentType=Crawler).
     * @return Server route that either maps to 200 OK response containing the instance, or the resp. error codes.
     */
-  def matchingInstance() : server.Route = parameters('ComponentType.as[String]){ compTypeString =>
+  def matchingInstance() : server.Route = parameters('Id.as[Long], 'ComponentType.as[String]){ (id, compTypeString) =>
     get{
-      log.debug(s"GET /matchingInstance?ComponentType=$compTypeString has been called")
+      log.debug(s"GET /matchingInstance?Id=$id&ComponentType=$compTypeString has been called")
 
       val compType : ComponentType = ComponentType.values.find(v => v.toString == compTypeString).orNull
       log.info(s"Looking for instance of type $compType ...")
@@ -158,8 +158,14 @@ object Server extends HttpApp with InstanceJsonSupport with EventJsonSupport wit
       if(compType != null){
         handler.getMatchingInstanceOfType(compType) match {
           case Success(matchedInstance) =>
-            log.info(s"Matched to $matchedInstance.")
-            complete(matchedInstance.toJson(instanceFormat))
+            log.info(s"Matched request from $id to $matchedInstance.")
+            handler.handleInstanceLinkCreated(id, matchedInstance.id.get) match {
+              case handler.OperationResult.IdUnknown =>
+                log.warning(s"Could not handle the creation of instance link, the id $id seems to be invalid.")
+                complete(HttpResponse(StatusCodes.NotFound, entity = s"Could not find instance with id $id."))
+              case handler.OperationResult.Ok =>
+                complete(matchedInstance.toJson(instanceFormat))
+            }
           case Failure(x) =>
             log.warning(s"Could not find matching instance for type $compType, message was ${x.getMessage}.")
             complete(HttpResponse(StatusCodes.NotFound, entity = s"Could not find matching instance for type $compType"))
@@ -176,14 +182,14 @@ object Server extends HttpApp with InstanceJsonSupport with EventJsonSupport wit
     * parameters named 'Id' and 'MatchingSuccessful' (so the call is /matchingResult?Id=42&MatchingSuccessful=True).
     * @return Server route that either maps to 200 OK or to the respective error codes
     */
-  def matchInstance() : server.Route = parameters('Id.as[Long], 'MatchingSuccessful.as[Boolean]){ (id, matchingResult) =>
+  def matchInstance() : server.Route = parameters('callerId.as[Long], 'matchedInstanceId.as[Long], 'MatchingSuccessful.as[Boolean]){ (callerId, matchedInstanceId, matchingResult) =>
     post {
-      log.debug(s"POST /matchingResult?Id=$id&MatchingSuccessful=$matchingResult has been called")
+      log.debug(s"POST /matchingResult?callerId=$callerId&matchedInstanceId=$matchedInstanceId&MatchingSuccessful=$matchingResult has been called")
 
-      handler.handleMatchingResult(id, matchingResult) match {
+      handler.handleMatchingResult(callerId, matchedInstanceId, matchingResult) match {
         case handler.OperationResult.IdUnknown =>
-          log.warning(s"Cannot apply matching result for id $id, that id was not found.")
-          complete{HttpResponse(StatusCodes.NotFound, entity = s"Id $id not found.")}
+          log.warning(s"Cannot apply matching result for id $callerId to id $matchedInstanceId, at least one id could not be found")
+          complete{HttpResponse(StatusCodes.NotFound, entity = s"One of the ids $callerId and $matchedInstanceId was not found.")}
         case handler.OperationResult.Ok =>
           complete{s"Matching result $matchingResult processed."}
       }
@@ -433,6 +439,34 @@ object Server extends HttpApp with InstanceJsonSupport with EventJsonSupport wit
           complete{HttpResponse(StatusCodes.Accepted, entity = "Operation accepted.")}
         case handler.OperationResult.InternalError =>
           complete{HttpResponse(StatusCodes.InternalServerError, entity = s"Internal server error")}
+      }
+    }
+  }
+
+  /**
+    * Called to assign a new instance dependency to the instance with the specified id. Both the ids of the instance and
+    * the specified dependency are passed as query arguments named 'Id' and 'assignedInstanceId' resp. (so the resulting
+    * call is /assignInstance?Id=42&assignedInstanceId=43). Will update the dependency in DB and than restart the container.
+    * @return Server route that either maps to 202 ACCEPTED or the respective error codes
+    */
+  def assignInstance() : server.Route = parameters('Id.as[Long], 'assignedInstanceId.as[Long]) { (id, assignedInstanceId) =>
+    post {
+      log.debug(s"POST /assignInstance?Id=$id&assignedInstanceId=$assignedInstanceId has been called")
+
+      handler.handleInstanceAssignment(id, assignedInstanceId) match {
+        case handler.OperationResult.IdUnknown =>
+          log.warning(s"Cannot assign $assignedInstanceId to $id, one or more ids not found.")
+          complete{HttpResponse(StatusCodes.NotFound, entity = s"Cannot assign instance, at least one of the ids $id / $assignedInstanceId was not found.")}
+        case handler.OperationResult.NoDockerContainer =>
+          log.warning(s"Cannot assign $assignedInstanceId to $id, $id is no docker container.")
+          complete{HttpResponse(StatusCodes.BadRequest,entity = s"Cannot assign instance, $id is no docker container.")}
+        case handler.OperationResult.InvalidTypeForOperation =>
+          log.warning(s"Cannot assign $assignedInstanceId to $id, incompatible types.")
+          complete{HttpResponse(StatusCodes.BadRequest,entity = s"Cannot assign $assignedInstanceId to $id, incompatible types.")}
+        case handler.OperationResult.Ok =>
+          complete{HttpResponse(StatusCodes.Accepted, entity = "Operation accepted.")}
+        case x =>
+          complete{HttpResponse(StatusCodes.InternalServerError, entity = s"Unexpected operation result $x")}
       }
     }
   }

@@ -105,6 +105,7 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
   }
 
   def getMatchingInstanceOfType(compType: ComponentType): Try[Instance] = {
+    //TODO: Check for links in state 'Assigned'
     log.info(s"Trying to match to instance of type $compType ...")
     getNumberOfInstances(compType) match {
       case 0 =>
@@ -154,23 +155,70 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
           }
         }
     }
-
   }
 
-  def handleMatchingResult(id: Long, result: Boolean): OperationResult.Value = {
-    if (!instanceDao.hasInstance(id)) {
+  def handleInstanceLinkCreated(instanceIdFrom: Long, instanceIdTo: Long): OperationResult.Value = {
+    if(!instanceDao.hasInstance(instanceIdFrom) || !instanceDao.hasInstance(instanceIdTo)){
       OperationResult.IdUnknown
     } else {
-      val instance = instanceDao.getInstance(id).get
-      instanceDao.addMatchingResult(id, result)
-      if (result && instance.instanceState == InstanceState.NotReachable) {
-        instanceDao.setStateFor(instance.id.get, InstanceState.Running)
-        fireStateChangedEvent(instanceDao.getInstance(id).get)
-      } else if (!result && instance.instanceState == InstanceState.Running) {
-        instanceDao.setStateFor(instance.id.get, InstanceState.NotReachable)
-        fireStateChangedEvent(instanceDao.getInstance(id).get)
+      //TODO: Verify there is no link present that is not failed!
+      //TODO: Insert Link into database, state should be 'Assigned'
+      OperationResult.Ok
+    }
+  }
+
+  def handleInstanceAssignment(instanceId: Long, newDependencyId: Long): OperationResult.Value = {
+    if(!instanceDao.hasInstance(instanceId) || !instanceDao.hasInstance(newDependencyId)){
+      OperationResult.IdUnknown
+    } else if(!isInstanceDockerContainer(instanceId)){
+      OperationResult.NoDockerContainer
+    } else {
+      val instance = instanceDao.getInstance(instanceId).get
+      val dependency = instanceDao.getInstance(instanceId).get
+
+      if(assignmentAllowed(instance.componentType) && compatibleTypes(instance.componentType, dependency.componentType)){
+        //TODO: Update database with assignment. Verify there is only one link present, remove it and replace it with new one
+        implicit val timeout : Timeout = Timeout(10 seconds)
+
+        (dockerActor ? restart(instance.dockerId.get)).map{
+          _ => log.info(s"Instance $instanceId restarted.")
+            instanceDao.setStateFor(instance.id.get, InstanceState.Stopped) //Set to stopped, will report start automatically
+            fireStateChangedEvent(instanceDao.getInstance(instanceId).get)
+        }.recover {
+          case ex: Exception =>
+            log.warning(s"Failed to restart container with id $instanceId. Message is: ${ex.getMessage}")
+            fireDockerOperationErrorEvent(Some(instance), s"Pause failed with message: ${ex.getMessage}")
+        }
+
+        OperationResult.Ok
+      } else {
+        OperationResult.InvalidTypeForOperation
       }
-      log.info(s"Applied matching result $result to instance with id $id.")
+
+
+    }
+  }
+
+  def handleMatchingResult(callerId: Long, matchedInstanceId: Long, result: Boolean): OperationResult.Value = {
+    if (!instanceDao.hasInstance(callerId) || !instanceDao.hasInstance(matchedInstanceId)) {
+      OperationResult.IdUnknown
+    } else {
+      val callingInstance = instanceDao.getInstance(callerId).get
+      val matchedInstance = instanceDao.getInstance(matchedInstanceId).get
+
+      //Update list of matching results
+      instanceDao.addMatchingResult(matchedInstanceId, result)
+      //Update state of matchedInstance accordingly
+      if (result && matchedInstance.instanceState == InstanceState.NotReachable) {
+        instanceDao.setStateFor(matchedInstanceId, InstanceState.Running)
+        fireStateChangedEvent(instanceDao.getInstance(matchedInstanceId).get) //Re-retrieve instance bc reference was invalidated by 'setStateFor'
+      } else if (!result && matchedInstance.instanceState == InstanceState.Running) {
+        instanceDao.setStateFor(matchedInstanceId, InstanceState.NotReachable)
+        fireStateChangedEvent(instanceDao.getInstance(matchedInstanceId).get)//Re-retrieve instance bc reference was invalidated by 'setStateFor'
+      }
+      log.info(s"Applied matching result $result to instance with id $matchedInstanceId.")
+
+      //TODO: Handle Link state, set it to failed if needed.
       OperationResult.Ok
     }
   }
@@ -565,11 +613,25 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
     }
   }
 
+  private def assignmentAllowed(instanceType: ComponentType) : Boolean = {
+    instanceType == ComponentType.Crawler || instanceType == ComponentType.WebApi || instanceType == ComponentType.WebApp
+  }
+
+  private def compatibleTypes(instanceType: ComponentType, dependencyType: ComponentType) : Boolean = {
+    instanceType match {
+      case ComponentType.Crawler => dependencyType == ComponentType.ElasticSearch
+      case ComponentType.WebApi => dependencyType == ComponentType.ElasticSearch
+      case ComponentType.WebApp => dependencyType == ComponentType.WebApi
+      case _ => false
+    }
+  }
+
   object OperationResult extends Enumeration {
     val IdUnknown: Value = Value("IdUnknown")
     val NoDockerContainer: Value = Value("NoDockerContainer")
     val IsDockerContainer: Value = Value("IsDockerContainer")
-    val InvalidStateForOperation: Value = Value("InvalidState")
+    val InvalidStateForOperation: Value = Value("InvalidStateForOperation")
+    val InvalidTypeForOperation: Value = Value("InvalidTypeForOperation")
     val Ok: Value = Value("Ok")
     val InternalError: Value = Value("InternalError")
   }
