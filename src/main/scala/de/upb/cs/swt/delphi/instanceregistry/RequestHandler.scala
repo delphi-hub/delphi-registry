@@ -1,12 +1,14 @@
 package de.upb.cs.swt.delphi.instanceregistry
 
 import akka.actor._
+import akka.http.scaladsl.model.StatusCodes
 import akka.pattern.ask
 import akka.util.Timeout
 import de.upb.cs.swt.delphi.instanceregistry.Docker.DockerActor._
 import de.upb.cs.swt.delphi.instanceregistry.Docker.{DockerActor, DockerConnection}
 import akka.stream.scaladsl.{Keep, Sink, Source}
 import akka.stream.{ActorMaterializer, Materializer, OverflowStrategy}
+import de.upb.cs.swt.delphi.instanceregistry.connection.RestClient
 import de.upb.cs.swt.delphi.instanceregistry.daos.{DynamicInstanceDAO, InstanceDAO}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.{ComponentType, InstanceState}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.LinkEnums.LinkState
@@ -117,59 +119,16 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
           Success(instance)
         case Failure(ex) =>
           log.warning(s"Matching pending: First try failed, message was ${ex.getMessage}")
-          Failure(ex) //TODO: Integrate below code here
+          tryDefaultMatching(compType) match {
+            case Success(instance) =>
+              log.info(s"Matching finished: Default matching yielded result $instance.")
+              Success(instance)
+            case Failure(ex2) =>
+              log.warning(s"Matching failed: Default matching did not yield result, message was ${ex2.getMessage}.")
+              Failure(ex2)
+          }
       }
     }
-    /*
-    log.info(s"Trying to match to instance of type $compType ...")
-    getNumberOfInstances(compType) match {
-      case 0 =>
-        log.error(s"Cannot match to any instance of type $compType, no such instance present.")
-        Failure(new RuntimeException(s"Cannot match to any instance of type $compType, no instance present."))
-      case 1 =>
-        val instance: Instance = instanceDao.getInstancesOfType(compType).head
-        log.info(s"Only one instance of that type present, matching to instance with id ${instance.id.get}.")
-        Success(instance)
-      case x =>
-        log.info(s"Found $x instances of type $compType.")
-
-        //First try: Match to instance with most consecutive positive matching results
-        var maxConsecutivePositiveResults = 0
-        var instanceToMatch: Instance = null
-
-        for (instance <- instanceDao.getInstancesOfType(compType)) {
-          if (countConsecutivePositiveMatchingResults(instance.id.get) > maxConsecutivePositiveResults) {
-            maxConsecutivePositiveResults = countConsecutivePositiveMatchingResults(instance.id.get)
-            instanceToMatch = instance
-          }
-        }
-
-        if (instanceToMatch != null) {
-          log.info(s"Matching to instance with id ${instanceToMatch.id}, as it has $maxConsecutivePositiveResults positive results in a row.")
-          Success(instanceToMatch)
-        } else {
-          //Second try: Match to instance with most positive matching results
-          var maxPositiveResults = 0
-
-          for (instance <- instanceDao.getInstancesOfType(compType)) {
-            val noOfPositiveResults: Int = instanceDao.getMatchingResultsFor(instance.id.get).get.count(i => i)
-            if (noOfPositiveResults > maxPositiveResults) {
-              maxPositiveResults = noOfPositiveResults
-              instanceToMatch = instance
-            }
-          }
-
-          if (instanceToMatch != null) {
-            log.info(s"Matching to instance with id ${instanceToMatch.id}, as it has $maxPositiveResults positive results.")
-            Success(instanceToMatch)
-          } else {
-            //All instances are equally good (or bad), match to any of them
-            instanceToMatch = instanceDao.getInstancesOfType(compType).head
-            log.info(s"Matching to instance with id ${instanceToMatch.id}, no differences between instances have been found.")
-            Success(instanceToMatch)
-          }
-        }
-    }*/
   }
 
   def handleInstanceLinkCreated(instanceIdFrom: Long, instanceIdTo: Long): OperationResult.Value = {
@@ -467,7 +426,28 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
     if (!instanceDao.hasInstance(id)) {
       OperationResult.IdUnknown
     } else if (!isInstanceDockerContainer(id)) {
-      OperationResult.NoDockerContainer
+      val instance = instanceDao.getInstance(id).get
+
+      if(instance.componentType == ComponentType.ElasticSearch || instance.componentType == ComponentType.DelphiManagement){
+        log.warning(s"Cannot stop instance of type ${instance.componentType}.")
+        OperationResult.InvalidTypeForOperation
+      } else {
+        log.info(s"Calling /stop on non-docker instance $instance..")
+        RestClient.executePost(RestClient.getUri(instance) + "/stop").map{
+          response =>
+            log.info(s"Request to /stop returned $response")
+            if (response.status == StatusCodes.OK){
+              log.info(s"Instance with id $id has been shut down successfully.")
+            } else {
+              log.warning(s"Failed to shut down instance with id $id. Status code was: ${response.status}")
+            }
+        }.recover{
+          case ex: Exception =>
+            log.warning(s"Failed to shut down instance with id $id. Message is: ${ex.getMessage}")
+        }
+        handleDeregister(id)
+        OperationResult.Ok
+      }
     } else {
       log.info(s"Handling /stop for instance with id $id...")
 
@@ -622,6 +602,49 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
             log.error(s"Matching first try failed: There were multiple links present, but none of them was assigned.")
             Failure(new RuntimeException("No links assigned."))
 
+        }
+    }
+  }
+
+  private def tryDefaultMatching(componentType: ComponentType) : Try[Instance] = {
+    log.info(s"Matching fallback: Searching for instances of type $componentType ...")
+    getNumberOfInstances(componentType) match {
+      case 0 =>
+        log.error(s"Matching failed: Cannot match to any instance of type $componentType, no such instance present.")
+        Failure(new RuntimeException(s"Cannot match to any instance of type $componentType, no instance present."))
+      case 1 =>
+        val instance: Instance = instanceDao.getInstancesOfType(componentType).head
+        log.info(s"Finished fallback matching: Only one instance of that type present, matching to instance with id ${instance.id.get}.")
+        Success(instance)
+      case x =>
+        log.info(s"Matching fallback: Found $x instances of type $componentType.")
+
+        instanceDao.getInstancesOfType(componentType).find(instance => instance.instanceState == InstanceState.Running) match {
+          case Some(instance) =>
+            log.info(s"Finished fallback matching: A running instance of type $componentType was found. Matching to $instance")
+            Success(instance)
+          case None =>
+            log.info(s"Matching fallback: Found $x instance of type $componentType, but none of them is running.")
+
+            //Match to instance with maxmum number of consecutive positive matching results
+            var maxConsecutivePositiveResults = 0
+            var instanceToMatch: Instance = null
+
+            for (instance <- instanceDao.getInstancesOfType(componentType)) {
+              if (countConsecutivePositiveMatchingResults(instance.id.get) > maxConsecutivePositiveResults) {
+                maxConsecutivePositiveResults = countConsecutivePositiveMatchingResults(instance.id.get)
+                instanceToMatch = instance
+              }
+            }
+
+            if (instanceToMatch != null) {
+              log.info(s"Finished fallback matching: Matching to instance with id ${instanceToMatch.id}, as it has $maxConsecutivePositiveResults positive results in a row.")
+              Success(instanceToMatch)
+            } else {
+              instanceToMatch = instanceDao.getInstancesOfType(componentType).head
+              log.info(s"Finished fallback matching: No difference in available instances found, matching to $instanceToMatch")
+              Success(instanceToMatch)
+            }
         }
     }
   }

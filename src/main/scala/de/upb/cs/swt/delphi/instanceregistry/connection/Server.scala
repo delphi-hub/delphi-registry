@@ -385,9 +385,9 @@ object Server extends HttpApp with InstanceJsonSupport with EventJsonSupport wit
         case handler.OperationResult.IdUnknown =>
           log.warning(s"Cannot stop id $id, that id was not found.")
           complete{HttpResponse(StatusCodes.NotFound, entity = s"Id $id not found.")}
-        case handler.OperationResult.NoDockerContainer =>
-          log.warning(s"Cannot stop id $id, that instance is not running in a docker container.")
-          complete{HttpResponse(StatusCodes.BadRequest, entity = s"Id $id is not running in a docker container.")}
+        case handler.OperationResult.InvalidTypeForOperation =>
+          log.warning(s"Cannot stop id $id, this component type cannot be stopped.")
+          complete{HttpResponse(StatusCodes.BadRequest, entity = s"Cannot stop instance of this type.")}
         case handler.OperationResult.Ok =>
           complete{HttpResponse(StatusCodes.Accepted, entity = "Operation accepted.")}
         case r =>

@@ -430,9 +430,10 @@ paths:
         - Docker Operations
       summary: Stops the specified instances' docker container
       description: >-
-        This command stops the docker container of the instance with the
-        specified ID. The instance will be properly shut down by calling its
-        /stop command first. Will change the instance state to 'Stopped'.
+        This command stops the specified instance. If the instance is running inside a docker container,
+        the container will be stopped. If not, the instance will be gracefully shut down by calling its 
+        /stop endpoint. Will change the instance state to 'Stopped' for docker containers, will remove the 
+        instance for non-docker instances.
       operationId: stop
       parameters:
         - in: query
@@ -446,8 +447,8 @@ paths:
           description: 'Accepted, the operation will be completed in the future.'
         '400':
           description: >-
-            Bad request, the instance with the specified ID is either already
-            stopped or not deployed as a docker container at all.
+            Bad request, the instance with the specified ID is already
+            stopped.
         '404':
           description: ID not found on server
         '500':
