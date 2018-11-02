@@ -105,8 +105,22 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
     instanceDao.getEventsFor(id)
   }
 
-  def getMatchingInstanceOfType(compType: ComponentType): Try[Instance] = {
-    //TODO: Check for links in state 'Assigned'
+  def getMatchingInstanceOfType(callerId: Long, compType: ComponentType): Try[Instance] = {
+    log.info(s"Started matching: Instance with id $callerId is looking for instance of type $compType.")
+    if(!instanceDao.hasInstance(callerId)){
+      log.warning(s"Matching failed: No instance with id $callerId was found.")
+      Failure(new RuntimeException(s"Id $callerId not present."))
+    } else {
+      tryLinkMatching(callerId, compType) match {
+        case Success(instance) =>
+          log.info(s"Matching finished: First try yielded result $instance.")
+          Success(instance)
+        case Failure(ex) =>
+          log.warning(s"Matching pending: First try failed, message was ${ex.getMessage}")
+          Failure(ex) //TODO: Integrate below code here
+      }
+    }
+    /*
     log.info(s"Trying to match to instance of type $compType ...")
     getNumberOfInstances(compType) match {
       case 0 =>
@@ -155,16 +169,21 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
             Success(instanceToMatch)
           }
         }
-    }
+    }*/
   }
 
   def handleInstanceLinkCreated(instanceIdFrom: Long, instanceIdTo: Long): OperationResult.Value = {
     if(!instanceDao.hasInstance(instanceIdFrom) || !instanceDao.hasInstance(instanceIdTo)){
       OperationResult.IdUnknown
     } else {
-      instanceDao.addLink(InstanceLink(instanceIdFrom, instanceIdTo, LinkState.Assigned)) match {
-        case Success(_) => OperationResult.Ok
-        case Failure(_) => OperationResult.InternalError //Should not happen, as ids are being verified above!
+      val (instanceFrom, instanceTo) = (instanceDao.getInstance(instanceIdFrom).get, instanceDao.getInstance(instanceIdTo).get)
+      if(compatibleTypes(instanceFrom.componentType, instanceTo.componentType)){
+        instanceDao.addLink(InstanceLink(instanceIdFrom, instanceIdTo, LinkState.Assigned)) match {
+          case Success(_) => OperationResult.Ok
+          case Failure(_) => OperationResult.InternalError //Should not happen, as ids are being verified above!
+        }
+      } else {
+        OperationResult.InvalidTypeForOperation
       }
     }
   }
@@ -545,6 +564,65 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
       } else {
         OperationResult.InvalidStateForOperation
       }
+    }
+  }
+
+  /**
+    * Tries to match caller to specified component type based on links stored in the dao. If one link is present, it will
+    * be selected regardless of its state. If multiple links are present, the assigned link will be returned. If none of
+    * the links is assigned, matching will fail. If the component types stored in the links do not match the required
+    * component type, matching will fail.
+    * @param callerId Id of the calling instance
+    * @param componentType ComponentType to look for
+    * @return Try[Instance], Success if matching was successful, Failure otherwise
+    */
+  private def tryLinkMatching(callerId: Long, componentType: ComponentType) : Try[Instance] = {
+    log.info(s"Matching first try: Analyzing links for $callerId...")
+
+    val links = instanceDao.getLinksFrom(callerId)
+
+    links.size match {
+      case 0 =>
+        log.info(s"Matching first try failed: No links present.")
+        Failure(new RuntimeException("No links for instance."))
+      case 1 =>
+        val instanceAssigned = instanceDao.getInstance(links.head.idTo)
+
+        if(instanceAssigned.isDefined && instanceAssigned.get.componentType == componentType){
+          log.info(s"Finished matching first try: Successfully matched based on 1 link found. Target is ${instanceAssigned.get}.")
+          Success(instanceAssigned.get)
+        } else if(instanceAssigned.isDefined && instanceAssigned.get.componentType != componentType){
+          log.error(s"Matching first try failed: There was one link present, but the target type ${instanceAssigned.get.componentType} did not match expected type $componentType")
+          instanceDao.updateLink(InstanceLink(links.head.idFrom, links.head.idTo, LinkState.Outdated))
+          Failure(new RuntimeException("Invalid target type."))
+        } else {
+          log.error(s"Matching first try failed: There was one link present, but the target id ${links.head.idTo} was not found.")
+          instanceDao.updateLink(InstanceLink(links.head.idFrom, links.head.idTo, LinkState.Outdated))
+          Failure(new RuntimeException("Invalid link for instance."))
+        }
+      case x =>
+        //Multiple links. Try to match to the one assigned link
+        links.find(link => link.linkState == LinkState.Assigned) match {
+          case Some(instanceLink) =>
+            val instanceAssigned = instanceDao.getInstance(instanceLink.idTo)
+
+            if(instanceAssigned.isDefined && instanceAssigned.get.componentType == componentType){
+              log.info(s"Finished matching first try: Successfully matched based on one assigned link found out of $x total links. Target is ${instanceAssigned.get}.")
+              Success(instanceAssigned.get)
+            } else if(instanceAssigned.isDefined && instanceAssigned.get.componentType != componentType){
+              log.error(s"Matching first try failed: There was one assigned link present, but the target type ${instanceAssigned.get.componentType} did not match expected type $componentType")
+              instanceDao.updateLink(InstanceLink(instanceLink.idFrom, instanceLink.idTo, LinkState.Outdated))
+              Failure(new RuntimeException("Invalid target type."))
+            } else {
+              log.error(s"Matching first try failed: There was one assigned link present, but the target id ${instanceLink.idTo} was not found.")
+              instanceDao.updateLink(InstanceLink(instanceLink.idFrom, instanceLink.idTo, LinkState.Outdated))
+              Failure(new RuntimeException("Invalid link for instance."))
+            }
+          case None =>
+            log.error(s"Matching first try failed: There were multiple links present, but none of them was assigned.")
+            Failure(new RuntimeException("No links assigned."))
+
+        }
     }
   }
 

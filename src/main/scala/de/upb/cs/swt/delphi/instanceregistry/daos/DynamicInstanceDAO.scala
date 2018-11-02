@@ -216,7 +216,7 @@ class DynamicInstanceDAO (configuration : Configuration) extends InstanceDAO wit
     }
   }
 
-  def getLinksFrom(id: Long, state: Option[LinkState] = None) : List[InstanceLink] = {
+  override def getLinksFrom(id: Long, state: Option[LinkState] = None) : List[InstanceLink] = {
     val links = instanceLinks.filter(link => link.idFrom == id)
 
     if(state.isDefined){

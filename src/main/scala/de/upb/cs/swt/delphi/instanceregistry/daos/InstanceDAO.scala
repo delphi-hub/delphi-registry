@@ -2,6 +2,7 @@ package de.upb.cs.swt.delphi.instanceregistry.daos
 
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.{Instance, InstanceLink, RegistryEvent}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.{ComponentType, InstanceState}
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.LinkEnums.LinkState
 
 import scala.util.Try
 
@@ -122,4 +123,11 @@ trait InstanceDAO {
     */
   def updateLink(link: InstanceLink) : Try[Unit]
 
+  /**
+    * Get all outgoing links from the specified instance. Optionally a LinkState can be specified as filter
+    * @param idFrom Id of the instance
+    * @param state Option[LinkState] to filter for certain LinkStates. If None, no filter will be applied.
+    * @return List of matching InstanceLinks
+    */
+  def getLinksFrom(idFrom: Long, state: Option[LinkState] = None) : List[InstanceLink]
 }

@@ -156,13 +156,16 @@ object Server extends HttpApp with InstanceJsonSupport with EventJsonSupport wit
       log.info(s"Looking for instance of type $compType ...")
 
       if(compType != null){
-        handler.getMatchingInstanceOfType(compType) match {
+        handler.getMatchingInstanceOfType(id, compType) match {
           case Success(matchedInstance) =>
             log.info(s"Matched request from $id to $matchedInstance.")
             handler.handleInstanceLinkCreated(id, matchedInstance.id.get) match {
               case handler.OperationResult.IdUnknown =>
                 log.warning(s"Could not handle the creation of instance link, the id $id seems to be invalid.")
                 complete(HttpResponse(StatusCodes.NotFound, entity = s"Could not find instance with id $id."))
+              case handler.OperationResult.InvalidTypeForOperation =>
+                log.warning(s"Could not handle the creation of instance link, incompatible types found.")
+                complete{HttpResponse(StatusCodes.BadRequest, entity = s"Invalid dependency type $compType")}
               case handler.OperationResult.Ok =>
                 complete(matchedInstance.toJson(instanceFormat))
               case handler.OperationResult.InternalError =>
@@ -170,7 +173,7 @@ object Server extends HttpApp with InstanceJsonSupport with EventJsonSupport wit
             }
           case Failure(x) =>
             log.warning(s"Could not find matching instance for type $compType, message was ${x.getMessage}.")
-            complete(HttpResponse(StatusCodes.NotFound, entity = s"Could not find matching instance for type $compType"))
+            complete(HttpResponse(StatusCodes.NotFound, entity = s"Could not find matching instance of type $compType for instance with id $id."))
         }
       } else {
         log.error(s"Failed to deserialize parameter string $compTypeString to ComponentType.")
