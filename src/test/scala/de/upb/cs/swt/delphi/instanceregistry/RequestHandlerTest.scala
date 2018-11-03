@@ -5,8 +5,9 @@ import java.io.File
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import de.upb.cs.swt.delphi.instanceregistry.Docker._
-import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.Instance
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.{Instance, InstanceLink}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.{ComponentType, InstanceState}
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.LinkEnums.LinkState
 import org.scalatest.{BeforeAndAfterEach, FlatSpec, Matchers}
 
 import scala.concurrent.ExecutionContext
@@ -78,7 +79,7 @@ class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach 
   }
 
   it must "validate the id before applying a matching result" in {
-    assert(handler.handleMatchingResult(42, result = false) == handler.OperationResult.IdUnknown)
+    assert(handler.handleMatchingResult(callerId = 41, matchedInstanceId = 42, matchingSuccess = false) == handler.OperationResult.IdUnknown)
   }
 
   it must "change the instance state when matching results are applied" in {
@@ -87,17 +88,23 @@ class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach 
     assert(register1.isSuccess)
     assert(register2.isSuccess)
 
-    assert(handler.handleMatchingResult(42, result = true) == handler.OperationResult.Ok)
+    //Add Link to prevent internal error later
+    assert(handler.instanceDao.addLink(InstanceLink(42,43, LinkState.Assigned)).isSuccess)
+
+    assert(handler.handleMatchingResult(callerId = 43, matchedInstanceId = 42, matchingSuccess = true) == handler.OperationResult.Ok)
     assert(handler.getInstance(42).get.instanceState == InstanceState.Running)
-    assert(handler.handleMatchingResult(43, result = false) == handler.OperationResult.Ok)
+    assert(handler.handleMatchingResult(callerId = 42, matchedInstanceId = 43, matchingSuccess = false) == handler.OperationResult.Ok)
     assert(handler.getInstance(43).get.instanceState == InstanceState.NotReachable)
   }
 
   it must "not change the instance state on invalid state transitions" in {
     val register = handler.instanceDao.addInstance(buildInstance(42, Some("RandomDockerId"), InstanceState.Failed))
-    assert(register.isSuccess)
+    val register2 = handler.instanceDao.addInstance(buildInstance(43, Some("RandomDockerId2"), InstanceState.Running))
 
-    assert(handler.handleMatchingResult(42, result = true) == handler.OperationResult.Ok)
+    assert(register.isSuccess)
+    assert(register2.isSuccess)
+
+    assert(handler.handleMatchingResult(callerId = 43, matchedInstanceId = 42, matchingSuccess = true) == handler.OperationResult.Ok)
     assert(handler.getInstance(42).get.instanceState == InstanceState.Failed)
   }
 
@@ -193,11 +200,7 @@ class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach 
   }*/
 
   it must "validate preconditions on handleStop" in {
-    val register1 = handler.instanceDao.addInstance(buildInstance(1, None))
-    assert(register1.isSuccess)
-
     assert(handler.handleStop(Int.MaxValue) == handler.OperationResult.IdUnknown)
-    assert(handler.handleStop(1) == handler.OperationResult.NoDockerContainer)
   }
 
   //Below test is not applicable anymore, state change is managed in futures!
@@ -253,46 +256,38 @@ class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach 
     assert(handler.getNumberOfInstances(ComponentType.ElasticSearch) == 1)
   }
 
-  it must "match to instance with most consecutive positive matching results" in {
+  it must "match to instance with most consecutive positive matching results if no links are present" in {
     val esInstance = handler.handleRegister(buildInstance(2))
+    val crawlerId = handler.handleRegister(Instance(Some(2), "foo", 42, "bar", ComponentType.Crawler, None, InstanceState.Running))
+
     assert(esInstance.isSuccess)
     assert(esInstance.get == 1)
+    assert(crawlerId.isSuccess)
+    assert(crawlerId.get == 2)
 
-    assert(handler.handleMatchingResult(0, result = false) == handler.OperationResult.Ok)
-    assert(handler.handleMatchingResult(0, result = true) == handler.OperationResult.Ok)
-    assert(handler.handleMatchingResult(0, result = true) == handler.OperationResult.Ok)
+    //Add Links to prevent errors later
+    assert(handler.instanceDao.addLink(InstanceLink(1,0,LinkState.Assigned)).isSuccess)
+    assert(handler.instanceDao.addLink(InstanceLink(0,1,LinkState.Assigned)).isSuccess)
 
-    assert(handler.handleMatchingResult(1, result = true) == handler.OperationResult.Ok)
-    assert(handler.handleMatchingResult(1, result = false) == handler.OperationResult.Ok)
+    assert(handler.handleMatchingResult(callerId = 1, matchedInstanceId = 0, matchingSuccess = false) == handler.OperationResult.Ok)
+    assert(handler.handleMatchingResult(callerId = 1, matchedInstanceId = 0, matchingSuccess = true) == handler.OperationResult.Ok)
+    assert(handler.handleMatchingResult(callerId = 1, matchedInstanceId = 0, matchingSuccess = true) == handler.OperationResult.Ok)
 
-    val matchingInstance = handler.getMatchingInstanceOfType(ComponentType.ElasticSearch)
+    assert(handler.handleMatchingResult(callerId = 0, matchedInstanceId = 1, matchingSuccess = true) == handler.OperationResult.Ok)
+    assert(handler.handleMatchingResult(callerId = 0, matchedInstanceId = 1, matchingSuccess = false) == handler.OperationResult.Ok)
+
+    val matchingInstance = handler.getMatchingInstanceOfType(callerId = 2, ComponentType.ElasticSearch)
     assert(matchingInstance.isSuccess)
     assert(matchingInstance.get.id.get == 0)
 
     assert(handler.handleDeregister(1L) == handler.OperationResult.Ok)
-  }
-
-  it must "match to instance with most positive matching results" in {
-    val esInstance = handler.handleRegister(buildInstance(2))
-    assert(esInstance.isSuccess)
-    assert(esInstance.get == 1)
-
-    assert(handler.handleMatchingResult(0, result = true) == handler.OperationResult.Ok)
-    assert(handler.handleMatchingResult(0, result = true) == handler.OperationResult.Ok)
-    assert(handler.handleMatchingResult(0, result = false) == handler.OperationResult.Ok)
-
-    assert(handler.handleMatchingResult(1, result = false) == handler.OperationResult.Ok)
-    assert(handler.handleMatchingResult(1, result = false) == handler.OperationResult.Ok)
-
-    val matchingInstance = handler.getMatchingInstanceOfType(ComponentType.ElasticSearch)
-    assert(matchingInstance.isSuccess)
-    assert(matchingInstance.get.id.get == 0)
-
-    assert(handler.handleDeregister(1L) == handler.OperationResult.Ok)
+    assert(handler.handleDeregister(2L) == handler.OperationResult.Ok)
   }
 
   it must "fail to match if no instance of type is present" in {
-    assert(handler.getMatchingInstanceOfType(ComponentType.Crawler).isFailure)
+    val register = handler.handleRegister(Instance(None, "foo", 42, "bar", ComponentType.WebApp, None, InstanceState.Running))
+    assert(register.isSuccess && register.get == 1)
+    assert(handler.getMatchingInstanceOfType(1, ComponentType.WebApi).isFailure)
   }
 
   override protected def afterEach(): Unit = {

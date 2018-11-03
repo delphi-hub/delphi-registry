@@ -137,8 +137,12 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
     } else {
       val (instanceFrom, instanceTo) = (instanceDao.getInstance(instanceIdFrom).get, instanceDao.getInstance(instanceIdTo).get)
       if(compatibleTypes(instanceFrom.componentType, instanceTo.componentType)){
-        instanceDao.addLink(InstanceLink(instanceIdFrom, instanceIdTo, LinkState.Assigned)) match {
-          case Success(_) => OperationResult.Ok
+        val link = InstanceLink(instanceIdFrom, instanceIdTo, LinkState.Assigned)
+
+        instanceDao.addLink(link) match {
+          case Success(_) =>
+            fireLinkAddedEvent(link)
+            OperationResult.Ok
           case Failure(_) => OperationResult.InternalError //Should not happen, as ids are being verified above!
         }
       } else {
@@ -157,10 +161,14 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
       val dependency = instanceDao.getInstance(instanceId).get
 
       if(assignmentAllowed(instance.componentType) && compatibleTypes(instance.componentType, dependency.componentType)){
-        if(instanceDao.addLink(InstanceLink(instanceId, newDependencyId, LinkState.Assigned)).isFailure){
+        val link = InstanceLink(instanceId, newDependencyId, LinkState.Assigned)
+        if(instanceDao.addLink(link).isFailure){
           //This should not happen, as ids are being verified above!
           OperationResult.InternalError
         } else {
+
+          fireLinkAddedEvent(link)
+
           implicit val timeout : Timeout = Timeout(10 seconds)
 
           (dockerActor ? restart(instance.dockerId.get)).map{
@@ -202,8 +210,11 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
 
       //Update link state
       if(!matchingSuccess){
-        instanceDao.updateLink(InstanceLink(callerId, matchedInstanceId, LinkState.Failed)) match {
-          case Success(_) => OperationResult.Ok
+        val link = InstanceLink(callerId, matchedInstanceId, LinkState.Failed)
+        instanceDao.updateLink(link) match {
+          case Success(_) =>
+            fireLinkStateChangedEvent(link)
+            OperationResult.Ok
           case Failure(_) => OperationResult.InternalError //Should not happen
         }
       } else {
@@ -573,11 +584,15 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
           Success(instanceAssigned.get)
         } else if(instanceAssigned.isDefined && instanceAssigned.get.componentType != componentType){
           log.error(s"Matching first try failed: There was one link present, but the target type ${instanceAssigned.get.componentType} did not match expected type $componentType")
-          instanceDao.updateLink(InstanceLink(links.head.idFrom, links.head.idTo, LinkState.Outdated))
+          val link = InstanceLink(links.head.idFrom, links.head.idTo, LinkState.Outdated)
+          instanceDao.updateLink(link)
+          fireLinkStateChangedEvent(link)
           Failure(new RuntimeException("Invalid target type."))
         } else {
           log.error(s"Matching first try failed: There was one link present, but the target id ${links.head.idTo} was not found.")
-          instanceDao.updateLink(InstanceLink(links.head.idFrom, links.head.idTo, LinkState.Outdated))
+          val link = InstanceLink(links.head.idFrom, links.head.idTo, LinkState.Outdated)
+          instanceDao.updateLink(link)
+          fireLinkStateChangedEvent(link)
           Failure(new RuntimeException("Invalid link for instance."))
         }
       case x =>
@@ -591,11 +606,15 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
               Success(instanceAssigned.get)
             } else if(instanceAssigned.isDefined && instanceAssigned.get.componentType != componentType){
               log.error(s"Matching first try failed: There was one assigned link present, but the target type ${instanceAssigned.get.componentType} did not match expected type $componentType")
-              instanceDao.updateLink(InstanceLink(instanceLink.idFrom, instanceLink.idTo, LinkState.Outdated))
+              val link = InstanceLink(links.head.idFrom, links.head.idTo, LinkState.Outdated)
+              instanceDao.updateLink(link)
+              fireLinkStateChangedEvent(link)
               Failure(new RuntimeException("Invalid target type."))
             } else {
               log.error(s"Matching first try failed: There was one assigned link present, but the target id ${instanceLink.idTo} was not found.")
-              instanceDao.updateLink(InstanceLink(instanceLink.idFrom, instanceLink.idTo, LinkState.Outdated))
+              val link = InstanceLink(links.head.idFrom, links.head.idTo, LinkState.Outdated)
+              instanceDao.updateLink(link)
+              fireLinkStateChangedEvent(link)
               Failure(new RuntimeException("Invalid link for instance."))
             }
           case None =>
@@ -697,6 +716,22 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
     if(affectedInstance.isDefined){
       instanceDao.addEventFor(affectedInstance.get.id.get, event)
     }
+  }
+
+  private def fireLinkAddedEvent(link: InstanceLink): Unit = {
+    val event = RegistryEventFactory.createLinkAddedEvent(link)
+    eventActor ! event
+
+    instanceDao.addEventFor(link.idFrom, event)
+    instanceDao.addEventFor(link.idTo, event)
+  }
+
+  private def fireLinkStateChangedEvent(link: InstanceLink): Unit = {
+    val event = RegistryEventFactory.createLinkStateChangedEvent(link)
+    eventActor ! event
+
+    instanceDao.addEventFor(link.idFrom, event)
+    instanceDao.addEventFor(link.idTo, event)
   }
 
   private def countConsecutivePositiveMatchingResults(id: Long): Int = {

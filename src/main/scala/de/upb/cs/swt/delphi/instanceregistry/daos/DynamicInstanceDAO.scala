@@ -66,6 +66,7 @@ class DynamicInstanceDAO (configuration : Configuration) extends InstanceDAO wit
       instances.remove(instances.find(i => i.id.get == id).get)
       instanceMatchingResults.remove(id)
       instanceEvents.remove(id)
+      instanceLinks.retain(link => link.idFrom != id && link.idTo != id)
       dumpToRecoveryFile()
       Success(log.info(s"Successfully removed instance with id $id."))
     } else {
