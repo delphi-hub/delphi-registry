@@ -195,7 +195,7 @@ object Server extends HttpApp
     * parameters named 'Id' and 'MatchingSuccessful' (so the call is /matchingResult?Id=42&MatchingSuccessful=True).
     * @return Server route that either maps to 200 OK or to the respective error codes
     */
-  def matchInstance() : server.Route = parameters('callerId.as[Long], 'matchedInstanceId.as[Long], 'MatchingSuccessful.as[Boolean]){ (callerId, matchedInstanceId, matchingResult) =>
+  def matchInstance() : server.Route = parameters('CallerId.as[Long], 'MatchedInstanceId.as[Long], 'MatchingSuccessful.as[Boolean]){ (callerId, matchedInstanceId, matchingResult) =>
     post {
       log.debug(s"POST /matchingResult?callerId=$callerId&matchedInstanceId=$matchedInstanceId&MatchingSuccessful=$matchingResult has been called")
 

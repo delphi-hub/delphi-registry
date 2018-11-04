@@ -191,13 +191,13 @@ paths:
       operationId: matchInstance
       parameters:
         - in: query
-          name: callerId
+          name: CallerId
           description: The ID of the instance that is calling this endpoint
           required: true
           type: integer
           format: int64
         - in: query
-          name: matchedInstanceId
+          name: MatchedInstanceId
           description: The ID of the instance that the sender was matched to.
           required: true
           type: integer
