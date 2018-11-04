@@ -239,6 +239,67 @@ paths:
               $ref: '#/definitions/Event'
         '404':
           description: Instance not found
+  /linksFrom:
+    get:
+      tags: 
+        - Basic Operations
+      summary: Retrieves outgoing links from an instance
+      description: >-
+        This command retreives a list of outgoing links from the instance with the specified id.
+      operationId: linksFrom
+      parameters:
+        - name: Id
+          in: query
+          description: Id of the instance
+          required: true
+          type: integer
+          format: int64
+      responses:
+        '200':
+          description: List of InstanceLinks from the specified instance
+          schema:
+            type: array
+            items:
+              $ref: '#/definitions/InstanceLink'
+        '404':
+          description: Instance not found
+  /linksTo:
+    get:
+      tags: 
+        - Basic Operations
+      summary: Retrieves incoming links to an instance
+      description: >-
+        This command retreives a list of incoming links from the instance with the specified id.
+      operationId: linksTo
+      parameters:
+        - name: Id
+          in: query
+          description: Id of the instance
+          required: true
+          type: integer
+          format: int64
+      responses:
+        '200':
+          description: List of InstanceLinks to the specified instance
+          schema:
+            type: array
+            items:
+              $ref: '#/definitions/InstanceLink'
+        '404':
+          description: Instance not found
+  /network:
+    get:
+      tags:
+        - Basic Operations
+      summary: Retrieves the current instance network
+      description: >-
+        Retrieves the instance network, meaning a list of all instances as well as a list of all links currently registered at the registry.
+      operationId: network
+      responses:
+        '200':
+          description: The instance network
+          schema:
+            $ref: '#/definitions/InstanceNetwork'
   /deploy:
     post:
       tags:
@@ -430,10 +491,11 @@ paths:
         - Docker Operations
       summary: Stops the specified instances' docker container
       description: >-
-        This command stops the specified instance. If the instance is running inside a docker container,
-        the container will be stopped. If not, the instance will be gracefully shut down by calling its 
-        /stop endpoint. Will change the instance state to 'Stopped' for docker containers, will remove the 
-        instance for non-docker instances.
+        This command stops the specified instance. If the instance is running
+        inside a docker container, the container will be stopped. If not, the
+        instance will be gracefully shut down by calling its  /stop endpoint.
+        Will change the instance state to 'Stopped' for docker containers, will
+        remove the  instance for non-docker instances.
       operationId: stop
       parameters:
         - in: query
@@ -446,9 +508,7 @@ paths:
         '202':
           description: 'Accepted, the operation will be completed in the future.'
         '400':
-          description: >-
-            Bad request, the instance with the specified ID is already
-            stopped.
+          description: 'Bad request, the instance with the specified ID is already stopped.'
         '404':
           description: ID not found on server
         '500':
@@ -515,8 +575,9 @@ paths:
         - Docker Operations
       summary: Assignes a new dependency to the specified instance
       description: >-
-        This command assignes a new dependency to the instance with the specified id. Internally, this will
-        stop the instance, assign the new dependency and start the instance again. This is why this is only 
+        This command assignes a new dependency to the instance with the
+        specified id. Internally, this will stop the instance, assign the new
+        dependency and start the instance again. This is why this is only 
         applicable to docker instances.
       operationId: assignInstance
       parameters:
@@ -533,15 +594,55 @@ paths:
           type: integer
           format: int64
       responses:
-        '202' :
+        '202':
           description: 'Accepted, the operation will be completed in the future.'
-        '400' :
-          description: 'Bad request, the instance with the specified ID is no running inside a docker container or the assigned instance is of the wrong component type.'
+        '400':
+          description: >-
+            Bad request, the instance with the specified ID is no running inside
+            a docker container or the assigned instance is of the wrong
+            component type.
         '404':
-          description: 'One of the ids was not found on the server'
+          description: One of the ids was not found on the server
         '500':
           description: Internal server error
 definitions:
+  InstanceNetwork:
+    type: object
+    required:
+      - instances
+      - links
+    properties:
+      instances:
+        type: array
+        items:
+              $ref: '#/definitions/Instance'
+      links:
+        type: array
+        items:
+              $ref: '#/definitions/InstanceLink'
+  InstanceLink:
+    type: object
+    required:
+      - idFrom
+      - idTo
+      - linkState
+    properties:
+      idFrom:
+        type: integer
+        format: int64
+        example: 0
+      idTo:
+        type: integer
+        format: int64
+        example: 42
+      linkState:
+        type: string
+        description: Valid states for an InstanceLink
+        example: Assigned
+        enum:
+          - Assigned
+          - Outdated
+          - Failed
   Event:
     type: object
     required:

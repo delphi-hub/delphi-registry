@@ -19,7 +19,12 @@ import scala.util.{Failure, Success}
 /**
   * Web server configuration for Instance Registry API.
   */
-object Server extends HttpApp with InstanceJsonSupport with EventJsonSupport with AppLogging {
+object Server extends HttpApp
+  with InstanceJsonSupport
+  with EventJsonSupport
+  with InstanceLinkJsonSupport
+  with InstanceNetworkJsonSupport
+  with AppLogging {
 
   implicit val system : ActorSystem = Registry.system
   implicit val materializer : ActorMaterializer = ActorMaterializer()
@@ -37,6 +42,9 @@ object Server extends HttpApp with InstanceJsonSupport with EventJsonSupport wit
       path("matchingInstance") { matchingInstance()} ~
       path("matchingResult") { matchInstance()} ~
       path("eventList") { eventList()} ~
+      path("linksFrom") { linksFrom()} ~
+      path("linksTo") { linksTo()} ~
+      path("network") { network()} ~
       /****************DOCKER OPERATIONS****************/
       path("deploy") { deployContainer()} ~
       path("reportStart") { reportStart()} ~
@@ -473,6 +481,55 @@ object Server extends HttpApp with InstanceJsonSupport with EventJsonSupport wit
         case x =>
           complete{HttpResponse(StatusCodes.InternalServerError, entity = s"Unexpected operation result $x")}
       }
+    }
+  }
+
+  /**
+    * Called to get a list of links from the instance with the specified id. The id is passed as query argument named
+    * 'Id' (so the resulting call is /linksFrom?Id=42).
+    * @return Server route that either maps to 200 OK (and the list of links as content), or the respective error code.
+    */
+  def linksFrom() : server.Route = parameters('Id.as[Long]) { id =>
+    get {
+      log.debug(s"GET /linksFrom?Id=$id has been called.")
+
+      handler.handleGetLinksFrom(id) match {
+        case Success(linkList) =>
+          complete{linkList}
+        case Failure(ex) =>
+          log.warning(s"Failed to get links from $id with message: ${ex.getMessage}")
+          complete{HttpResponse(StatusCodes.NotFound, entity = s"Failed to get links from $id, that id is not known.")}
+      }
+    }
+  }
+
+  /**
+    * Called to get a list of links to the instance with the specified id. The id is passed as query argument named
+    * 'Id' (so the resulting call is /linksTo?Id=42).
+    * @return Server route that either maps to 200 OK (and the list of links as content), or the respective error code.
+    */
+  def linksTo() : server.Route = parameters('Id.as[Long]) {id =>
+    get {
+      log.debug(s"GET /linksTo?Id=$id has been called.")
+
+      handler.handleGetLinksTo(id) match {
+        case Success(linkList) =>
+          complete{linkList}
+        case Failure(ex) =>
+          log.warning(s"Failed to get links to $id with message: ${ex.getMessage}")
+          complete{HttpResponse(StatusCodes.NotFound, entity = s"Failed to get links to $id, that id is not known.")}
+      }
+    }
+  }
+
+  /**
+    * Called to get the whole network graph of the current registry. Contains a list of all instances and all links
+    * currently registered.
+    * @return Server route that maps to 200 OK and the current InstanceNetwork as content.
+    */
+  def network() : server.Route = {
+    get {
+      complete{handler.handleGetNetwork().toJson(InstanceNetworkFormat)}
     }
   }
 

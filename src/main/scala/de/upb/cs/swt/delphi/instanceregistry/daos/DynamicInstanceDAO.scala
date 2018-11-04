@@ -5,7 +5,7 @@ import java.io.{File, IOException, PrintWriter}
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import de.upb.cs.swt.delphi.instanceregistry.{AppLogging, Configuration, Registry}
-import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.{Instance, InstanceJsonSupport, InstanceLink, RegistryEvent}
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model._
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.{ComponentType, InstanceState}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.LinkEnums.LinkState
 
@@ -227,7 +227,7 @@ class DynamicInstanceDAO (configuration : Configuration) extends InstanceDAO wit
     }
   }
 
-  def getLinksTo(id:Long, state: Option[LinkState] = None) : List[InstanceLink] = {
+  override def getLinksTo(id:Long, state: Option[LinkState] = None) : List[InstanceLink] = {
     val links = instanceLinks.filter(link => link.idTo == id)
 
     if(state.isDefined){
@@ -235,6 +235,11 @@ class DynamicInstanceDAO (configuration : Configuration) extends InstanceDAO wit
     } else {
       List() ++ links
     }
+  }
+
+  override def getNetwork() : InstanceNetwork = {
+    InstanceNetwork( List() ++ instances,
+      List() ++ instanceLinks)
   }
 
   private[daos] def clearData() : Unit = {

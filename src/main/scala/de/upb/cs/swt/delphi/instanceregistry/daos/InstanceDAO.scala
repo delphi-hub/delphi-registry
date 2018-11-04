@@ -1,6 +1,6 @@
 package de.upb.cs.swt.delphi.instanceregistry.daos
 
-import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.{Instance, InstanceLink, RegistryEvent}
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.{Instance, InstanceLink, InstanceNetwork, RegistryEvent}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.{ComponentType, InstanceState}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.LinkEnums.LinkState
 
@@ -130,4 +130,18 @@ trait InstanceDAO {
     * @return List of matching InstanceLinks
     */
   def getLinksFrom(idFrom: Long, state: Option[LinkState] = None) : List[InstanceLink]
+
+  /**
+    * Get all incoming links to the specified instance. Optionally a LinkState can be specified as filter
+    * @param idFrom Id of the instance
+    * @param state Option[LinkState] to filter for certain LinkStates. If None, no filter will be applied.
+    * @return List of matching InstanceLinks
+    */
+  def getLinksTo(idFrom: Long, state: Option[LinkState] = None) : List[InstanceLink]
+
+  /**
+    * Get the current Instance Network
+    * @return InstanceNetwork object
+    */
+  def getNetwork() : InstanceNetwork
 }

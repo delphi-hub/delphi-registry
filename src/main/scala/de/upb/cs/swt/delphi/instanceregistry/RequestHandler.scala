@@ -559,6 +559,40 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
   }
 
   /**
+    * Retrieves links from the instance with the specified id.
+    * @param id Id of the specified instance
+    * @return Success(listOfLinks) if id is present, Failure otherwise
+    */
+  def handleGetLinksFrom(id: Long) : Try[List[InstanceLink]] = {
+    if(!instanceDao.hasInstance(id)){
+      Failure(new RuntimeException(s"Cannot get links from $id, that id is unknown."))
+    } else {
+      Success(instanceDao.getLinksFrom(id))
+    }
+  }
+
+  /**
+    * Retrieves links to the instance with the specified id.
+    * @param id Id of the specified instance
+    * @return Success(listOfLinks) if id is present, Failure otherwise
+    */
+  def handleGetLinksTo(id: Long) : Try[List[InstanceLink]] = {
+    if(!instanceDao.hasInstance(id)){
+      Failure(new RuntimeException(s"Cannot get links to $id, that id is unknown."))
+    } else {
+      Success(instanceDao.getLinksTo(id))
+    }
+  }
+
+  /**
+    * Retrieves the current instance network, containing all instances and instance links.
+    * @return InstanceNetwork
+    */
+  def handleGetNetwork() : InstanceNetwork = {
+    instanceDao.getNetwork()
+  }
+
+  /**
     * Tries to match caller to specified component type based on links stored in the dao. If one link is present, it will
     * be selected regardless of its state. If multiple links are present, the assigned link will be returned. If none of
     * the links is assigned, matching will fail. If the component types stored in the links do not match the required
