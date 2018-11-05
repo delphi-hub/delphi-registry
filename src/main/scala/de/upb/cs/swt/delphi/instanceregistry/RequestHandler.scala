@@ -39,7 +39,13 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
     instanceDao.initialize()
     if (!instanceDao.allInstances().exists(instance => instance.name.equals("Default ElasticSearch Instance"))) {
       //Add default ES instance
-      handleRegister(Instance(None, "elasticsearch://172.17.0.1", 9200, "Default ElasticSearch Instance", ComponentType.ElasticSearch, None, InstanceState.Running))
+      handleRegister(Instance(None,
+        configuration.defaultElasticSearchInstanceHost,
+        configuration.defaultElasticSearchInstancePort,
+        "Default ElasticSearch Instance",
+        ComponentType.ElasticSearch,
+        None,
+        InstanceState.Running))
     }
     log.info("Done initializing request handler.")
   }
