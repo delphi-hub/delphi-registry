@@ -25,6 +25,8 @@ class Configuration( ) {
   //Where this registry can be contacted at inside the LAN
   val uriInLocalNetwork: String = "http://172.17.0.1:8087"
 
+  val maxLabelLength: Int = 50
+
 }
 
 

@@ -45,7 +45,8 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
         "Default ElasticSearch Instance",
         ComponentType.ElasticSearch,
         None,
-        InstanceState.Running))
+        InstanceState.Running,
+        List("Default")))
     }
     log.info("Done initializing request handler.")
   }
@@ -69,7 +70,7 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
 
     val newInstance = Instance(id = Some(newID), name = instance.name, host = instance.host,
       portNumber = instance.portNumber, componentType = instance.componentType,
-      dockerId = None, instanceState = InstanceState.Running)
+      dockerId = None, instanceState = InstanceState.Running, labels = instance.labels)
 
     instanceDao.addInstance(newInstance) match {
       case Success(_) =>
@@ -249,7 +250,15 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
         val normalizedHost = host.substring(1,host.length - 1)
         log.info(s"Deployed new container with id $dockerId, host $normalizedHost and port $port.")
 
-        val newInstance = Instance(Some(newId), normalizedHost, port, name.getOrElse(s"Generic $componentType"), componentType, Some(dockerId), InstanceState.Deploying)
+        val newInstance = Instance(Some(newId),
+          normalizedHost,
+          port,
+          name.getOrElse(s"Generic $componentType"),
+          componentType,
+          Some(dockerId),
+          InstanceState.Deploying,
+          List.empty[String]
+        )
         log.info(s"Registering instance $newInstance....")
 
         instanceDao.addInstance(newInstance) match {
@@ -596,6 +605,23 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
     */
   def handleGetNetwork() : InstanceNetwork = {
     instanceDao.getNetwork()
+  }
+
+  /**
+    * Add label to instance with specified id
+    * @param id Instance id
+    * @param label Label to add
+    * @return OperationResult
+    */
+  def handleAddLabel(id: Long, label: String) : OperationResult.Value = {
+    if(!instanceDao.hasInstance(id)){
+      OperationResult.IdUnknown
+    } else {
+      instanceDao.addLabelFor(id, label) match {
+        case Success(_) => OperationResult.Ok
+        case Failure(_) => OperationResult.InternalError
+      }
+    }
   }
 
   /**

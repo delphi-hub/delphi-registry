@@ -45,6 +45,7 @@ object Server extends HttpApp
       path("linksFrom") { linksFrom()} ~
       path("linksTo") { linksTo()} ~
       path("network") { network()} ~
+      path("addLabel") { addLabel()} ~
       /****************DOCKER OPERATIONS****************/
       path("deploy") { deployContainer()} ~
       path("reportStart") { reportStart()} ~
@@ -530,6 +531,28 @@ object Server extends HttpApp
   def network() : server.Route = {
     get {
       complete{handler.handleGetNetwork().toJson(InstanceNetworkFormat)}
+    }
+  }
+
+  /**
+    * Called to add a generic label to the instance with the specified id. The Id and label are passed as query arguments
+    * named 'Id' and 'Label', resp. (so the resulting call is /addLabel?Id=42&Label=private)
+    * @return Server route that either maps to 200 OK or the respective error codes.
+    */
+  def addLabel() : server.Route = parameters('Id.as[Long], 'Label.as[String]){ (id, label) =>
+    post {
+      handler.handleAddLabel(id, label) match {
+        case handler.OperationResult.IdUnknown =>
+          log.warning(s"Cannot add label $label to $id, id not found.")
+          complete{HttpResponse(StatusCodes.NotFound, entity = s"Cannot add label, id $id not found.")}
+        case handler.OperationResult.InternalError =>
+          log.warning(s"Error while adding label $label to $id: Label exceeds character limit.")
+          complete{HttpResponse(StatusCodes.BadRequest,
+            entity = s"Cannot add label to $id, label exceeds character limit of ${Registry.configuration.maxLabelLength}")}
+        case handler.OperationResult.Ok =>
+          log.info(s"Successfully added label $label to instance with id $id.")
+          complete("Successfully added label")
+      }
     }
   }
 

@@ -69,7 +69,7 @@ trait InstanceJsonSupport extends SprayJsonSupport with DefaultJsonProtocol {
   }
 
   //JSON format for Instances
-  implicit val instanceFormat : JsonFormat[Instance] = jsonFormat7(Instance)
+  implicit val instanceFormat : JsonFormat[Instance] = jsonFormat8(Instance)
 }
 
 /**
@@ -89,7 +89,8 @@ final case class Instance (
      name: String,
      componentType: ComponentType,
      dockerId: Option[String],
-     instanceState: InstanceState
+     instanceState: InstanceState,
+     labels: List[String]
 )
 
 /**

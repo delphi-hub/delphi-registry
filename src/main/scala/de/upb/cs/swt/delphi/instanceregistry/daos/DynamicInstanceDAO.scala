@@ -154,10 +154,44 @@ class DynamicInstanceDAO (configuration : Configuration) extends InstanceDAO wit
   override def setStateFor(id: Long, state: InstanceState.Value): Try[Unit] = {
     if(hasInstance(id)){
       val instance = getInstance(id).get
-      val newInstance = Instance(instance.id, instance.host, instance.portNumber, instance.name, instance.componentType, instance.dockerId, state)
+      val newInstance = Instance(instance.id,
+        instance.host,
+        instance.portNumber,
+        instance.name,
+        instance.componentType,
+        instance.dockerId,
+        state,
+        instance.labels)
       instances.remove(instance)
       instances.add(newInstance)
       Success()
+    } else {
+      Failure(new RuntimeException(s"Instance with id $id was not found."))
+    }
+  }
+
+  override def addLabelFor(id: Long, label: String): Try[Unit] = {
+    if(hasInstance(id)){
+      val instance = getInstance(id).get
+      if(instance.labels.exists(l => l.equalsIgnoreCase(label))){
+        Success() //Label already present, Success!
+      } else {
+        if(label.length > configuration.maxLabelLength){
+          Failure(new RuntimeException(s"Label exceeds character limit of ${configuration.maxLabelLength}."))
+        } else {
+          val newInstance = Instance(instance.id,
+            instance.host,
+            instance.portNumber,
+            instance.name,
+            instance.componentType,
+            instance.dockerId,
+            instance.instanceState,
+            instance.labels ++ List[String](label))
+          instances.remove(instance)
+          instances.add(newInstance)
+          Success()
+        }
+      }
     } else {
       Failure(new RuntimeException(s"Instance with id $id was not found."))
     }

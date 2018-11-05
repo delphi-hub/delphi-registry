@@ -144,4 +144,12 @@ trait InstanceDAO {
     * @return InstanceNetwork object
     */
   def getNetwork() : InstanceNetwork
+
+  /**
+    * Adds a label to the instance with the specified id
+    * @param id Id of the instance
+    * @param label Label to add
+    * @return Success if instance is present and label does not exceed character limit, false otherwise.
+    */
+  def addLabelFor(id: Long, label: String) : Try[Unit]
 }
