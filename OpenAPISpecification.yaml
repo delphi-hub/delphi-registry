@@ -241,11 +241,12 @@ paths:
           description: Instance not found
   /linksFrom:
     get:
-      tags: 
+      tags:
         - Basic Operations
       summary: Retrieves outgoing links from an instance
       description: >-
-        This command retreives a list of outgoing links from the instance with the specified id.
+        This command retreives a list of outgoing links from the instance with
+        the specified id.
       operationId: linksFrom
       parameters:
         - name: Id
@@ -265,11 +266,12 @@ paths:
           description: Instance not found
   /linksTo:
     get:
-      tags: 
+      tags:
         - Basic Operations
       summary: Retrieves incoming links to an instance
       description: >-
-        This command retreives a list of incoming links from the instance with the specified id.
+        This command retreives a list of incoming links from the instance with
+        the specified id.
       operationId: linksTo
       parameters:
         - name: Id
@@ -293,13 +295,42 @@ paths:
         - Basic Operations
       summary: Retrieves the current instance network
       description: >-
-        Retrieves the instance network, meaning a list of all instances as well as a list of all links currently registered at the registry.
+        Retrieves the instance network, meaning a list of all instances as well
+        as a list of all links currently registered at the registry.
       operationId: network
       responses:
         '200':
           description: The instance network
           schema:
             $ref: '#/definitions/InstanceNetwork'
+  /addLabel:
+    post:
+      tags:
+        - Basic Operations
+      summary: Add a label to the instance with the specified id
+      description: >-
+        This command will add the specified label to the instance with the specified
+        id.
+      operationId: addLabel
+      parameters:
+        - name: Id
+          in: query
+          description: Id of the instance
+          required: true
+          type: integer
+          format: int64
+        - name: Label
+          in: query
+          description: The label to add to the instance
+          required: true
+          type: string
+      responses:
+        '200':
+          description: Label successfully added
+        '400':
+          description: Bad request, your label exceeded the character limit
+        '404':
+          description: Not found, the id you specified could not be found
   /deploy:
     post:
       tags:
@@ -615,11 +646,11 @@ definitions:
       instances:
         type: array
         items:
-              $ref: '#/definitions/Instance'
+          $ref: '#/definitions/Instance'
       links:
         type: array
         items:
-              $ref: '#/definitions/InstanceLink'
+          $ref: '#/definitions/InstanceLink'
   InstanceLink:
     type: object
     required:
@@ -704,3 +735,8 @@ definitions:
           - Stopped
           - Paused
           - NotReachable
+      labels:
+        type: array
+        items:
+          type: string
+        example: ["private", "debug"]
