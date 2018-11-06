@@ -1,8 +1,9 @@
 package de.upb.cs.swt.delphi.instanceregistry.daos
 
 import de.upb.cs.swt.delphi.instanceregistry.Configuration
-import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.Instance
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.{Instance, InstanceLink, RegistryEventFactory}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.{ComponentType, InstanceState}
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.LinkEnums.LinkState
 import org.scalatest.{BeforeAndAfterEach, FlatSpec, Matchers}
 
 class DynamicInstanceDAOTest extends FlatSpec with Matchers with BeforeAndAfterEach{
@@ -128,6 +129,36 @@ class DynamicInstanceDAOTest extends FlatSpec with Matchers with BeforeAndAfterE
       ComponentType.WebApi, Some("dockerId"), InstanceState.Running, List.empty[String] )).isSuccess)
     assert(dao.getDockerIdFor(42).isSuccess)
     assert(dao.getDockerIdFor(42).get.equals("dockerId"))
+  }
+
+  it must "add events only to instances that have been registered" in {
+    assert(dao.getEventsFor(1).isSuccess)
+    assert(dao.getEventsFor(1).get.isEmpty)
+
+    val eventToAdd = RegistryEventFactory.createInstanceAddedEvent(dao.getInstance(1).get)
+    assert(dao.addEventFor(-1, eventToAdd).isFailure)
+    assert(dao.addEventFor(1, eventToAdd).isSuccess)
+    assert(dao.getEventsFor(1).get.size == 1)
+    assert(dao.getEventsFor(1).get.head == eventToAdd)
+  }
+
+  it must "verify the presence of instance ids when a link is added" in {
+    assert(dao.addLink(InstanceLink(-1,2, LinkState.Assigned)).isFailure)
+    assert(dao.addLink(InstanceLink(42, Integer.MAX_VALUE, LinkState.Assigned)).isFailure)
+    assert(dao.addLink(InstanceLink(1,2, LinkState.Assigned)).isSuccess)
+    assert(dao.getLinksFrom(1).size == 1)
+  }
+
+  it must "update old links in state 'Assigned' on adding a new assigned link." in {
+    assert(dao.addLink(InstanceLink(1,2, LinkState.Assigned)).isSuccess)
+    assert(dao.getLinksFrom(1, Some(LinkState.Assigned)).size == 1)
+    assert(dao.addLink(InstanceLink(1,3, LinkState.Assigned)).isSuccess)
+
+    assert(dao.getLinksFrom(1, Some(LinkState.Outdated)).size == 1)
+    assert(dao.getLinksFrom(1, Some(LinkState.Outdated)).head.idTo == 2)
+
+    assert(dao.getLinksFrom(1, Some(LinkState.Assigned)).size == 1)
+    assert(dao.getLinksFrom(1, Some(LinkState.Assigned)).head.idTo == 3)
   }
 
   override protected def afterEach() : Unit = {
