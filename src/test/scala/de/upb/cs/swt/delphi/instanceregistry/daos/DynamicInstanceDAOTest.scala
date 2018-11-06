@@ -10,7 +10,7 @@ class DynamicInstanceDAOTest extends FlatSpec with Matchers with BeforeAndAfterE
   val dao : DynamicInstanceDAO = new DynamicInstanceDAO(new Configuration())
 
   private def buildInstance(id : Int) : Instance = {
-    Instance(Some(id), "https://localhost", 12345, "TestInstance", ComponentType.Crawler, None, InstanceState.Stopped)
+    Instance(Some(id), "https://localhost", 12345, "TestInstance", ComponentType.Crawler, None, InstanceState.Stopped, List.empty[String])
   }
 
   override protected def beforeEach() : Unit = {
@@ -125,7 +125,7 @@ class DynamicInstanceDAOTest extends FlatSpec with Matchers with BeforeAndAfterE
   it must "return the correct docker ids for instances with a docker id" in {
     assert(dao.addInstance
     (Instance(Some(42), "http://localhost", 33449, "AnyName",
-      ComponentType.WebApi, Some("dockerId"), InstanceState.Running )).isSuccess)
+      ComponentType.WebApi, Some("dockerId"), InstanceState.Running, List.empty[String] )).isSuccess)
     assert(dao.getDockerIdFor(42).isSuccess)
     assert(dao.getDockerIdFor(42).get.equals("dockerId"))
   }

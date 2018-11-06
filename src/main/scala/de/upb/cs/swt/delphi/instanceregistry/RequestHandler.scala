@@ -126,13 +126,20 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
           Success(instance)
         case Failure(ex) =>
           log.warning(s"Matching pending: First try failed, message was ${ex.getMessage}")
-          tryDefaultMatching(compType) match {
+          tryLabelMatching(callerId, compType) match {
             case Success(instance) =>
-              log.info(s"Matching finished: Default matching yielded result $instance.")
+              log.info(s"Matching finished: Second try yielded result $instance.")
               Success(instance)
             case Failure(ex2) =>
-              log.warning(s"Matching failed: Default matching did not yield result, message was ${ex2.getMessage}.")
-              Failure(ex2)
+              log.warning(s"Matching pending: Second try failed, message was ${ex2.getMessage}")
+              tryDefaultMatching(compType) match {
+                case Success(instance) =>
+                  log.info(s"Matching finished: Default matching yielded result $instance.")
+                  Success(instance)
+                case Failure(ex3) =>
+                  log.warning(s"Matching failed: Default matching did not yield result, message was ${ex3.getMessage}.")
+                  Failure(ex3)
+              }
           }
       }
     }
@@ -165,7 +172,7 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
       OperationResult.NoDockerContainer
     } else {
       val instance = instanceDao.getInstance(instanceId).get
-      val dependency = instanceDao.getInstance(instanceId).get
+      val dependency = instanceDao.getInstance(newDependencyId).get
 
       if(assignmentAllowed(instance.componentType) && compatibleTypes(instance.componentType, dependency.componentType)){
         val link = InstanceLink(instanceId, newDependencyId, LinkState.Assigned)
@@ -636,7 +643,7 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
   private def tryLinkMatching(callerId: Long, componentType: ComponentType) : Try[Instance] = {
     log.info(s"Matching first try: Analyzing links for $callerId...")
 
-    val links = instanceDao.getLinksFrom(callerId)
+    val links = instanceDao.getLinksFrom(callerId).filter(link => link.linkState == LinkState.Assigned)
 
     links.size match {
       case 0 =>
@@ -691,6 +698,42 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
     }
   }
 
+  /**
+    * Tries to match caller to instance of the specified type based on which instance has the most labels in common with
+    * the caller. Will fail if no such instance is found.
+    * @param callerId Id of the calling instance
+    * @param componentType ComponentType to match to
+    * @return Success(Instance) if successful, Failure otherwise.
+    */
+  private def tryLabelMatching(callerId: Long, componentType: ComponentType) : Try[Instance] = {
+    log.info(s"Matching second try: Analyzing labels for $callerId...")
+
+    val possibleMatches = instanceDao.getInstancesOfType(componentType)
+
+    possibleMatches.size match {
+      case 0 =>
+        log.warning(s"Matching second try failed: There are no instances of type $componentType present.")
+        Failure(new RuntimeException(s"Type $componentType not present."))
+      case _ =>
+        val labels = instanceDao.getInstance(callerId).get.labels
+
+        val intersectionList = possibleMatches
+            .filter(instance => instance.labels.intersect(labels).nonEmpty)
+            .sortBy(instance => instance.labels.intersect(labels).size)
+            .reverse
+
+        if(intersectionList.nonEmpty){
+          val result = intersectionList.head
+          val noOfSharedLabels = result.labels.intersect(labels).size
+          log.info(s"Finished matching second try: Successfully matched to  $result based on $noOfSharedLabels shared labels.")
+          Success(result)
+        } else {
+          log.warning(s"Matching second try failed: There are no instance with shared labels to $labels.")
+          Failure(new RuntimeException(s"No instance with shared labels."))
+        }
+    }
+  }
+
   private def tryDefaultMatching(componentType: ComponentType) : Try[Instance] = {
     log.info(s"Matching fallback: Searching for instances of type $componentType ...")
     getNumberOfInstances(componentType) match {
@@ -711,7 +754,7 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
           case None =>
             log.info(s"Matching fallback: Found $x instance of type $componentType, but none of them is running.")
 
-            //Match to instance with maxmum number of consecutive positive matching results
+            //Match to instance with maximum number of consecutive positive matching results
             var maxConsecutivePositiveResults = 0
             var instanceToMatch: Instance = null
 
