@@ -105,8 +105,8 @@ class DockerActor(connection: DockerConnection) extends Actor with ActorLogging 
       }
 
     case logs(containerId: String) =>
-     log.info(s"Fetching Container logs")
-      container.logs(containerId)
+      log.info(s"Fetching Container logs")
+      sender ! container.logs(containerId)
 
     case x => log.warning("Received unknown message: [{}] ", x)
   }

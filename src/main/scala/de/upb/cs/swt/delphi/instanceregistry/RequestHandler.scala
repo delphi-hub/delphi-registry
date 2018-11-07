@@ -1,5 +1,6 @@
 package de.upb.cs.swt.delphi.instanceregistry
 
+import akka.NotUsed
 import akka.actor._
 import akka.http.scaladsl.model.StatusCodes
 import akka.pattern.ask
@@ -628,6 +629,32 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
         case Success(_) => OperationResult.Ok
         case Failure(_) => OperationResult.InternalError
       }
+    }
+  }
+
+  /**
+    *
+    * Returns a source streaming the container logs of the instance with the specified id
+    * @param id Id of the instance
+    * @return Tuple of OperationResult and Option[Source[...] ]
+    */
+  def handleGetLogs(id: Long) : (OperationResult.Value, Option[Source[String, NotUsed]]) = {
+    if(!instanceDao.hasInstance(id)){
+      (OperationResult.IdUnknown, None)
+    } else if(!isInstanceDockerContainer(id)){
+      (OperationResult.NoDockerContainer, None)
+    } else {
+      val instance = instanceDao.getInstance(id).get
+
+      val f : Future[(OperationResult.Value, Option[Source[String, NotUsed]])]= (dockerActor ? logs(instance.dockerId.get))(Timeout(10 seconds)).map{
+        source: Any =>
+          (OperationResult.Ok, Option(source.asInstanceOf[Source[String, NotUsed]]))
+      }.recover{
+        case ex: Exception =>
+          fireDockerOperationErrorEvent(Some(instance), errorMessage = s"Failed to get logs with message: ${ex.getMessage}")
+          (OperationResult.InternalError, None)
+      }
+      Await.result(f, Duration.Inf)
     }
   }
 

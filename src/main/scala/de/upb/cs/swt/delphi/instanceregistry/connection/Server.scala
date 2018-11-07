@@ -1,5 +1,6 @@
 package de.upb.cs.swt.delphi.instanceregistry.connection
 
+import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.ws.{Message, TextMessage}
 import akka.http.scaladsl.model.{HttpResponse, StatusCodes}
@@ -56,6 +57,7 @@ object Server extends HttpApp
       path("stop") { stop()} ~
       path("start") { start()} ~
       path("delete") { deleteContainer()} ~
+      path("logs") { streamLogs()} ~
       /****************EVENT OPERATIONS****************/
       path("events") { streamEvents()}
 
@@ -530,6 +532,7 @@ object Server extends HttpApp
     */
   def network() : server.Route = {
     get {
+      log.debug(s"GET /network has been called.")
       complete{handler.handleGetNetwork().toJson(InstanceNetworkFormat)}
     }
   }
@@ -541,6 +544,7 @@ object Server extends HttpApp
     */
   def addLabel() : server.Route = parameters('Id.as[Long], 'Label.as[String]){ (id, label) =>
     post {
+      log.debug(s"POST /addLabel?Id=$id&Label=$label has been called.")
       handler.handleAddLabel(id, label) match {
         case handler.OperationResult.IdUnknown =>
           log.warning(s"Cannot add label $label to $id, id not found.")
@@ -584,8 +588,41 @@ object Server extends HttpApp
         }
       }
     }
+  }
+
+
+  def streamLogs() : server.Route = parameters('Id.as[Long]) { id =>
+    log.debug(s"WS-Request to /logs?Id=$id has been called.")
+
+    handler.handleGetLogs(id) match {
+      case (handler.OperationResult.IdUnknown, _) =>
+        complete{HttpResponse(StatusCodes.NotFound, entity = s"Cannot find instance with id $id.")}
+      case (handler.OperationResult.NoDockerContainer, _) =>
+        complete{HttpResponse(StatusCodes.BadRequest, entity = s"Instance with id $id is no docker container.")}
+      case (handler.OperationResult.Ok, sourceOption) =>
+        val source : Source[String, NotUsed] = sourceOption.get
+        handleWebSocketMessages{
+          Flow[Message]
+            .map{
+              case TextMessage.Strict(msg: String) => msg
+              case _ => println("Ignored non-text message while streaming logs.")
+            }
+            .via(
+              Flow.fromSinkAndSource(Sink.foreach(println), source))
+            .map{msg: String => TextMessage.Strict(msg + "\n")}
+            .watchTermination() { (_, done) =>
+              done.onComplete {
+                case Success(_) =>
+                  log.info("Stream route completed successfully")
+                case Failure(ex) =>
+                  log.error(s"Stream route completed with failure : $ex")
+              }
+            }
+        }
+    }
 
   }
+
 
 }
 
