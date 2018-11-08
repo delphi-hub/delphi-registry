@@ -116,6 +116,31 @@ paths:
             $ref: '#/definitions/Instance'
         '400':
           description: Invalid status value
+  /instance:
+    get:
+      tags:
+        - Basic Operations
+      summary: Get the instance with the specified id
+      description: >-
+        This command retrieves the instance with the specified id from the server.
+        If that id is not present, 404 will be returned.
+      operationId: instance
+      parameters:
+        - in: query
+          name: Id
+          description: Id of the instance
+          required: true
+          type: integer
+          format: int64
+      responses:
+        '200':
+          description: The instance that was requested
+          schema:
+            $ref: '#/definitions/Instance'
+        '404':
+          description: The id was not found on the server
+        '500':
+          description: Internal server error
   /instances:
     get:
       tags:
@@ -309,8 +334,8 @@ paths:
         - Basic Operations
       summary: Add a label to the instance with the specified id
       description: >-
-        This command will add the specified label to the instance with the specified
-        id.
+        This command will add the specified label to the instance with the
+        specified id.
       operationId: addLabel
       parameters:
         - name: Id
@@ -328,9 +353,9 @@ paths:
         '200':
           description: Label successfully added
         '400':
-          description: Bad request, your label exceeded the character limit
+          description: 'Bad request, your label exceeded the character limit'
         '404':
-          description: Not found, the id you specified could not be found
+          description: 'Not found, the id you specified could not be found'
   /deploy:
     post:
       tags:
@@ -739,4 +764,6 @@ definitions:
         type: array
         items:
           type: string
-        example: ["private", "debug"]
+        example:
+          - private
+          - debug

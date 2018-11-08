@@ -39,6 +39,7 @@ object Server extends HttpApp
       path("register") {entity(as[String]) { jsonString => register(jsonString) }} ~
       path("deregister") { deregister() } ~
       path("instances") { fetchInstancesOfType() } ~
+      path("instance") { retrieveInstance() } ~
       path("numberOfInstances") { numberOfInstances() } ~
       path("matchingInstance") { matchingInstance()} ~
       path("matchingResult") { matchInstance()} ~
@@ -57,7 +58,6 @@ object Server extends HttpApp
       path("stop") { stop()} ~
       path("start") { start()} ~
       path("delete") { deleteContainer()} ~
-      path("logs") { streamLogs()} ~
       /****************EVENT OPERATIONS****************/
       path("events") { streamEvents()}
 
@@ -150,6 +150,25 @@ object Server extends HttpApp
       } else {
         log.error(s"Failed to deserialize parameter string $compTypeString to ComponentType.")
         complete(HttpResponse(StatusCodes.BadRequest, entity = s"Could not deserialize parameter string $compTypeString to ComponentType"))
+      }
+    }
+  }
+
+  /**
+    * Returns an instance with the specified id. Id is passed as query argument named 'Id' (so the resulting call is
+    * /instance?Id=42)
+    * @return Server route that either maps to 200 OK and the respective instance as entity, or 404.
+    */
+  def retrieveInstance() : server.Route = parameters('Id.as[Long]) { id =>
+    get {
+      log.debug(s"GET /instance?Id=$id has been called")
+
+      val instanceOption = handler.getInstance(id)
+
+      if(instanceOption.isDefined){
+        complete(instanceOption.get.toJson(instanceFormat))
+      } else {
+        complete{HttpResponse(StatusCodes.NotFound, entity = s"Id $id was not found on the server.")}
       }
     }
   }
@@ -588,39 +607,6 @@ object Server extends HttpApp
         }
       }
     }
-  }
-
-
-  def streamLogs() : server.Route = parameters('Id.as[Long]) { id =>
-    log.debug(s"WS-Request to /logs?Id=$id has been called.")
-
-    handler.handleGetLogs(id) match {
-      case (handler.OperationResult.IdUnknown, _) =>
-        complete{HttpResponse(StatusCodes.NotFound, entity = s"Cannot find instance with id $id.")}
-      case (handler.OperationResult.NoDockerContainer, _) =>
-        complete{HttpResponse(StatusCodes.BadRequest, entity = s"Instance with id $id is no docker container.")}
-      case (handler.OperationResult.Ok, sourceOption) =>
-        val source : Source[String, NotUsed] = sourceOption.get
-        handleWebSocketMessages{
-          Flow[Message]
-            .map{
-              case TextMessage.Strict(msg: String) => msg
-              case _ => println("Ignored non-text message while streaming logs.")
-            }
-            .via(
-              Flow.fromSinkAndSource(Sink.foreach(println), source))
-            .map{msg: String => TextMessage.Strict(msg + "\n")}
-            .watchTermination() { (_, done) =>
-              done.onComplete {
-                case Success(_) =>
-                  log.info("Stream route completed successfully")
-                case Failure(ex) =>
-                  log.error(s"Stream route completed with failure : $ex")
-              }
-            }
-        }
-    }
-
   }
 
 
