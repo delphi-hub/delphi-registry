@@ -1,5 +1,8 @@
 package de.upb.cs.swt.delphi.instanceregistry
 
+import akka.util.Timeout
+import scala.concurrent.duration.DurationInt
+
 class Configuration( ) {
   //Where to host the http server
   val bindHost: String = "0.0.0.0"
@@ -26,6 +29,8 @@ class Configuration( ) {
   val uriInLocalNetwork: String = "http://172.17.0.1:8087"
 
   val maxLabelLength: Int = 50
+
+  val dockerOperationTimeout: Timeout = Timeout(20 seconds)
 
 }
 
