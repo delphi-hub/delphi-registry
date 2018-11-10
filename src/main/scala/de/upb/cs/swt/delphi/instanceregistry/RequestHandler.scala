@@ -184,7 +184,7 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
 
           fireLinkAddedEvent(link)
 
-          implicit val timeout : Timeout = Timeout(10 seconds)
+          implicit val timeout : Timeout = configuration.dockerOperationTimeout
 
           (dockerActor ? restart(instance.dockerId.get)).map{
             _ => log.info(s"Instance $instanceId restarted.")
@@ -244,7 +244,7 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
 
     log.info(s"Deploying container of type $componentType")
 
-    implicit val timeout: Timeout = Timeout(10 seconds)
+    implicit val timeout: Timeout = configuration.dockerOperationTimeout
 
     val future: Future[Any] = dockerActor ? create(componentType, newId)
     val deployResult = Await.result(future, timeout.duration).asInstanceOf[Try[(String, String, Int)]]
@@ -395,7 +395,7 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
       val instance = instanceDao.getInstance(id).get
       if (instance.instanceState == InstanceState.Running) {
         log.info(s"Handling /pause for instance with id $id...")
-        implicit val timeout : Timeout = Timeout(10 seconds)
+        implicit val timeout : Timeout = configuration.dockerOperationTimeout
 
         (dockerActor ? pause(instance.dockerId.get)).map{
           _ => log.info(s"Instance $id paused.")
@@ -430,7 +430,7 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
       val instance = instanceDao.getInstance(id).get
       if (instance.instanceState == InstanceState.Paused) {
         log.info(s"Handling /resume for instance with id $id...")
-        implicit val timeout : Timeout = Timeout(10 seconds)
+        implicit val timeout : Timeout = configuration.dockerOperationTimeout
 
         (dockerActor ? unpause(instance.dockerId.get)).map{
           _ => log.info(s"Instance $id resumed.")
@@ -488,7 +488,7 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
       val instance = instanceDao.getInstance(id).get
 
       log.info("Stopping container...")
-      implicit val timeout: Timeout = Timeout(10 seconds)
+      implicit val timeout: Timeout = configuration.dockerOperationTimeout
 
       (dockerActor ? stop(instance.dockerId.get)).map{
         _ => log.info(s"Instance $id stopped.")
@@ -522,7 +522,7 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
       val instance = instanceDao.getInstance(id).get
       if (instance.instanceState == InstanceState.Stopped) {
         log.info("Starting container...")
-        implicit val timeout: Timeout = Timeout(10 seconds)
+        implicit val timeout: Timeout = configuration.dockerOperationTimeout
 
         (dockerActor ? start(instance.dockerId.get)).map{
           _ => log.info(s"Instance $id started.")
@@ -557,7 +557,7 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
       if (instance.instanceState != InstanceState.Running) {
         log.info("Deleting container...")
 
-        implicit val timeout: Timeout = Timeout(10 seconds)
+        implicit val timeout: Timeout = configuration.dockerOperationTimeout
 
         (dockerActor ? delete(instance.dockerId.get)).map{
           _ => log.info(s"Container for instance $id deleted.")
@@ -646,7 +646,7 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
     } else {
       val instance = instanceDao.getInstance(id).get
 
-      val f : Future[(OperationResult.Value, Option[Source[String, NotUsed]])]= (dockerActor ? logs(instance.dockerId.get))(Timeout(10 seconds)).map{
+      val f : Future[(OperationResult.Value, Option[Source[String, NotUsed]])]= (dockerActor ? logs(instance.dockerId.get))(configuration.dockerOperationTimeout).map{
         source: Any =>
           (OperationResult.Ok, Option(source.asInstanceOf[Source[String, NotUsed]]))
       }.recover{
