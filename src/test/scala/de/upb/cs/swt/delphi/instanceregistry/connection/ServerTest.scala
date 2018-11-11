@@ -19,14 +19,31 @@ package de.upb.cs.swt.delphi.webapi
 import akka.http.javadsl.model.StatusCodes
 import akka.http.scaladsl.server
 import akka.http.scaladsl.testkit.ScalatestRouteTest
+import de.upb.cs.swt.delphi.instanceregistry.Docker.DockerConnection
+import de.upb.cs.swt.delphi.instanceregistry.connection.Server.{complete, handler}
+import de.upb.cs.swt.delphi.instanceregistry.{Configuration, RequestHandler}
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.Instance
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.{ComponentType, InstanceState}
 import org.scalatest.{Matchers, WordSpec}
 
 class ServerTests extends WordSpec with Matchers with ScalatestRouteTest {
+  val handler: RequestHandler = new RequestHandler(new Configuration(), DockerConnection.fromEnvironment())
+  private def buildInstance(id: Long, dockerId: Option[String] = None, state: InstanceState.Value = InstanceState.Stopped): Instance = {
+    Instance(Some(id), "https://localhost", 12345, "TestInstance", ComponentType.ElasticSearch, dockerId, state)
+  }
   "The Server" should {
     "this return method not allowed while registering" in {
       Post("register") -> server.Route -> check {
         status === StatusCodes.METHOD_NOT_ALLOWED
         responseAs[String] shouldEqual "HTTP method not allowed, supported methods: POST"
+      }
+    }
+    "Successfully Registered" in {
+      Post("register") -> server.Route -> check {
+        assert(status === StatusCodes.OK)
+        assert(response.status === 200)
+        val registerNewInstance = handler.handleRegister(buildInstance(Long.MaxValue))
+        assert(registerNewInstance.isSuccess)
       }
     }
     "Internal Server Error occured while registering" in {
@@ -38,6 +55,7 @@ class ServerTests extends WordSpec with Matchers with ScalatestRouteTest {
     "Could not deserialize parameter instance while registering instance" in {
       Post("register") -> server.Route -> check {
         status === StatusCodes.BAD_REQUEST
+        responseAs[String] should contain("Could not deserialize parameter instance")
       }
     }
     "This Method not allowed in order to deregister instance" in {
@@ -48,12 +66,16 @@ class ServerTests extends WordSpec with Matchers with ScalatestRouteTest {
     }
     "Successfully Deregistered" in {
       Post("deregister") -> server.Route -> check {
-        status === StatusCodes.OK
+        assert(status === StatusCodes.OK)
+        assert(response.status === 200)
+        val registerInstance = handler.handleRegister(buildInstance(1, None))
+        assert(registerInstance.isSuccess)
       }
     }
     "Could not Deregister Instance" in {
       Post("deregister") -> server.Route -> check {
         status === StatusCodes.BAD_REQUEST
+        responseAs[String] should contain("Cannot remove instance")
       }
     }
     "This Method not allowed while fetching number of instances" in {
@@ -65,6 +87,15 @@ class ServerTests extends WordSpec with Matchers with ScalatestRouteTest {
     "Could not deserialize parameter string while fetching number of Instances" in {
       Get("numberOfInstances") -> server.Route -> check {
         status === StatusCodes.BAD_REQUEST
+        responseAs[String] should contain("Could not deserialize parameter string")
+      }
+    }
+    "Should display number of instances of specific componentType" in {
+      Get("numberOfInstances") -> server.Route -> check {
+        assert(status === StatusCodes.OK)
+        assert(response.status === 200)
+        handler.initialize()
+        assert(handler.getNumberOfInstances(ComponentType.ElasticSearch) == 1)
       }
     }
   "This method not allowed while matching instance" in {
@@ -73,14 +104,26 @@ class ServerTests extends WordSpec with Matchers with ScalatestRouteTest {
       responseAs[String] shouldEqual "HTTP method not allowed, supported methods: GET"
     }
   }
+    "Return Matching instance of specific type" in {
+    Get("matchingInstance") -> server.Route -> check {
+      assert(status === StatusCodes.OK)
+      assert(response.status === 200)
+      handler.initialize()
+      val matchingInstance = handler.getMatchingInstanceOfType(ComponentType.ElasticSearch)
+      assert(matchingInstance.isSuccess)
+    }
+  }
+
   "Could not find matching instance" in {
     Get("matchingInstance") -> server.Route -> check {
       status === StatusCodes.NOT_FOUND
+      responseAs[String] should contain("Could not find instance")
     }
   }
-  "Failed to deserialize while matching instance" in {
+  "Invalid dependency type" in {
     Get("matchingInstance") -> server.Route -> check {
       status === StatusCodes.BAD_REQUEST
+      responseAs[String] should contain("Invalid dependency type")
     }
   }
   "This Method not allowed while fetching instance" in {
@@ -89,9 +132,16 @@ class ServerTests extends WordSpec with Matchers with ScalatestRouteTest {
       responseAs[String] shouldEqual "HTTP method not allowed, supported methods: GET"
     }
   }
+    " Displax All Matching Instance" in {
+      Get("instances") -> server.Route -> check {
+        assert(status === StatusCodes.OK)
+        assert(response.status === 200)
+      }
+    }
   "Failed to deserialize while fetching instance" in {
     Get("instances") -> server.Route -> check {
       status === StatusCodes.BAD_REQUEST
+      responseAs[String] should contain("Could not deserialize parameter string")
     }
   }
   "Method not allowed in matching result" in {
@@ -100,6 +150,14 @@ class ServerTests extends WordSpec with Matchers with ScalatestRouteTest {
       responseAs[String] shouldEqual "HTTP method not allowed, supported methods: POST"
     }
   }
+    "Successfully Matched Result" in {
+      Post("matchingResult") -> server.Route -> check {
+        assert(status === StatusCodes.OK)
+        assert(response.status === 200)
+        handler.initialize()
+        assert(handler.handleMatchingResult(0, result = true) == handler.OperationResult.Ok)
+      }
+    }
   "Method not allowed in eventlist" in {
     Get("eventList") -> server.Route -> check {
       status === StatusCodes.METHOD_NOT_ALLOWED
@@ -109,6 +167,7 @@ class ServerTests extends WordSpec with Matchers with ScalatestRouteTest {
   "Instance ID not found in event list" in {
     Get("eventList") -> server.Route -> check {
       status === StatusCodes.NOT_FOUND
+      responseAs[String] should contain("ID not found")
     }
   }
 "Successfully Deployed Container" in {
@@ -119,11 +178,13 @@ class ServerTests extends WordSpec with Matchers with ScalatestRouteTest {
 "Internal Server Error while deploying container" in {
   Post("deploy") -> server.Route -> check {
     status === StatusCodes.INTERNAL_SERVER_ERROR
+    responseAs[String] should contain("Internal server error")
   }
 }
 "Unable to deserialise parameter string while deploying container" in {
   Post("deploy") -> server.Route -> check {
     status === StatusCodes.BAD_REQUEST
+    responseAs[String] should contain("Could not deserialize parameter string")
   }
 }
 "This Method not allowed to deploy container" in {
@@ -142,16 +203,19 @@ class ServerTests extends WordSpec with Matchers with ScalatestRouteTest {
 "failed to report start, instance ID not found" in {
   Post("reportStart") -> server.Route -> check {
     status === StatusCodes.NOT_FOUND
+    responseAs[String] should contain("not found")
   }
 }
 "Failed to report start, instance not running in Docker container" in {
   Post("reportStart") -> server.Route -> check {
     status === StatusCodes.BAD_REQUEST
+    responseAs[String] should contain("not running in a docker container")
   }
 }
 "Internal Server Error while reporting start" in {
   Post("reportStart") -> server.Route -> check {
     status === StatusCodes.INTERNAL_SERVER_ERROR
+    responseAs[String] should contain("Internal server error, unknown operation result")
   }
 }
 "Failed to report stop, Method not allowed" in {
@@ -163,11 +227,13 @@ class ServerTests extends WordSpec with Matchers with ScalatestRouteTest {
 "ID not found, failed to report stop" in {
   Post("reportStop") -> server.Route -> check {
     status === StatusCodes.NOT_FOUND
+    responseAs[String] should contain("not found")
   }
 }
-"Failed report śtart, Instance not running in a Docker container" in {
-  Post("reportStart") -> server.Route -> check {
+"Failed report śtop, Instance not running in a Docker container" in {
+  Post("reportStop") -> server.Route -> check {
     status === StatusCodes.BAD_REQUEST
+    responseAs[String] should contain("not running in a docker container")
   }
 }
 "Internal Server Error while reporting stop command" in {
