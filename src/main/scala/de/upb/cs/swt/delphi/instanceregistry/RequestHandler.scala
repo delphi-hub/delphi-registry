@@ -488,6 +488,56 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
     }
   }
 
+  /**
+    * Handles a call to /command. container id and command must be present,
+    * Will run the command into the container with provide parameters
+    *
+    * @param id container id the command will run on
+    * @param command the command to run
+    * @param attachStdin attaches to stdin of the command
+    * @param attachStdout attaches to stdout of the command
+    * @param attachStderr attaches to stderr of the command
+    * @param detachKeys  Override the key sequence for detaching a container.
+    *                    Format is a single character [a-Z] or ctrl-<@value> where <v@alue> is one of: a-z, @, [, , or _
+    * @param privileged  runs the process with extended privileges
+    * @param tty  allocate a pseudo-TTY
+    * @param user A string value specifying the user, and optionally, group to run the process inside the container,
+    *             Format is one of: "user", "user:group", "uid", or "uid:gid".
+    * @return
+    */
+  def handleCommand(id: Long, command: String, attachStdin: Option[Boolean],
+                    attachStdout: Option[Boolean],
+                    attachStderr: Option[Boolean],
+                    detachKeys: Option[String],
+                    privileged: Option[Boolean],
+                    tty: Option[Boolean],
+                    user: Option[String]): OperationResult.Value = {
+    if (!instanceDao.hasInstance(id)) {
+      OperationResult.IdUnknown
+    } else if (!isInstanceDockerContainer(id)) {
+      OperationResult.NoDockerContainer
+    } else {
+      val instance = instanceDao.getInstance(id).get
+      log.info(s"Handling /command for instance with id $id...")
+      implicit val timeout : Timeout = Timeout(10 seconds)
+
+      val future: Future[Any] = dockerActor ? runCommand(instance.dockerId.get, command, attachStdin, attachStdout, attachStderr, detachKeys, privileged, tty, user)
+      val commandRunResult = Await.result(future, timeout.duration).asInstanceOf[Try[(String, String, Int)]]
+
+      commandRunResult match {
+        case Failure(ex) =>
+          log.error(s"Failed to run command : ${ex.getMessage}.")
+          fireDockerOperationErrorEvent(None, s"Command run failed : ${ex.getMessage}")
+          Failure(new RuntimeException(s"Failed to run command (${ex.getMessage})."))
+        case Success(_) =>
+          log.info(s"Command ran successfully.")
+      }
+
+      OperationResult.Ok
+
+    }
+  }
+
 
   def isInstanceIdPresent(id: Long): Boolean = {
     instanceDao.hasInstance(id)
