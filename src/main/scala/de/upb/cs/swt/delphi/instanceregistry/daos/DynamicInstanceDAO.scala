@@ -5,8 +5,9 @@ import java.io.{File, IOException, PrintWriter}
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import de.upb.cs.swt.delphi.instanceregistry.{AppLogging, Configuration, Registry}
-import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.{Instance, InstanceJsonSupport, RegistryEvent}
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model._
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.{ComponentType, InstanceState}
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.LinkEnums.LinkState
 
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext
@@ -24,6 +25,7 @@ class DynamicInstanceDAO (configuration : Configuration) extends InstanceDAO wit
   private val instances : mutable.Set[Instance] = new mutable.HashSet[Instance]()
   private val instanceMatchingResults : mutable.Map[Long, mutable.MutableList[Boolean]] = new mutable.HashMap[Long,mutable.MutableList[Boolean]]()
   private val instanceEvents : mutable.Map[Long, mutable.MutableList[RegistryEvent]] = new mutable.HashMap[Long, mutable.MutableList[RegistryEvent]]()
+  private val instanceLinks: mutable.Set[InstanceLink] = new mutable.HashSet[InstanceLink]()
 
   implicit val system : ActorSystem = Registry.system
   implicit val materializer : ActorMaterializer = ActorMaterializer()
@@ -64,6 +66,7 @@ class DynamicInstanceDAO (configuration : Configuration) extends InstanceDAO wit
       instances.remove(instances.find(i => i.id.get == id).get)
       instanceMatchingResults.remove(id)
       instanceEvents.remove(id)
+      instanceLinks.retain(link => link.idFrom != id && link.idTo != id)
       dumpToRecoveryFile()
       Success(log.info(s"Successfully removed instance with id $id."))
     } else {
@@ -95,6 +98,7 @@ class DynamicInstanceDAO (configuration : Configuration) extends InstanceDAO wit
     instances.clear()
     instanceMatchingResults.clear()
     instanceEvents.clear()
+    instanceLinks.clear()
     dumpToRecoveryFile()
   }
 
@@ -150,10 +154,44 @@ class DynamicInstanceDAO (configuration : Configuration) extends InstanceDAO wit
   override def setStateFor(id: Long, state: InstanceState.Value): Try[Unit] = {
     if(hasInstance(id)){
       val instance = getInstance(id).get
-      val newInstance = Instance(instance.id, instance.host, instance.portNumber, instance.name, instance.componentType, instance.dockerId, state)
+      val newInstance = Instance(instance.id,
+        instance.host,
+        instance.portNumber,
+        instance.name,
+        instance.componentType,
+        instance.dockerId,
+        state,
+        instance.labels)
       instances.remove(instance)
       instances.add(newInstance)
       Success()
+    } else {
+      Failure(new RuntimeException(s"Instance with id $id was not found."))
+    }
+  }
+
+  override def addLabelFor(id: Long, label: String): Try[Unit] = {
+    if(hasInstance(id)){
+      val instance = getInstance(id).get
+      if(instance.labels.exists(l => l.equalsIgnoreCase(label))){
+        Success() //Label already present, Success!
+      } else {
+        if(label.length > configuration.maxLabelLength){
+          Failure(new RuntimeException(s"Label exceeds character limit of ${configuration.maxLabelLength}."))
+        } else {
+          val newInstance = Instance(instance.id,
+            instance.host,
+            instance.portNumber,
+            instance.name,
+            instance.componentType,
+            instance.dockerId,
+            instance.instanceState,
+            instance.labels ++ List[String](label))
+          instances.remove(instance)
+          instances.add(newInstance)
+          Success()
+        }
+      }
     } else {
       Failure(new RuntimeException(s"Instance with id $id was not found."))
     }
@@ -177,10 +215,72 @@ class DynamicInstanceDAO (configuration : Configuration) extends InstanceDAO wit
     }
   }
 
+  override def addLink(link: InstanceLink) : Try[Unit] = {
+    if(hasInstance(link.idFrom) && hasInstance(link.idTo)){
+
+      if(getLinksFrom(link.idFrom).exists(l => l.idTo == link.idTo)){
+        //There already is a link between the two instances. Update it instead of adding a new one
+        updateLink(link)
+      } else {
+        //If new link is in state 'Assigned': Set any link that previously was assigned to 'outdated'
+        //IMPORTANT: Only works bc every component has exactly one dependency!
+        if(link.linkState == LinkState.Assigned){
+          for (prevLink <- getLinksFrom(link.idFrom, Some(LinkState.Assigned))){
+            updateLink(InstanceLink(prevLink.idFrom, prevLink.idTo, LinkState.Outdated))
+          }
+        }
+        instanceLinks.add(link)
+      }
+      Success()
+    } else {
+      Failure(new RuntimeException("Cannot add link, ids not known."))
+    }
+  }
+
+  override def updateLink(link: InstanceLink) : Try[Unit] = {
+    val linksMatching = instanceLinks.filter(l => l.idFrom == link.idFrom && l.idTo == link.idTo)
+
+    if(linksMatching.nonEmpty){
+      for(l <- linksMatching){
+        instanceLinks.remove(l)
+        instanceLinks.add(link)
+      }
+      Success()
+    } else {
+      Failure(new RuntimeException(s"Cannot update link $link, this link is not present in the dao."))
+    }
+  }
+
+  override def getLinksFrom(id: Long, state: Option[LinkState] = None) : List[InstanceLink] = {
+    val links = instanceLinks.filter(link => link.idFrom == id)
+
+    if(state.isDefined){
+      List() ++ links.filter(link => link.linkState == state.get)
+    } else {
+      List() ++ links
+    }
+  }
+
+  override def getLinksTo(id:Long, state: Option[LinkState] = None) : List[InstanceLink] = {
+    val links = instanceLinks.filter(link => link.idTo == id)
+
+    if(state.isDefined){
+      List() ++ links.filter(link => link.linkState == state.get)
+    } else {
+      List() ++ links
+    }
+  }
+
+  override def getNetwork() : InstanceNetwork = {
+    InstanceNetwork( List() ++ instances,
+      List() ++ instanceLinks)
+  }
+
   private[daos] def clearData() : Unit = {
     instances.clear()
     instanceMatchingResults.clear()
     instanceEvents.clear()
+    instanceLinks.clear()
   }
 
   private[daos] def dumpToRecoveryFile() : Unit = {
@@ -232,5 +332,4 @@ class DynamicInstanceDAO (configuration : Configuration) extends InstanceDAO wit
     }
 
   }
-
 }

@@ -39,6 +39,7 @@ To obtain these images, checkout the respective repositories ([here](https://git
 sbt docker:publishLocal
 ```
 inside their root directory. This will build the docker images and register them directly at the local docker registry.
+The registry requires an initial instance of ElasticSearch to be running. The default location for this is *elasticsearch://172.17.0.1:9200*, however this can be changed in the *Configuration.scala* file at *src/main/scala/de/upb/cs/swt/delphi/instanceregistry*.
 
 ## Contributing
 

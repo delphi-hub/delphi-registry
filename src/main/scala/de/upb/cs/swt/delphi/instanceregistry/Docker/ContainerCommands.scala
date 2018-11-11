@@ -187,14 +187,15 @@ class ContainerCommands(connection: DockerConnection) extends JsonSupport with C
   def logs(
             containerId: String
           )(implicit ec: ExecutionContext): Source[String, NotUsed] = {
-    val query = Query("all")
-    val request = Get(buildUri(containersPath / containerId / "logs", query))
+    val query = Query("stdout" -> "true" )
+    val request = Get(buildUri(containersPath / containerId.substring(0,11) / "logs", query))
 
     val flow =
       Flow[HttpResponse].map {
         case HttpResponse(StatusCodes.OK, _, HttpEntity.Chunked(_, chunks), _) =>
           chunks.map(_.data().utf8String)
-        case HttpResponse(StatusCodes.NotFound, _, _, _) =>
+        case HttpResponse(StatusCodes.NotFound, _, HttpEntity.Strict(_, data), _) =>
+          log.warning(s"DOCKER LOGS FAILED: ${data.utf8String}")
           throw ContainerNotFoundException(containerId)
         case response =>
           unknownResponse(response)
