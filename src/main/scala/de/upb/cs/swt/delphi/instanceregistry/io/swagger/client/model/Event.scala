@@ -66,7 +66,7 @@ trait EventJsonSupport extends SprayJsonSupport with DefaultJsonProtocol with In
     def read(json: JsValue): RegistryEventPayload = json match{
       case jso: JsObject => if(jso.fields.isDefinedAt("instance")){
         instancePayloadFormat.read(jso)
-      } else if(jso.fields.isDefinedAt("noOfCrawlers")){
+      } else if(jso.fields.isDefinedAt("newNumber")){
         numbersChangedPayloadFormat.read(jso)
       } else if(jso.fields.isDefinedAt("errorMessage")) {
         dockerOperationErrorPayloadFormat.read(jso)
