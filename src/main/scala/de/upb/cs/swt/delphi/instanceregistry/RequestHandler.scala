@@ -835,18 +835,14 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
     } else {
       val instance = instanceDao.getInstance(id).get
       log.info(s"Handling /command for instance with id $id...")
-      implicit val timeout : Timeout = Timeout(10 seconds)
+      implicit val timeout : Timeout = configuration.dockerOperationTimeout
 
-      val future: Future[Any] = dockerActor ? runCommand(instance.dockerId.get, command, attachStdin, attachStdout, attachStderr, detachKeys, privileged, tty, user)
-      val commandRunResult = Await.result(future, timeout.duration).asInstanceOf[Try[(String, String, Int)]]
-
-      commandRunResult match {
-        case Failure(ex) =>
-          log.error(s"Failed to run command : ${ex.getMessage}.")
-          fireDockerOperationErrorEvent(None, s"Command run failed : ${ex.getMessage}")
-          Failure(new RuntimeException(s"Failed to run command (${ex.getMessage})."))
-        case Success(_) =>
-          log.info(s"Command ran successfully.")
+      (dockerActor ? runCommand(instance.dockerId.get, command, attachStdin, attachStdout, attachStderr, detachKeys, privileged, tty, user)).map{
+        _ => log.info(s"Command '$command' ran successfully in container with id $id.")
+      }.recover {
+        case ex: Exception =>
+          log.warning(s"Failed to run command $command in container with id $id : (${ex.getMessage}).")
+          fireDockerOperationErrorEvent(Some(instance), s"Failed to run command (${ex.getMessage}).")
       }
 
       OperationResult.Ok

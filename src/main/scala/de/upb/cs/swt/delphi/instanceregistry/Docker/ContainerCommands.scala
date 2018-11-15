@@ -9,9 +9,9 @@ import akka.http.scaladsl.model.Uri.{Path, Query}
 import akka.http.scaladsl.model.{HttpEntity, HttpResponse, StatusCodes}
 import akka.http.scaladsl.unmarshalling.Unmarshal
 import akka.stream.scaladsl.{Flow, Source}
-import akka.util.ByteString
 import de.upb.cs.swt.delphi.instanceregistry.{AppLogging, Registry}
 import spray.json._
+import PostDataFormatting.commandJsonRequest
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -250,32 +250,6 @@ class ContainerCommands(connection: DockerConnection) extends JsonSupport with C
           unknownResponseFuture(response)
       }
     }
-  }
-
-  def commandJsonRequest(cmd: String,
-                         attachStdin: Option[Boolean],
-                         attachStdout: Option[Boolean],
-                         attachStderr: Option[Boolean],
-                         detachKeys: Option[String],
-                         privileged: Option[Boolean],
-                         tty: Option[Boolean],
-                         user: Option[String]
-                        ): ByteString ={
-    var data = s""""Cmd":["$cmd"]"""
-    if(attachStdin.isDefined) data = data.concat(s""","AttachStdin":${attachStdin.get}""")
-    if(attachStdout.isDefined) data = data.concat(s""","AttachStdout":${attachStdout.get}""")
-    if(attachStderr.isDefined) data = data.concat(s""","AttachStderr":${attachStderr.get}""")
-    if(detachKeys.isDefined) data = data.concat(s""","DetachKeys":${detachKeys.get}""")
-    if(privileged.isDefined) data = data.concat(s""","Privileged":${privileged.get}""")
-    if(tty.isDefined)data = data.concat(s""","Tty":${tty.get}""")
-    if(user.isDefined) data = data.concat(s""","User":${user.get}""")
-
-    ByteString(
-      s"""
-         |{
-         |  $data
-         |}
-        """.stripMargin)
   }
 
 }

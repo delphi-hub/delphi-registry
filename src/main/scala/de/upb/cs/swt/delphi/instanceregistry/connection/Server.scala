@@ -592,6 +592,12 @@ object Server extends HttpApp
     post {
         log.debug(s"POST /command has been called")
         handler.handleCommand(id, command, attachStdin, attachStdout, attachStderr, detachKeys, privileged, tty, user) match {
+          case handler.OperationResult.IdUnknown =>
+            log.warning(s"Cannot run command $command to $id, id not found.")
+            complete{HttpResponse(StatusCodes.NotFound, entity = s"Cannot run command, id $id not found.")}
+          case handler.OperationResult.NoDockerContainer =>
+            log.warning(s"Cannot run command $command to $id, $id is no docker container.")
+            complete{HttpResponse(StatusCodes.BadRequest,entity = s"Cannot run command, $id is no docker container.")}
           case handler.OperationResult.Ok =>
             complete{HttpResponse(StatusCodes.OK)}
           case r =>
