@@ -644,7 +644,7 @@ paths:
           type: integer
           format: int64
         - in: query
-          name: assignedInstanceId
+          name: AssignedInstanceId
           description: The ID of the instance that should be assigned as dependency
           required: true
           type: integer

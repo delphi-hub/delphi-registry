@@ -58,6 +58,7 @@ object Server extends HttpApp
       path("stop") { stop()} ~
       path("start") { start()} ~
       path("delete") { deleteContainer()} ~
+      path("assignInstance") { assignInstance()} ~
       path("command") { runCommandInContainer()} ~
       /****************EVENT OPERATIONS****************/
       path("events") { streamEvents()}
@@ -485,7 +486,7 @@ object Server extends HttpApp
     * call is /assignInstance?Id=42&assignedInstanceId=43). Will update the dependency in DB and than restart the container.
     * @return Server route that either maps to 202 ACCEPTED or the respective error codes
     */
-  def assignInstance() : server.Route = parameters('Id.as[Long], 'assignedInstanceId.as[Long]) { (id, assignedInstanceId) =>
+  def assignInstance() : server.Route = parameters('Id.as[Long], 'AssignedInstanceId.as[Long]) { (id, assignedInstanceId) =>
     post {
       log.debug(s"POST /assignInstance?Id=$id&assignedInstanceId=$assignedInstanceId has been called")
 

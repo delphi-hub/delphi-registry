@@ -111,7 +111,7 @@ class ContainerCommands(connection: DockerConnection) extends JsonSupport with C
   def restart(
                containerId: String,
              )(implicit ec: ExecutionContext): Future[String] = {
-    val request = Post(buildUri(containersPath / containerId / "stop"))
+    val request = Post(buildUri(containersPath / containerId / "restart"))
     connection.sendRequest(request).flatMap { response =>
       response.status match {
         case StatusCodes.NoContent =>

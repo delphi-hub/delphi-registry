@@ -3,10 +3,10 @@ package de.upb.cs.swt.delphi.instanceregistry
 import akka.NotUsed
 import akka.actor._
 import akka.http.scaladsl.model.StatusCodes
-import akka.pattern.ask
+import akka.pattern.{AskTimeoutException, ask}
 import akka.util.Timeout
 import de.upb.cs.swt.delphi.instanceregistry.Docker.DockerActor._
-import de.upb.cs.swt.delphi.instanceregistry.Docker.{DockerActor, DockerConnection}
+import de.upb.cs.swt.delphi.instanceregistry.Docker.{ContainerAlreadyStoppedException, DockerActor, DockerConnection}
 import akka.stream.scaladsl.{Keep, Sink, Source}
 import akka.stream.{ActorMaterializer, Materializer, OverflowStrategy}
 import de.upb.cs.swt.delphi.instanceregistry.connection.RestClient
@@ -495,7 +495,15 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
           instanceDao.setStateFor(instance.id.get, InstanceState.Stopped)
           fireStateChangedEvent(instance)
       }.recover {
-        case ex: Exception =>
+        case atx: AskTimeoutException => //Timeout: Most likely operation will be completed in the background, so update state anyway
+          log.warning(s"Ask timed out with timeout $timeout. Message was ${atx.getMessage}")
+          instanceDao.setStateFor(instance.id.get, InstanceState.Stopped)
+          fireStateChangedEvent(instance)
+        case casx: ContainerAlreadyStoppedException => //Container already stopped in docker. Update state to be consistent.
+          log.warning(s"Container was already stopped. Message was ${casx.getMessage}")
+          instanceDao.setStateFor(instance.id.get, InstanceState.Stopped)
+          fireStateChangedEvent(instance)
+        case ex => //Docker not reachable, etc, do not update state
           log.warning(s"Failed to stop container with id $id. Message is: ${ex.getMessage}")
           fireDockerOperationErrorEvent(Some(instance), s"Stop failed with message: ${ex.getMessage}")
       }
