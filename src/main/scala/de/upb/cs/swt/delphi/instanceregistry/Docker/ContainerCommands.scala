@@ -4,12 +4,14 @@ package de.upb.cs.swt.delphi.instanceregistry.Docker
 import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.http.scaladsl.client.RequestBuilding._
+import akka.http.scaladsl.model.MediaTypes.`application/json`
 import akka.http.scaladsl.model.Uri.{Path, Query}
 import akka.http.scaladsl.model.{HttpEntity, HttpResponse, StatusCodes}
 import akka.http.scaladsl.unmarshalling.Unmarshal
 import akka.stream.scaladsl.{Flow, Source}
 import de.upb.cs.swt.delphi.instanceregistry.{AppLogging, Registry}
 import spray.json._
+import PostDataFormatting.commandJsonRequest
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -201,6 +203,53 @@ class ContainerCommands(connection: DockerConnection) extends JsonSupport with C
 
     Source.fromFuture(connection.sendRequest(request))
       .via(flow)
+  }
+
+  def commandCreate(
+            containerId: String,
+            cmd: String,
+            attachStdin: Option[Boolean],
+            attachStdout: Option[Boolean],
+            attachStderr: Option[Boolean],
+            detachKeys: Option[String],
+            privileged: Option[Boolean],
+            tty: Option[Boolean],
+            user: Option[String]
+          )(implicit ec: ExecutionContext): Future[CreateContainerResponse] =  {
+
+    val content = commandJsonRequest(cmd, attachStdin, attachStdout, attachStderr, detachKeys, privileged, tty, user)
+
+    val request = Post(buildUri(containersPath / containerId / "exec"), HttpEntity(`application/json`, content))
+
+
+    connection.sendRequest(request).flatMap { response =>
+
+      response.status match {
+        case StatusCodes.Created =>
+          Unmarshal(response).to[CreateContainerResponse]
+        case StatusCodes.NotFound =>
+          throw new ContainerNotFoundException(containerId)
+        case _ =>
+          unknownResponseFuture(response)
+      }
+    }
+  }
+
+  def commandRun(
+                     containerId: String,
+                     commandId: String
+                   )(implicit ec: ExecutionContext): Future[String]  =  {
+    val request = Post(buildUri(containersPath / "exec" / commandId / "start"))
+    connection.sendRequest(request).flatMap { response =>
+      response.status match {
+        case StatusCodes.OK =>
+          Future.successful(commandId)
+        case StatusCodes.NotFound =>
+          throw new ContainerNotFoundException(containerId)
+        case _ =>
+          unknownResponseFuture(response)
+      }
+    }
   }
 
 }

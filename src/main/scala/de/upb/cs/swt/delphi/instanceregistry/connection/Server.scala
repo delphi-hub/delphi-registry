@@ -59,6 +59,7 @@ object Server extends HttpApp
       path("start") { start()} ~
       path("delete") { deleteContainer()} ~
       path("assignInstance") { assignInstance()} ~
+      path("command") { runCommandInContainer()} ~
       /****************EVENT OPERATIONS****************/
       path("events") { streamEvents()}
 
@@ -577,6 +578,32 @@ object Server extends HttpApp
           log.info(s"Successfully added label $label to instance with id $id.")
           complete("Successfully added label")
       }
+    }
+  }
+
+  /**
+    * Called to run a command in a  docker container. The Id an Command is the required parameter there are other optional parameter can be passed
+    * a query with required parameter Command and Id (so the resulting call is /delete?Id=42&Command=ls).
+    * @return Server route that either maps to 200 Ok or the respective error codes.
+    */
+  def runCommandInContainer() : server.Route = parameters('Id.as[Long], 'Command.as[String],
+    'AttachStdin.as[Boolean].?, 'AttachStdout.as[Boolean].?,
+    'AttachStderr.as[Boolean].?,'DetachKeys.as[String].?, 'Privileged.as[Boolean].?,'Tty.as[Boolean].?, 'User.as[String].?
+    ) { (id, command, attachStdin, attachStdout, attachStderr, detachKeys, privileged, tty, user) =>
+    post {
+        log.debug(s"POST /command has been called")
+        handler.handleCommand(id, command, attachStdin, attachStdout, attachStderr, detachKeys, privileged, tty, user) match {
+          case handler.OperationResult.IdUnknown =>
+            log.warning(s"Cannot run command $command to $id, id not found.")
+            complete{HttpResponse(StatusCodes.NotFound, entity = s"Cannot run command, id $id not found.")}
+          case handler.OperationResult.NoDockerContainer =>
+            log.warning(s"Cannot run command $command to $id, $id is no docker container.")
+            complete{HttpResponse(StatusCodes.BadRequest,entity = s"Cannot run command, $id is no docker container.")}
+          case handler.OperationResult.Ok =>
+            complete{HttpResponse(StatusCodes.OK)}
+          case r =>
+            complete{HttpResponse(StatusCodes.InternalServerError, entity = s"Internal server error, unknown operation result $r")}
+        }
     }
   }
 
