@@ -17,15 +17,14 @@
 package de.upb.cs.swt.delphi.registry.connection
 import akka.http.javadsl.model.StatusCodes
 import akka.http.scaladsl.model.ContentTypes
-import akka.http.scaladsl.server
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import de.upb.cs.swt.delphi.instanceregistry.Registry
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.Instance
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.{ComponentType, InstanceState}
 import org.scalatest.{Matchers, WordSpec}
-import de.upb.cs.swt.delphi.instanceregistry.connection.Server.{instanceFormat, routes}
-
-import scala.concurrent.Future
+import de.upb.cs.swt.delphi.instanceregistry.connection.Server.routes
+import scala.concurrent.duration.Duration
+import scala.concurrent.{Await, Future}
 
 class ServerTest extends WordSpec with Matchers with ScalatestRouteTest {
 
@@ -33,12 +32,9 @@ class ServerTest extends WordSpec with Matchers with ScalatestRouteTest {
     Instance(Some(id), "https://localhost", 12345, "TestInstance", ComponentType.ElasticSearch, dockerId, state)
   }
   override def beforeAll(): Unit = {
-    Future(Registry.main(Array[String]()))
-    Thread.sleep(3000)
+      Await.result(Future(Registry.main(Array[String]())),Duration("1 second"))
   }
-  override def afterAll(): Unit = {
-    System.exit(0)
-  }
+
   "The Server" should {
     "this return method not allowed while registering" in {
       Post("/register") ~> routes ~> check {
@@ -51,14 +47,13 @@ class ServerTest extends WordSpec with Matchers with ScalatestRouteTest {
         assert(status === StatusCodes.OK)
         assert(response.status === 200)
         contentType should ===(ContentTypes.`application/json`)
-        Get("/register") ~> routes ~> check {
-        }
       }
     }
     "Invalid Input" in {
       Post("/register") ~> routes ~> check {
         assert(response.status === 405)
         responseAs[String] shouldEqual("Invalid Input")
+
       }
     }
     "Successfully Deregistered" in {
@@ -95,6 +90,7 @@ class ServerTest extends WordSpec with Matchers with ScalatestRouteTest {
     }
     "Validation Exception: Instances not found" in {
       Get("/numberOfInstances") ~> routes ~> check {
+        assert(response.status === 400)
         assert(status === StatusCodes.BAD_REQUEST)
       }
     }
@@ -102,9 +98,15 @@ class ServerTest extends WordSpec with Matchers with ScalatestRouteTest {
       Get("/numberOfInstances") ~> routes ~> check {
         assert(status === StatusCodes.OK)
         assert(response.status === 200)
-
       }
     }
+    "Instances not found" in {
+      Get("/numberOfInstances") ~> routes ~> check {
+        assert(status === StatusCodes.NOT_FOUND)
+        assert(response.status === 404)
+      }
+    }
+
   "This method not allowed while matching instance" in {
     Get("/matchingInstance") ~> routes ~> check {
       assert(status === StatusCodes.METHOD_NOT_ALLOWED)
@@ -120,14 +122,8 @@ class ServerTest extends WordSpec with Matchers with ScalatestRouteTest {
 
   "Could not find matching instance" in {
     Get("/matchingInstance") ~> routes ~> check {
-      status === StatusCodes.NOT_FOUND
-      responseAs[String] should contain("Could not find instance")
-    }
-  }
-  "Invalid dependency type" in {
-    Get("/matchingInstance") ~> routes ~> check {
       assert(status === StatusCodes.BAD_REQUEST)
-      responseAs[String] should contain("Invalid dependency type")
+      assert(response.status === 400)
     }
   }
   "This Method not allowed while fetching instance" in {
@@ -145,7 +141,7 @@ class ServerTest extends WordSpec with Matchers with ScalatestRouteTest {
   "Failed to deserialize while fetching instance" in {
     Get("/instances") ~> routes ~> check {
       assert(status === StatusCodes.BAD_REQUEST)
-      responseAs[String] should contain("Could not deserialize parameter string")
+      assert(response.status === 400)
     }
   }
   "Method not allowed in matching result" in {
@@ -170,7 +166,7 @@ class ServerTest extends WordSpec with Matchers with ScalatestRouteTest {
   "Instance ID not found in event list" in {
     Get("/eventList") ~> routes ~> check {
       assert(status === StatusCodes.NOT_FOUND)
-      responseAs[String] should contain("ID not found")
+      assert(response.status === 404)
     }
   }
   }
