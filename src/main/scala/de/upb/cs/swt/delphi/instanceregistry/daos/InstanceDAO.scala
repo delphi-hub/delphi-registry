@@ -1,6 +1,6 @@
 package de.upb.cs.swt.delphi.instanceregistry.daos
 
-import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.{Instance, InstanceLink, InstanceNetwork, RegistryEvent}
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.{Instance, InstanceLink, RegistryEvent}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.{ComponentType, InstanceState}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.LinkEnums.LinkState
 
@@ -138,12 +138,6 @@ trait InstanceDAO {
     * @return List of matching InstanceLinks
     */
   def getLinksTo(idFrom: Long, state: Option[LinkState] = None) : List[InstanceLink]
-
-  /**
-    * Get the current Instance Network
-    * @return InstanceNetwork object
-    */
-  def getNetwork() : InstanceNetwork
 
   /**
     * Adds a label to the instance with the specified id
