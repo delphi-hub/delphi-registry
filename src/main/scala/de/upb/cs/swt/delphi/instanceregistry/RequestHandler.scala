@@ -47,7 +47,9 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
         ComponentType.ElasticSearch,
         None,
         InstanceState.Running,
-        List("Default")))
+        List("Default"),
+        List.empty[InstanceLink],
+        List.empty[InstanceLink]))
     }
     log.info("Done initializing request handler.")
   }
@@ -71,7 +73,8 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
 
     val newInstance = Instance(id = Some(newID), name = instance.name, host = instance.host,
       portNumber = instance.portNumber, componentType = instance.componentType,
-      dockerId = None, instanceState = InstanceState.Running, labels = instance.labels)
+      dockerId = None, instanceState = InstanceState.Running, labels = instance.labels,
+      linksTo = List.empty[InstanceLink], linksFrom = List.empty[InstanceLink])
 
     instanceDao.addInstance(newInstance) match {
       case Success(_) =>
@@ -265,7 +268,9 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
           componentType,
           Some(dockerId),
           InstanceState.Deploying,
-          List.empty[String]
+          List.empty[String],
+          List.empty[InstanceLink],
+          List.empty[InstanceLink]
         )
         log.info(s"Registering instance $newInstance....")
 
@@ -562,7 +567,13 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
     } else {
       log.info(s"Handling /delete for instance with id $id...")
       val instance = instanceDao.getInstance(id).get
-      if (instance.instanceState != InstanceState.Running) {
+
+      //It is not safe to delete instances when other running instances depend on it!
+      val usedBy = instance.linksTo.find(link => link.linkState == LinkState.Assigned)
+      val notSafeToDelete = usedBy.isDefined && instanceDao.getInstance(usedBy.get.idFrom).get.instanceState == InstanceState.Running
+      if(notSafeToDelete){
+        OperationResult.BlockingDependency
+      } else if (instance.instanceState != InstanceState.Running) {
         log.info("Deleting container...")
 
         implicit val timeout: Timeout = configuration.dockerOperationTimeout
@@ -619,8 +630,8 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
     * Retrieves the current instance network, containing all instances and instance links.
     * @return InstanceNetwork
     */
-  def handleGetNetwork() : InstanceNetwork = {
-    instanceDao.getNetwork()
+  def handleGetNetwork() : List[Instance] = {
+    instanceDao.allInstances()
   }
 
   /**
@@ -970,6 +981,7 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
     val IsDockerContainer: Value = Value("IsDockerContainer")
     val InvalidStateForOperation: Value = Value("InvalidStateForOperation")
     val InvalidTypeForOperation: Value = Value("InvalidTypeForOperation")
+    val BlockingDependency: Value = Value("BlockingDependency")
     val Ok: Value = Value("Ok")
     val InternalError: Value = Value("InternalError")
   }

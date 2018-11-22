@@ -80,18 +80,18 @@ class DynamicInstanceDAO (configuration : Configuration) extends InstanceDAO wit
     if(hasInstance(id)) {
       val query = instances filter {i => i.id.get == id}
       val instance  = query.iterator.next()
-      Some(instance)
+      Some(addLinksToInstance(instance))
     } else {
       None
     }
   }
 
   override def getInstancesOfType(componentType: ComponentType): List[Instance] = {
-    List() ++ instances filter {i => i.componentType == componentType}
+    List() ++ instances filter {i => i.componentType == componentType} map addLinksToInstance
   }
 
   override def allInstances(): List[Instance] = {
-    List() ++ instances
+    List() ++ instances map addLinksToInstance
   }
 
   override def removeAll() : Unit = {
@@ -161,8 +161,10 @@ class DynamicInstanceDAO (configuration : Configuration) extends InstanceDAO wit
         instance.componentType,
         instance.dockerId,
         state,
-        instance.labels)
-      instances.remove(instance)
+        instance.labels,
+        instance.linksTo,
+        instance.linksFrom)
+      instances filter {i => i.id == instance.id} map instances.remove
       instances.add(newInstance)
       Success()
     } else {
@@ -186,8 +188,10 @@ class DynamicInstanceDAO (configuration : Configuration) extends InstanceDAO wit
             instance.componentType,
             instance.dockerId,
             instance.instanceState,
-            instance.labels ++ List[String](label))
-          instances.remove(instance)
+            instance.labels ++ List[String](label),
+            instance.linksTo,
+            instance.linksFrom)
+          instances filter {i => i.id == instance.id} map instances.remove
           instances.add(newInstance)
           Success()
         }
@@ -271,9 +275,22 @@ class DynamicInstanceDAO (configuration : Configuration) extends InstanceDAO wit
     }
   }
 
-  override def getNetwork() : InstanceNetwork = {
-    InstanceNetwork( List() ++ instances,
-      List() ++ instanceLinks)
+  private def addLinksToInstance(instance: Instance): Instance = {
+    val linksTo = List[InstanceLink]() ++ instanceLinks.filter(link => link.idTo == instance.id.getOrElse(-1))
+    val linksFrom = List[InstanceLink]() ++ instanceLinks.filter(link => link.idFrom == instance.id.getOrElse(-1))
+
+    Instance(
+      instance.id,
+      instance.host,
+      instance.portNumber,
+      instance.name,
+      instance.componentType,
+      instance.dockerId,
+      instance.instanceState,
+      instance.labels,
+      linksTo,
+      linksFrom
+    )
   }
 
   private[daos] def clearData() : Unit = {

@@ -1,6 +1,5 @@
 package de.upb.cs.swt.delphi.instanceregistry.connection
 
-import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.ws.{Message, TextMessage}
 import akka.http.scaladsl.model.{HttpResponse, StatusCodes}
@@ -24,7 +23,6 @@ object Server extends HttpApp
   with InstanceJsonSupport
   with EventJsonSupport
   with InstanceLinkJsonSupport
-  with InstanceNetworkJsonSupport
   with AppLogging {
 
   implicit val system : ActorSystem = Registry.system
@@ -476,6 +474,8 @@ object Server extends HttpApp
           complete{HttpResponse(StatusCodes.Accepted, entity = "Operation accepted.")}
         case handler.OperationResult.InternalError =>
           complete{HttpResponse(StatusCodes.InternalServerError, entity = s"Internal server error")}
+        case handler.OperationResult.BlockingDependency =>
+          complete{HttpResponse(StatusCodes.BadRequest, entity = s"Cannot delete this instance, other running instances are depending on it.")}
       }
     }
   }
@@ -554,7 +554,7 @@ object Server extends HttpApp
   def network() : server.Route = {
     get {
       log.debug(s"GET /network has been called.")
-      complete{handler.handleGetNetwork().toJson(InstanceNetworkFormat)}
+      complete{handler.handleGetNetwork().toJson}
     }
   }
 
