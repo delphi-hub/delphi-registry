@@ -19,7 +19,7 @@ class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach 
   val handler: RequestHandler = new RequestHandler(new Configuration(), DockerConnection.fromEnvironment())
 
   private def buildInstance(id: Long, componentType: ComponentType = ComponentType.ElasticSearch, dockerId: Option[String] = None, state: InstanceState.Value = InstanceState.Stopped, labels: List[String] = List.empty[String]): Instance = {
-    Instance(Some(id), "https://localhost", 12345, "TestInstance", componentType, dockerId, state, labels)
+    Instance(Some(id), "https://localhost", 12345, "TestInstance", componentType, dockerId, state, labels, List.empty[InstanceLink], List.empty[InstanceLink])
   }
 
   override protected def beforeEach(): Unit = {
@@ -345,7 +345,7 @@ class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach 
 
   it must "match to instance with most consecutive positive matching results in fallback matching" in {
     val esInstance = handler.handleRegister(buildInstance(2))
-    val crawlerId = handler.handleRegister(Instance(Some(2), "foo", 42, "bar", ComponentType.Crawler, None, InstanceState.Running, List.empty[String]))
+    val crawlerId = handler.handleRegister(Instance(Some(2), "foo", 42, "bar", ComponentType.Crawler, None, InstanceState.Running, List.empty[String], List.empty[InstanceLink], List.empty[InstanceLink]))
 
     assert(esInstance.isSuccess)
     assert(esInstance.get == 1)

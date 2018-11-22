@@ -180,6 +180,8 @@ class DynamicInstanceDAO (configuration : Configuration) extends InstanceDAO wit
       } else {
         if(label.length > configuration.maxLabelLength){
           Failure(new RuntimeException(s"Label exceeds character limit of ${configuration.maxLabelLength}."))
+        } else if (label.contains(',')){
+          Failure(new RuntimeException(s"Label contains invalid character: comma"))
         } else {
           val newInstance = Instance(instance.id,
             instance.host,
