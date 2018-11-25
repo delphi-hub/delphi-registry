@@ -16,157 +16,174 @@
 
 package de.upb.cs.swt.delphi.registry.connection
 import akka.http.javadsl.model.StatusCodes
-import akka.http.scaladsl.model.ContentTypes
+import akka.http.scaladsl.model._
+import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import de.upb.cs.swt.delphi.instanceregistry.Registry
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.Instance
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.{ComponentType, InstanceState}
 import org.scalatest.{Matchers, WordSpec}
 import de.upb.cs.swt.delphi.instanceregistry.connection.Server.routes
-import scala.concurrent.duration.Duration
-import scala.concurrent.{Await, Future}
 
-class ServerTest extends WordSpec with Matchers with ScalatestRouteTest {
+import scala.concurrent.Future
+import scala.util.Random
+
+class ServerTest extends WordSpec with Matchers with  ScalatestRouteTest {
 
   private def buildInstance(id: Long, dockerId: Option[String] = None, state: InstanceState.Value = InstanceState.Stopped): Instance = {
     Instance(Some(id), "https://localhost", 12345, "TestInstance", ComponentType.ElasticSearch, dockerId, state)
   }
+  def randomId(length: Int = 12) =
+    Random.alphanumeric.take(length).mkString
+
+
   override def beforeAll(): Unit = {
-      Await.result(Future(Registry.main(Array[String]())),Duration("1 second"))
+    Future(Registry.main(Array[String]()))
+    Thread.sleep(1000)
+      //Await.ready(Future(Registry.main(Array[String]())),Duration("5 seconds"))
   }
 
   "The Server" should {
-    "this return method not allowed while registering" in {
-      Post("/register") ~> routes ~> check {
+    "return method not allowed while registering" in {
+      Get("/register?InstanceString=25")  ~> Route.seal(routes) ~> check {
         assert(status === StatusCodes.METHOD_NOT_ALLOWED)
         responseAs[String] shouldEqual "HTTP method not allowed, supported methods: POST"
       }
     }
-    "Successfully Registered" in {
-      Post("/register") ~> routes ~> check {
-        assert(status === StatusCodes.OK)
-        assert(response.status === 200)
-        contentType should ===(ContentTypes.`application/json`)
-      }
+    "Successfully Register" in {
+      //Post("/register", requestBody.toJson).withHeaders("if Any") ~> Route.seal(routes) ~> check {
+      //  status shouldBe StatusCodes.OK
+
+
+     // Post("/register", HttpEntitywithHeaders("if Any") ~> Route.seal(routes) ~> check {
+      //  status shouldBe StatusCodes.OK
+
+      //Post("/register",
+      //Post("/register" + randomId(1)+"/") ~> Route.seal(routes) ~> check {
+        //assert(status === StatusCodes.OK)
+      // HttpEntity(ContentTypes.`application/json`,"""{InstanceToRegister:body}""")
+
+      Post("/register?InstanceString", HttpEntity(ContentTypes.`application/json`,
+        """{"name":"MyWebApiInstance","host":"127.0.1.2","instanceState":"Running","componentType":"WebApi","portNumber":"8086}""".stripMargin)) ~> Route.seal(routes) ~> check {
+       assert(status === StatusCodes.OK)
+       //assert(response.status === 200)
+       //contentType should ===(ContentTypes.`application/json`)
+       //responseEntity shouldBe Int
+
+     }
     }
-    "Invalid Input" in {
-      Post("/register") ~> routes ~> check {
-        assert(response.status === 405)
-        responseAs[String] shouldEqual("Invalid Input")
+    "Not register with Invalid Input" in {
+      Post("/register?InstanceString=0") ~> routes ~> check {
+        assert(status === StatusCodes.INTERNAL_SERVER_ERROR)
+        responseAs[String] should === ("An internal server error occurred.")
 
       }
     }
-    "Successfully Deregistered" in {
-      Post("/deregister?Id=42") ~> routes ~> check {
+    "Successfully Deregister" in {
+      Post("/deregister?Id=0") ~> routes ~> check {
         assert(status === StatusCodes.OK)
-        assert(response.status === 200)
-        contentType should ===(ContentTypes.`application/json`)
-        entityAs[String] should === ("Successfully removed instance with id 42")
+
+        entityAs[String] should === ("Successfully removed instance with id 0")
       }
     }
     "Validation Exception: Method not allowed" in {
-      Post("/deregister") ~> routes ~> check {
+      Get("/deregister?Id=0") ~> Route.seal(routes) ~> check {
         assert(status === StatusCodes.METHOD_NOT_ALLOWED)
         responseAs[String] shouldEqual "HTTP method not allowed, supported methods: POST"
       }
     }
     "Could not Deregister Instance" in {
-      Post("/deregister") ~> routes ~> check {
+      Post("/deregister?Id=kilo") ~> Route.seal(routes) ~> check {
         assert(status === StatusCodes.BAD_REQUEST)
-        assert(response.status === 400)
-        responseAs[String] should contain("Cannot remove instance")
+
       }
     }
     "Instance not found" in {
-      Post("/deregister") ~> routes ~> check {
-        assert(response === StatusCodes.NOT_FOUND)
+      Post("/deregister?Id=30") ~> routes ~> check {
+        responseAs[String] shouldEqual("Id 30 not known to the server")
       }
     }
     "Validation Exception: Method not allowed while fetching number of instances" in {
-      Get("/numberOfInstances") ~> routes ~> check {
+      Post("/numberOfInstances?ComponentType=Crawler") ~> Route.seal(routes) ~> check {
         assert(status === StatusCodes.METHOD_NOT_ALLOWED)
         responseAs[String] shouldEqual "HTTP method not allowed, supported methods: GET"
       }
     }
-    "Validation Exception: Instances not found" in {
-      Get("/numberOfInstances") ~> routes ~> check {
-        assert(response.status === 400)
+    "Return Error 400 Bad Request" in {
+      Get("/numberOfInstances?ComponentType=Crawlerr") ~> routes ~> check {
         assert(status === StatusCodes.BAD_REQUEST)
       }
     }
     "Should display number of instances of specific componentType" in {
-      Get("/numberOfInstances") ~> routes ~> check {
+      Get("/numberOfInstances?ComponentType=ElasticSearch") ~> routes ~> check {
         assert(status === StatusCodes.OK)
-        assert(response.status === 200)
       }
     }
     "Instances not found" in {
-      Get("/numberOfInstances") ~> routes ~> check {
+      Get("/numberOfInstances?ComponentType=Crawler") ~> routes ~> check {
         assert(status === StatusCodes.NOT_FOUND)
-        assert(response.status === 404)
       }
     }
 
-  "This method not allowed while matching instance" in {
-    Get("/matchingInstance") ~> routes ~> check {
+  "Return POST method not allowed while matching instance" in {
+    Post("/matchingInstance?ComponentType=ElasticSearch") ~> Route.seal(routes) ~> check {
       assert(status === StatusCodes.METHOD_NOT_ALLOWED)
       responseAs[String] shouldEqual "HTTP method not allowed, supported methods: GET"
     }
   }
     "Return Matching instance of specific type" in {
-      Get("/matchingInstance") ~> routes ~> check {
+      Get("/matchingInstance?ComponentType=ElasticSearch", HttpEntity(ContentTypes.`application/json`,"ElasticSearch")) ~> routes ~> check {
       assert(status === StatusCodes.OK)
-      assert(response.status === 200)
     }
   }
 
-  "Could not find matching instance" in {
-    Get("/matchingInstance") ~> routes ~> check {
+  "Return Bad Request:Could not find matching instance" in {
+    Get("/matchingInstance?Id=0&ComponentType=ElasticSarch") ~> Route.seal(routes) ~> check {
       assert(status === StatusCodes.BAD_REQUEST)
-      assert(response.status === 400)
     }
   }
   "This Method not allowed while fetching instance" in {
-    Get("/instances") ~> routes ~> check {
+    Post("/instances?ComponentType=ElasticSearch") ~> Route.seal(routes) ~> check {
       assert(status === StatusCodes.METHOD_NOT_ALLOWED)
       responseAs[String] shouldEqual "HTTP method not allowed, supported methods: GET"
     }
   }
     "Display All Matching Instance" in {
-      Get("/instances") ~> routes ~> check {
+      Get("/instances?ComponentType=ElasticSearch") ~> routes ~> check {
         assert(status === StatusCodes.OK)
-        assert(response.status === 200)
       }
     }
-  "Failed to deserialize while fetching instance" in {
-    Get("/instances") ~> routes ~> check {
+  "Return Failed to deserialize while fetching instance" in {
+    Get("/instances?ComponentType=ElastcSearch") ~> Route.seal(routes) ~> check {
       assert(status === StatusCodes.BAD_REQUEST)
-      assert(response.status === 400)
     }
   }
-  "Method not allowed in matching result" in {
-    Post("/matchingResult") ~> routes ~> check {
+  "Return GET Method not allowed in matching result" in {
+    Get("/matchingResult?Id=1&MatchingSuccessful=0") ~> Route.seal(routes) ~> check {
       assert(status === StatusCodes.METHOD_NOT_ALLOWED)
       responseAs[String] shouldEqual "HTTP method not allowed, supported methods: POST"
     }
   }
-    "Successfully Matched Result" in {
-      Post("/matchingResult") ~> routes ~> check {
-        assert(status === StatusCodes.OK)
-        assert(response.status === 200)
-
+    "Return Matching Result not found" in {
+      Post("/matchingResult?Id=1&MatchingSuccessful=0") ~> routes ~> check {
+        assert(status === StatusCodes.NOT_FOUND)
       }
     }
+    "Return Invalid ID if input is wrong" in {
+      Post("/matchingResult?Id=lm&MatchingSuccessful=0") ~> Route.seal(routes) ~> check {
+        assert(status === StatusCodes.BAD_REQUEST)
+      }
+    }
+
   "Method not allowed in eventlist" in {
-    Get("/eventList") ~> routes ~> check {
+    Post("/eventList?Id=0") ~> Route.seal(routes) ~> check {
       assert(status === StatusCodes.METHOD_NOT_ALLOWED)
       responseAs[String] shouldEqual "HTTP method not allowed, supported methods: GET"
     }
   }
-  "Instance ID not found in event list" in {
-    Get("/eventList") ~> routes ~> check {
+  " return Instance ID not found in event list" in {
+    Get("/eventList?Id=45") ~> routes ~> check {
       assert(status === StatusCodes.NOT_FOUND)
-      assert(response.status === 404)
     }
   }
   }
