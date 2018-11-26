@@ -8,7 +8,7 @@ import spray.json.{DefaultJsonProtocol, DeserializationException, JsObject, JsSt
 /**
   * Trait defining the implicit JSON formats needed to work with RegistryEvents
   */
-trait EventJsonSupport extends SprayJsonSupport with DefaultJsonProtocol with InstanceJsonSupport {
+trait EventJsonSupport extends SprayJsonSupport with DefaultJsonProtocol with InstanceJsonSupport with InstanceLinkJsonSupport{
 
   //Custom JSON format for an EventType
   implicit val eventTypeFormat  : JsonFormat[EventType] = new JsonFormat[EventType] {
@@ -33,6 +33,8 @@ trait EventJsonSupport extends SprayJsonSupport with DefaultJsonProtocol with In
         case "InstanceRemovedEvent" => EventType.InstanceRemovedEvent
         case "NumbersChangedEvent" => EventType.NumbersChangedEvent
         case "DockerOperationErrorEvent" => EventType.DockerOperationErrorEvent
+        case "LinkAddedEvent" => EventType.LinkStateChangedEvent
+        case "LinkStateChangedEvent" => EventType.LinkStateChangedEvent
         case x => throw DeserializationException(s"Unexpected string value $x for event type.")
       }
       case y => throw DeserializationException(s"Unexpected type $y during deserialization event type.")
@@ -51,6 +53,7 @@ trait EventJsonSupport extends SprayJsonSupport with DefaultJsonProtocol with In
       case ncp: NumbersChangedPayload => numbersChangedPayloadFormat.write(ncp)
       case ip:  InstancePayload => instancePayloadFormat.write(ip)
       case doep: DockerOperationErrorPayload => dockerOperationErrorPayloadFormat.write(doep)
+      case ilp: InstanceLinkPayload => instanceLinkPayloadFormat.write(ilp)
       case _ => throw new RuntimeException("Unsupported type of payload!")
     }
 
@@ -63,11 +66,13 @@ trait EventJsonSupport extends SprayJsonSupport with DefaultJsonProtocol with In
     def read(json: JsValue): RegistryEventPayload = json match{
       case jso: JsObject => if(jso.fields.isDefinedAt("instance")){
         instancePayloadFormat.read(jso)
-      } else if(jso.fields.isDefinedAt("noOfCrawlers")){
+      } else if(jso.fields.isDefinedAt("newNumber")){
         numbersChangedPayloadFormat.read(jso)
       } else if(jso.fields.isDefinedAt("errorMessage")) {
         dockerOperationErrorPayloadFormat.read(jso)
-      } else {
+      } else if(jso.fields.isDefinedAt("link")){
+        instanceLinkPayloadFormat.read(jso)
+      } else  {
         throw DeserializationException("Unexpected type for event payload!")
       }
       case _ => throw DeserializationException("Unexpected type for event payload!")
@@ -87,6 +92,10 @@ trait EventJsonSupport extends SprayJsonSupport with DefaultJsonProtocol with In
   //JSON format for an DockerOperationErrorPayload
   implicit val dockerOperationErrorPayloadFormat: JsonFormat[DockerOperationErrorPayload] =
     jsonFormat2(DockerOperationErrorPayload)
+
+  //JSON format for an InstanceLinkPayload
+  implicit val instanceLinkPayloadFormat: JsonFormat[InstanceLinkPayload] =
+    jsonFormat1(InstanceLinkPayload)
 
 }
 
@@ -147,6 +156,21 @@ object RegistryEventFactory {
   def createDockerOperationErrorEvent(affectedInstance: Option[Instance], message: String) : RegistryEvent =
     RegistryEvent(EventType.DockerOperationErrorEvent, DockerOperationErrorPayload(affectedInstance, message))
 
+  /**
+    * Creates a new LinkAddedEvent. Sets EventType and payload accordingly
+    * @param link Link that was added
+    * @return RegistryEvent with the respective type and payload
+    */
+  def createLinkAddedEvent(link: InstanceLink) : RegistryEvent =
+    RegistryEvent(EventType.LinkAddedEvent, InstanceLinkPayload(link))
+
+  /**
+    * Creates a new LinkStateChangedEvent. Sets EventType and payload accordingly.
+    * @param link Link whichs state has been changed
+    * @return RegistryEvent with the respective type and payload
+    */
+  def createLinkStateChangedEvent(link: InstanceLink) : RegistryEvent =
+    RegistryEvent(EventType.LinkStateChangedEvent, InstanceLinkPayload(link))
 }
 
 /**
@@ -179,6 +203,13 @@ final case class InstancePayload(instance: Instance) extends RegistryEventPayloa
 final case class DockerOperationErrorPayload(affectedInstance: Option[Instance], errorMessage: String)
   extends RegistryEventPayload
 
+/**
+  * This InstanceLinkPayload is sent with event of type LinkAddedEvent & LinkStateChangedEvent. It contains the respective
+  * link that was added / changed.
+  * @param link Link that caused the event
+  */
+final case class InstanceLinkPayload(link: InstanceLink) extends RegistryEventPayload
+
 
 /**
   * Enumerations concerning Events
@@ -197,5 +228,7 @@ object EventEnums {
     val InstanceRemovedEvent: Value = Value("InstanceRemovedEvent")
     val NumbersChangedEvent: Value = Value("NumbersChangedEvent")
     val DockerOperationErrorEvent: Value = Value("DockerOperationErrorEvent")
+    val LinkAddedEvent: Value = Value("LinkAddedEvent")
+    val LinkStateChangedEvent: Value = Value("LinkStateChangedEvent")
   }
 }
