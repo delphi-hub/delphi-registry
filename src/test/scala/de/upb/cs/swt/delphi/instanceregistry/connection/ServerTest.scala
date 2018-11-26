@@ -22,15 +22,29 @@ import akka.http.scaladsl.testkit.ScalatestRouteTest
 import de.upb.cs.swt.delphi.instanceregistry.Registry
 import org.scalatest.{Matchers, WordSpec}
 import de.upb.cs.swt.delphi.instanceregistry.connection.Server.routes
-import scala.concurrent.duration.Duration
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.{Instance, InstanceJsonSupport, InstanceLink}
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.{ComponentType, InstanceState}
+import spray.json._
+
 import scala.concurrent.{Await, Future}
+import scala.util.Try
 
 
-class ServerTest extends WordSpec with Matchers with  ScalatestRouteTest {
+class ServerTest extends WordSpec with Matchers with  ScalatestRouteTest with InstanceJsonSupport{
+
+  //JSON CONSTANTS
+  private val validJsonInstance = Instance(id = None, host = "http://localhost", portNumber = 4242,
+    name = "ValidInstance", componentType = ComponentType.Crawler, dockerId = Some("randomId"),
+    instanceState = InstanceState.Running, labels = List("some_label"), linksTo = List.empty, linksFrom = List.empty)
+    .toJson(instanceFormat).toString
+  //Valid Json syntax but missing a required member for instances
+  private val validJsonInstanceMissingRequiredMember = validJsonInstance.replace(""""name":"ValidInstance",""", "")
+  //Invalid Json syntax: missing quotation mark
+  private val invalidJsonInstance = validJsonInstance.replace(""""name":"ValidInstance",""", """"name":Invalid", """)
 
   override def beforeAll(): Unit = {
     Future(Registry.main(Array[String]()))
-    Thread.sleep(1000)
+    Thread.sleep(3000)
     //def a = Future(Registry.main(Array[String]()))
     //Await.ready(a, Duration("1 second"))
     //Await.ready(Future(Registry.main(Array[String]())),Duration("1 second"))
@@ -57,8 +71,15 @@ class ServerTest extends WordSpec with Matchers with  ScalatestRouteTest {
       // HttpEntity(ContentTypes.`application/json`,"""{InstanceToRegister:Crawler}""")
 
       Post("/register", HttpEntity(ContentTypes.`application/json`,
-        """{"name":"MyWebApiInstance","host":"127.0.1.1","instanceState":"Running","componentType":"WebApi","portNumber":"8089}""".stripMargin)) ~> Route.seal(routes) ~> check {
-       assert(status === StatusCodes.OK)
+        validJsonInstance.stripMargin)) ~> Route.seal(routes) ~> check {
+        assert(status === StatusCodes.OK)
+        responseEntity match {
+          case HttpEntity.Strict(_, data) =>
+            val responseEntityString = data.utf8String
+            assert(Try(responseEntityString.toLong).isSuccess)
+          case x =>
+            fail(s"Invalid response type $x")
+        }
        //assert(response.status === 200)
        //contentType should ===(ContentTypes.`application/json`)
        //responseEntity shouldBe Int
