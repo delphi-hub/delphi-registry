@@ -10,6 +10,7 @@ import akka.stream.scaladsl.{Flow, Sink, Source}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.ComponentType
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model._
 import de.upb.cs.swt.delphi.instanceregistry.{AppLogging, Registry, RequestHandler}
+import spray.json.JsonParser.ParsingException
 import spray.json._
 
 import scala.concurrent.ExecutionContext
@@ -78,13 +79,20 @@ object Server extends HttpApp
         handler.handleRegister(paramInstance) match {
           case Success(id) =>
             complete{id.toString}
-          case Failure(_) =>  complete(HttpResponse(StatusCodes.InternalServerError, entity = "An internal server error occurred."))
+          case Failure(ex) =>
+            log.error(ex, "Failed to handle registration of instance.")
+            complete(HttpResponse(StatusCodes.InternalServerError, entity = "An internal server error occurred."))
         }
       } catch {
         case dx : DeserializationException =>
           log.error(dx, "Deserialization exception")
           complete(HttpResponse(StatusCodes.BadRequest, entity = s"Could not deserialize parameter instance with message ${dx.getMessage}."))
-        case _ : Exception =>  complete(HttpResponse(StatusCodes.InternalServerError, entity = "An internal server error occurred."))
+        case px : ParsingException =>
+          log.error(px, "Failed to parse JSON while registering")
+          complete(HttpResponse(StatusCodes.BadRequest, entity = s"Failed to parse JSON entity with message ${px.getMessage}"))
+        case x : Exception =>
+          log.error(x, "Uncaught exception while deserializing.")
+          complete(HttpResponse(StatusCodes.InternalServerError, entity = "An internal server error occurred."))
       }
     }
   }
