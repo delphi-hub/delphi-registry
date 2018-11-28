@@ -17,17 +17,20 @@
 package de.upb.cs.swt.delphi.registry.connection
 import akka.http.javadsl.model.StatusCodes
 import akka.http.scaladsl.Http
+import akka.http.scaladsl.Http.ServerBinding
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import de.upb.cs.swt.delphi.instanceregistry.Registry
+import de.upb.cs.swt.delphi.instanceregistry.connection.Server
 import org.scalatest.{Matchers, WordSpec}
 import de.upb.cs.swt.delphi.instanceregistry.connection.Server.routes
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.{Instance, InstanceJsonSupport}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.{ComponentType, InstanceState}
 import spray.json._
 
-import scala.concurrent.Future
+import scala.concurrent.duration.Duration
+import scala.concurrent.{Await, Future}
 import scala.util.Try
 
 
@@ -43,13 +46,23 @@ class ServerTest extends WordSpec with Matchers with  ScalatestRouteTest with In
   //Invalid Json syntax: missing quotation mark
   private val invalidJsonInstance = validJsonInstance.replace(""""name":"ValidInstance",""", """"name":Invalid", """)
 
+
+  val bindingFuture: Future[ServerBinding] = Http().bindAndHandle(Server.routes,
+    Registry.configuration.bindHost, Registry.configuration.bindPort)
+
   override def beforeAll(): Unit = {
-    Future(Registry.main(Array[String]()))
-    Thread.sleep(3000)
+    Registry.requestHandler.initialize()
+    Await.ready(bindingFuture, Duration(3, "seconds"))
   }
 
   override def afterAll(): Unit = {
-    Http().shutdownAllConnectionPools()
+    bindingFuture
+      .flatMap(_.unbind())
+      .onComplete{_ =>
+        Registry.requestHandler.shutdown()
+        Await.ready(Registry.system.terminate(), Duration.Inf)
+        Await.ready(system.terminate(), Duration.Inf)
+      }
   }
 
   "The Server" should {
@@ -60,8 +73,6 @@ class ServerTest extends WordSpec with Matchers with  ScalatestRouteTest with In
       }
     }
     "Successfully Register" in {
-
-
       Post("/register", HttpEntity(ContentTypes.`application/json`,
         validJsonInstance.stripMargin)) ~> Route.seal(routes) ~> check {
         assert(status === StatusCodes.OK)

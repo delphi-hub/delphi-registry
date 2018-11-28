@@ -227,7 +227,7 @@ class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach 
     val register1 = handler.instanceDao.addInstance(buildInstance(id = 1, dockerId = Some("RandomDockerId"), state = InstanceState.Stopped))
     assert(register1.isSuccess)
 
-    assert(handler.handleStop(1) == handler.OperationResult.Ok)
+    assert(handler.handleStart(1) == handler.OperationResult.Ok)
     assert(handler.getInstance(1).get.instanceState == InstanceState.Stopped)
   }
 
