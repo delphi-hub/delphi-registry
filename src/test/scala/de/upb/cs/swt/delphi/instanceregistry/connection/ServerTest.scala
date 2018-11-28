@@ -16,15 +16,17 @@
 
 package de.upb.cs.swt.delphi.registry.connection
 import akka.http.javadsl.model.StatusCodes
+import akka.http.scaladsl.Http
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import de.upb.cs.swt.delphi.instanceregistry.Registry
 import org.scalatest.{Matchers, WordSpec}
 import de.upb.cs.swt.delphi.instanceregistry.connection.Server.routes
-import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.{Instance, InstanceJsonSupport, InstanceLink}
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.{Instance, InstanceJsonSupport}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.{ComponentType, InstanceState}
 import spray.json._
+
 import scala.concurrent.Future
 import scala.util.Try
 
@@ -44,7 +46,10 @@ class ServerTest extends WordSpec with Matchers with  ScalatestRouteTest with In
   override def beforeAll(): Unit = {
     Future(Registry.main(Array[String]()))
     Thread.sleep(3000)
+  }
 
+  override def afterAll(): Unit = {
+    Http().shutdownAllConnectionPools()
   }
 
   "The Server" should {
