@@ -66,13 +66,15 @@ class ServerTest extends WordSpec with Matchers with  ScalatestRouteTest with In
   }
 
   "The Server" should {
+
     "return method not allowed while registering" in {
       Get("/register?InstanceString=25") ~> Route.seal(routes) ~> check {
         assert(status === StatusCodes.METHOD_NOT_ALLOWED)
         responseAs[String] shouldEqual "HTTP method not allowed, supported methods: POST"
       }
     }
-    "Successfully Register" in {
+
+    "Successfully register when entity is valid" in {
       Post("/register", HttpEntity(ContentTypes.`application/json`,
         validJsonInstance.stripMargin)) ~> Route.seal(routes) ~> check {
         assert(status === StatusCodes.OK)
@@ -85,12 +87,27 @@ class ServerTest extends WordSpec with Matchers with  ScalatestRouteTest with In
         }
       }
     }
-    "not register with Invalid Input" in {
-      Post("/register?InstanceString=0") ~> routes ~> check {
-        assert(status === StatusCodes.INTERNAL_SERVER_ERROR)
-        responseAs[String] should ===("An internal server error occurred.")
 
+    "not register when entity is invalid" in {
+
+      //No entity
+      Post("/register") ~> routes ~> check {
+        assert(status === StatusCodes.BAD_REQUEST)
+        responseAs[String].toLowerCase should include ("failed to parse json")
       }
+
+      //Wrong JSON syntax
+      Post("/register", HttpEntity(ContentTypes.`application/json`, invalidJsonInstance.stripMargin)) ~> routes ~> check {
+        assert(status === StatusCodes.BAD_REQUEST)
+        responseAs[String].toLowerCase should include ("failed to parse json")
+      }
+
+      //Missing required JSON members
+      Post("/register", HttpEntity(ContentTypes.`application/json`, validJsonInstanceMissingRequiredMember.stripMargin)) ~> routes ~> check {
+        assert(status === StatusCodes.BAD_REQUEST)
+        responseAs[String].toLowerCase should include ("could not deserialize parameter instance")
+      }
+
     }
     "successfully Deregister" in {
       Post("/deregister?Id=0") ~> routes ~> check {
