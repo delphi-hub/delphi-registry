@@ -32,6 +32,8 @@ class Configuration( ) {
 
   val dockerOperationTimeout: Timeout = Timeout(20 seconds)
 
+  val jwtSecretKey: String = sys.env.getOrElse("JWT_SECRET", "changeme")
+
 }
 
 
