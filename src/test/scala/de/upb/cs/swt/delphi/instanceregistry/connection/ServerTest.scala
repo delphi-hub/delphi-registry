@@ -247,15 +247,47 @@ class ServerTest extends WordSpec with Matchers with  ScalatestRouteTest with In
         responseAs[String] shouldEqual "HTTP method not allowed, supported methods: GET"
       }
     }
-    /* Throwing Error 404 even with the right commands (as specified in server.scala).
-     Tested after running registry and verifying ElasticSearch is registered with Id=0. Also with other components after running them.
 
-    "Return Matching instance of specific type" in {
-      Get("/matchingInstance?Id=0&ComponentType=ElasticSearch") ~> routes ~> check {
-      assert(status === StatusCodes.OK)
-    }
+    //Valid get matching instance
+    "return matching instance of specific type" in {
+      var id = -1L
+
+      //Add a crawler instance for testing
+      Post("/register", HttpEntity(ContentTypes.`application/json`,
+        validJsonInstance.stripMargin)) ~> Route.seal(routes) ~> check {
+        assert(status === StatusCodes.OK)
+        responseEntity match {
+          case HttpEntity.Strict(_, data) =>
+            val responseEntityString = data.utf8String
+            assert(Try(responseEntityString.toLong).isSuccess)
+            id = responseEntityString.toLong
+          case x =>
+            fail(s"Invalid response type $x")
+        }
+      }
+
+      //Actual test
+      Get(s"/matchingInstance?Id=$id&ComponentType=ElasticSearch") ~> routes ~> check {
+        assert(status === StatusCodes.OK)
+        Try(responseAs[String].parseJson.convertTo[Instance](instanceFormat)) match {
+          case Success(esInstance) =>
+            esInstance.id.get shouldEqual 0
+            esInstance.name shouldEqual "Default ElasticSearch Instance"
+          case Failure(ex) =>
+            fail(ex)
+        }
+      }
+
+
+
+      //Remove crawler instance
+      Post(s"/deregister?Id=$id") ~> routes ~> check {
+        assert(status === StatusCodes.OK)
+        entityAs[String].toLowerCase should include ("successfully removed instance")
+      }
+
   }
-*/
+
     "return bad request:Could not find matching instance" in {
       Get("/matchingInstance?Id=0&ComponentType=ElasticSarch") ~> Route.seal(routes) ~> check {
         assert(status === StatusCodes.BAD_REQUEST)
@@ -306,6 +338,8 @@ class ServerTest extends WordSpec with Matchers with  ScalatestRouteTest with In
         assert(status === StatusCodes.NOT_FOUND)
       }
     }
+
+
     /*
     "Matching successful" in {
       Post("/matchingResult?CallerId=1&MatchedInstanceId=0&MatchingSuccessful=1") ~> Route.seal(routes) ~> check {
