@@ -68,7 +68,7 @@ class ServerTest extends WordSpec with Matchers with  ScalatestRouteTest with In
   override def afterAll(): Unit = {
     bindingFuture
       .flatMap(_.unbind())
-      .onComplete{_ =>
+      .onComplete { _ =>
         Registry.requestHandler.shutdown()
         Await.ready(Registry.system.terminate(), Duration.Inf)
         Await.ready(system.terminate(), Duration.Inf)
@@ -244,6 +244,19 @@ class ServerTest extends WordSpec with Matchers with  ScalatestRouteTest with In
       }
     }
 
+    "return an instance with the specified id" in {
+      Get("/instance?Id=0") ~> routes ~> check {
+        assert(status === StatusCodes.OK)
+      }
+    }
+    //Negative Test
+    "return instance not found with the specified id" in {
+      Get("/instance?Id=45") ~> routes ~> check {
+        assert(status === StatusCodes.NOT_FOUND)
+        responseAs[String] shouldEqual "Id 45 was not found on the server."
+      }
+    }
+
 
     //Valid get matching instance
     "return matching instance of specific type" in {
@@ -307,10 +320,10 @@ class ServerTest extends WordSpec with Matchers with  ScalatestRouteTest with In
     "successfully fetch instances of defined type" in {
       Get("/instances?ComponentType=ElasticSearch") ~> routes ~> check {
         assert(status === StatusCodes.OK)
-        }
       }
+    }
 
-  //Negative tests
+    //Negative tests
     "return failed to deserialize parameter while fetching instance or method not allowed if wrong method is used to fetch instances" in {
       //Failed to deserealize componentType
       Get("/instances?ComponentType=ElastcSearch") ~> Route.seal(routes) ~> check {
@@ -318,11 +331,11 @@ class ServerTest extends WordSpec with Matchers with  ScalatestRouteTest with In
         responseAs[String] shouldEqual "Could not deserialize parameter string ElastcSearch to ComponentType"
       }
 
-    Post("/instances?ComponentType=ElasticSearch") ~> Route.seal(routes) ~> check {
-      assert(status === StatusCodes.METHOD_NOT_ALLOWED)
-      responseAs[String] shouldEqual "HTTP method not allowed, supported methods: GET"
+      Post("/instances?ComponentType=ElasticSearch") ~> Route.seal(routes) ~> check {
+        assert(status === StatusCodes.METHOD_NOT_ALLOWED)
+        responseAs[String] shouldEqual "HTTP method not allowed, supported methods: GET"
+      }
     }
-  }
     //PositiveTest
     var id1 = -1L
     var id2 = -2L
@@ -427,5 +440,114 @@ class ServerTest extends WordSpec with Matchers with  ScalatestRouteTest with In
         entityAs[String].toLowerCase should include("successfully removed instance")
       }
     }
+    "get the whole network graph of the current registry" in {
+      Get("/network") ~> routes ~> check {
+        assert(status === StatusCodes.OK)
+
+      }
+    }
+    "get a list of links from the instance with the specified id" in {
+      var id = -1L
+      Post("/register", HttpEntity(ContentTypes.`application/json`,
+        validJsonInstance.stripMargin)) ~> Route.seal(routes) ~> check {
+        assert(status === StatusCodes.OK)
+        responseEntity match {
+          case HttpEntity.Strict(_, data) =>
+            val responseEntityString = data.utf8String
+            assert(Try(responseEntityString.toLong).isSuccess)
+            id = responseEntityString.toLong
+          case x =>
+            fail(s"Invalid response type $x")
+        }
+      }
+      Get(s"/matchingInstance?Id=$id&ComponentType=Crawler") ~> routes ~> check {
+        assert(status === StatusCodes.OK)
+        Try(responseAs[String].parseJson.convertTo[Instance](instanceFormat)) match {
+          case Success(esInstance) =>
+            esInstance.id.get shouldEqual 0
+            esInstance.name shouldEqual "Default ElasticSearch Instance"
+          case Failure(ex) =>
+            fail(ex)
+        }
+      }
+
+      Get(s"/linksFrom?Id=0") ~> routes ~> check {
+        assert(status === StatusCodes.OK)
+        println(response)
+      }
+
+      Post(s"/deregister?Id=$id") ~> routes ~> check {
+        assert(status === StatusCodes.OK)
+        entityAs[String].toLowerCase should include("successfully removed instance")
+      }
+    }
+    "return no links found from specified id" in {
+      Get("/linksFrom?Id=45") ~> routes ~> check {
+        assert(status === StatusCodes.NOT_FOUND)
+      }
+    }
+    "get a list of links to the instance with the specified id" in {
+      var id = -1L
+      Post("/register", HttpEntity(ContentTypes.`application/json`,
+        validJsonInstance.stripMargin)) ~> Route.seal(routes) ~> check {
+        assert(status === StatusCodes.OK)
+        responseEntity match {
+          case HttpEntity.Strict(_, data) =>
+            val responseEntityString = data.utf8String
+            assert(Try(responseEntityString.toLong).isSuccess)
+            id = responseEntityString.toLong
+          case x =>
+            fail(s"Invalid response type $x")
+        }
+      }
+      Get(s"/matchingInstance?Id=0&ComponentType=ElasticSearch") ~> routes ~> check {
+        assert(status === StatusCodes.OK)
+        Try(responseAs[String].parseJson.convertTo[Instance](instanceFormat)) match {
+          case Success(esInstance) =>
+            esInstance.id.get shouldEqual 0
+            esInstance.name shouldEqual "Default ElasticSearch Instance"
+          case Failure(ex) =>
+            fail(ex)
+        }
+      }
+
+      Get(s"/linksto?Id=0") ~> routes ~> check {
+        assert(status === StatusCodes.OK)
+        println(response)
+      }
+
+      Post(s"/deregister?Id=$id") ~> routes ~> check {
+        assert(status === StatusCodes.OK)
+        entityAs[String].toLowerCase should include("successfully removed instance")
+      }
+    }
+
+    "return no links found to specified id" in {
+      Get("/linksTo?Id=45") ~> routes ~> check {
+        assert(status === StatusCodes.NOT_FOUND)
+      }
+    }
+
+    "add a generic label to the instance with the specified id" in {
+      Post("/addLabel?Id=0&Label=ElasticSearchDefaultLabel") ~> routes ~> check {
+        assert(status === StatusCodes.OK)
+        responseAs[String] shouldEqual "Successfully added label"
+      }
+    }
+    //NegativeTests
+    "fail to add label if the instance with specified id is not found, should fail to add a label is value is out of bound" in{
+      Post("/addLabel?Id=45&Label=Privat") ~> routes ~> check {
+        assert(status === StatusCodes.NOT_FOUND)
+        responseAs[String] shouldEqual "Cannot add label, id 45 not found."
+        println()
+      }
+      val maximum = "Veryveryextralonglabelthatdoesnotworkswhileaddinglabel"
+      //val maximum1 = Registry.configuration.maxLabelLength+100
+
+      Post(s"/addLabel?Id=0&Label=$maximum") ~> routes ~> check {
+        assert(status === StatusCodes.BAD_REQUEST)
+
+      }
+  }
   }
 }
