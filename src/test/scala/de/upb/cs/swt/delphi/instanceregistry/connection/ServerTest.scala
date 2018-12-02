@@ -17,8 +17,6 @@
 package de.upb.cs.swt.delphi.instanceregistry.connection
 
 import akka.http.javadsl.model.StatusCodes
-import akka.http.scaladsl.Http
-import akka.http.scaladsl.Http.ServerBinding
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.testkit.ScalatestRouteTest
@@ -32,7 +30,7 @@ import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.LinkEnums.L
 import spray.json._
 
 import scala.concurrent.duration.Duration
-import scala.concurrent.{Await, Future}
+import scala.concurrent.Await
 import scala.util.{Failure, Success, Try}
 
 
@@ -54,28 +52,22 @@ class ServerTest
   private val invalidJsonInstance = validJsonInstance.replace(""""name":"ValidInstance",""", """"name":Invalid", """)
 
 
-  val bindingFuture: Future[ServerBinding] = Http().bindAndHandle(Server.routes,
-    Registry.configuration.bindHost, Registry.configuration.bindPort)
+
 
   /**
     * Before all tests: Initialize handler and wait for server binding to be ready.
     */
   override def beforeAll(): Unit = {
     Registry.requestHandler.initialize()
-    Await.ready(bindingFuture, Duration(3, "seconds"))
   }
 
   /**
     * After all tests: Unbind the server, shutdown handler and await termination of both actor systems.
     */
   override def afterAll(): Unit = {
-    bindingFuture
-      .flatMap(_.unbind())
-      .onComplete { _ =>
-        Registry.requestHandler.shutdown()
-        Await.ready(Registry.system.terminate(), Duration.Inf)
-        Await.ready(system.terminate(), Duration.Inf)
-      }
+    Registry.requestHandler.shutdown()
+    Await.ready(Registry.system.terminate(), Duration.Inf)
+    Await.ready(system.terminate(), Duration.Inf)
   }
 
   "The Server" should {
@@ -492,8 +484,80 @@ class ServerTest
         assert(status === StatusCodes.BAD_REQUEST)
         responseAs[String].toLowerCase should include ("exceeds character limit")
       }
-  }
+    }
 
+    /**Minimal tests for docker operations**/
+
+    "fail to deploy if component type is invalid" in {
+      Post("/deploy?ComponentType=Car") ~> routes ~> check {
+        status shouldEqual StatusCodes.BAD_REQUEST
+        responseAs[String].toLowerCase should include ("could not deserialize")
+      }
+    }
+
+    "fail to execute docker operations if id is invalid" in {
+      Post("/reportStart?Id=42") ~> routes ~> check {
+        status shouldEqual StatusCodes.NOT_FOUND
+        responseAs[String].toLowerCase should include ("not found")
+      }
+      Post("/reportStop?Id=42") ~> routes ~> check {
+        status shouldEqual StatusCodes.NOT_FOUND
+        responseAs[String].toLowerCase should include ("not found")
+      }
+      Post("/reportFailure?Id=42") ~> routes ~> check {
+        status shouldEqual StatusCodes.NOT_FOUND
+        responseAs[String].toLowerCase should include ("not found")
+      }
+      Post("/pause?Id=42") ~> routes ~> check {
+        status shouldEqual StatusCodes.NOT_FOUND
+        responseAs[String].toLowerCase should include ("not found")
+      }
+      Post("/resume?Id=42") ~> routes ~> check {
+        status shouldEqual StatusCodes.NOT_FOUND
+        responseAs[String].toLowerCase should include ("not found")
+      }
+      Post("/stop?Id=42") ~> routes ~> check {
+        status shouldEqual StatusCodes.NOT_FOUND
+        responseAs[String].toLowerCase should include ("not found")
+      }
+      Post("/start?Id=42") ~> routes ~> check {
+        status shouldEqual StatusCodes.NOT_FOUND
+        responseAs[String].toLowerCase should include ("not found")
+      }
+      Post("/delete?Id=42") ~> routes ~> check {
+        status shouldEqual StatusCodes.NOT_FOUND
+        responseAs[String].toLowerCase should include ("not found")
+      }
+      Post("/assignInstance?Id=42&AssignedInstanceId=43") ~> routes ~> check {
+        status shouldEqual StatusCodes.NOT_FOUND
+        responseAs[String].toLowerCase should include ("not found")
+      }
+    }
+
+    "fail to execute docker operations if instance is no docker container" in {
+      val id = assertValidRegister(ComponentType.Crawler, dockerId = None)
+      Post(s"/reportStart?Id=$id") ~> routes ~> check {
+        status shouldEqual StatusCodes.BAD_REQUEST
+      }
+      Post(s"/reportStop?Id=$id") ~> routes ~> check {
+        status shouldEqual StatusCodes.BAD_REQUEST
+      }
+      Post(s"/reportFailure?Id=$id") ~> routes ~> check {
+        status shouldEqual StatusCodes.BAD_REQUEST
+      }
+      Post(s"/pause?Id=$id") ~> routes ~> check {
+        status shouldEqual StatusCodes.BAD_REQUEST
+      }
+      Post(s"/resume?Id=$id") ~> routes ~> check {
+        status shouldEqual StatusCodes.BAD_REQUEST
+      }
+      Post(s"/start?Id=$id") ~> routes ~> check {
+        status shouldEqual StatusCodes.BAD_REQUEST
+      }
+      Post(s"/delete?Id=$id") ~> routes ~> check {
+        status shouldEqual StatusCodes.BAD_REQUEST
+      }
+    }
   }
   private def assertValidRegister(compType: ComponentType,
                                   dockerId: Option[String] = Some("randomId"),
