@@ -25,7 +25,8 @@ import akka.http.scaladsl.testkit.ScalatestRouteTest
 import de.upb.cs.swt.delphi.instanceregistry.Registry
 import org.scalatest.{Matchers, WordSpec}
 import de.upb.cs.swt.delphi.instanceregistry.connection.Server.routes
-import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.{Instance, InstanceJsonSupport, InstanceLink}
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.EventEnums.EventType
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model._
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.{ComponentType, InstanceState}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.LinkEnums.LinkState
 import spray.json._
@@ -35,7 +36,12 @@ import scala.concurrent.{Await, Future}
 import scala.util.{Failure, Success, Try}
 
 
-class ServerTest extends WordSpec with Matchers with  ScalatestRouteTest with InstanceJsonSupport {
+class ServerTest
+  extends WordSpec
+  with Matchers
+  with ScalatestRouteTest
+  with InstanceJsonSupport
+  with EventJsonSupport {
 
   //JSON CONSTANTS
   private val validJsonInstance = Instance(id = None, host = "http://localhost", portNumber = 4242,
@@ -47,10 +53,6 @@ class ServerTest extends WordSpec with Matchers with  ScalatestRouteTest with In
   //Invalid Json syntax: missing quotation mark
   private val invalidJsonInstance = validJsonInstance.replace(""""name":"ValidInstance",""", """"name":Invalid", """)
 
-
-  private val webappinstance = validJsonInstance.replace(""""componentType":"ComponentType.Crawler",""", "componentType = ComponentType.WebpApp")
-
-  private val webapiinstance = validJsonInstance.replace(""""componentType":"ComponentType.Crawler",""", "componentType = ComponentType.WebpApi")
 
   val bindingFuture: Future[ServerBinding] = Http().bindAndHandle(Server.routes,
     Registry.configuration.bindHost, Registry.configuration.bindPort)
@@ -78,19 +80,12 @@ class ServerTest extends WordSpec with Matchers with  ScalatestRouteTest with In
 
   "The Server" should {
 
-    //Valid register
-    "successfully register when entity is valid" in {
-      Post("/register", HttpEntity(ContentTypes.`application/json`,
-        validJsonInstance.stripMargin)) ~> Route.seal(routes) ~> check {
-        assert(status === StatusCodes.OK)
-        responseEntity match {
-          case HttpEntity.Strict(_, data) =>
-            val responseEntityString = data.utf8String
-            assert(Try(responseEntityString.toLong).isSuccess)
-          case x =>
-            fail(s"Invalid response type $x")
-        }
-      }
+    //Valid register and deregister
+    "successfully register and deregister when entity is valid" in {
+      //Register, actual test
+      val id = assertValidRegister(ComponentType.Crawler)
+      //Deregister to not pollute DB
+      assertValidDeregister(id)
     }
 
     //Invalid register
@@ -119,29 +114,6 @@ class ServerTest extends WordSpec with Matchers with  ScalatestRouteTest with In
         responseAs[String] shouldEqual "HTTP method not allowed, supported methods: POST"
       }
 
-    }
-
-    //Valid deregister
-    "successfully deregister when id is valid" in {
-      var id = -1L
-
-      Post("/register", HttpEntity(ContentTypes.`application/json`,
-        validJsonInstance.stripMargin)) ~> Route.seal(routes) ~> check {
-        assert(status === StatusCodes.OK)
-        responseEntity match {
-          case HttpEntity.Strict(_, data) =>
-            val responseEntityString = data.utf8String
-            assert(Try(responseEntityString.toLong).isSuccess)
-            id = responseEntityString.toLong
-          case x =>
-            fail(s"Invalid response type $x")
-        }
-      }
-
-      Post(s"/deregister?Id=$id") ~> routes ~> check {
-        assert(status === StatusCodes.OK)
-        entityAs[String].toLowerCase should include("successfully removed instance")
-      }
     }
 
     //Invalid deregister
@@ -199,7 +171,7 @@ class ServerTest extends WordSpec with Matchers with  ScalatestRouteTest with In
       }
 
       //Wrong parameter value
-      Get("/instances?ComponentType=Crawlerr") ~> routes ~> check {
+      Get("/instances?ComponentType=Car") ~> routes ~> check {
         assert(status === StatusCodes.BAD_REQUEST)
         responseAs[String].toLowerCase should include("could not deserialize parameter")
       }
@@ -215,7 +187,6 @@ class ServerTest extends WordSpec with Matchers with  ScalatestRouteTest with In
           case Failure(ex) =>
             fail(ex)
         }
-
       }
 
       //No instances of that type present, still need to be 200 OK
@@ -239,19 +210,28 @@ class ServerTest extends WordSpec with Matchers with  ScalatestRouteTest with In
       }
 
       //Wrong parameter value
-      Get("/numberOfInstances?ComponentType=Crawlerr") ~> routes ~> check {
+      Get("/numberOfInstances?ComponentType=Car") ~> routes ~> check {
         assert(status === StatusCodes.BAD_REQUEST)
         responseAs[String].toLowerCase should include("could not deserialize parameter")
       }
     }
 
-    "return an instance with the specified id" in {
+    //Valid GET /instance
+    "return an instance if id is valid and instance is present" in {
       Get("/instance?Id=0") ~> routes ~> check {
         assert(status === StatusCodes.OK)
+        Try(responseAs[String].parseJson.convertTo[Instance](instanceFormat)) match {
+          case Success(instance) =>
+            instance.id.get shouldEqual 0
+            instance.name should include ("Default ElasticSearch")
+          case Failure(ex) =>
+            fail(ex)
+        }
       }
     }
-    //Negative Test
-    "return instance not found with the specified id" in {
+
+    //Invalid GET /instance
+    "return 404 if instance id is not known" in {
       Get("/instance?Id=45") ~> routes ~> check {
         assert(status === StatusCodes.NOT_FOUND)
         responseAs[String] shouldEqual "Id 45 was not found on the server."
@@ -259,23 +239,10 @@ class ServerTest extends WordSpec with Matchers with  ScalatestRouteTest with In
     }
 
 
-    //Valid get matching instance
-    "return matching instance of specific type" in {
-      var id = -1L
-
+    //Valid GET /matchingInstance
+    "return matching instance of specific type if parameters are valid" in {
       //Add a crawler instance for testing
-      Post("/register", HttpEntity(ContentTypes.`application/json`,
-        validJsonInstance.stripMargin)) ~> Route.seal(routes) ~> check {
-        assert(status === StatusCodes.OK)
-        responseEntity match {
-          case HttpEntity.Strict(_, data) =>
-            val responseEntityString = data.utf8String
-            assert(Try(responseEntityString.toLong).isSuccess)
-            id = responseEntityString.toLong
-          case x =>
-            fail(s"Invalid response type $x")
-        }
-      }
+      val id = assertValidRegister(ComponentType.Crawler, dockerId = None)
 
       //Actual test
       Get(s"/matchingInstance?Id=$id&ComponentType=ElasticSearch") ~> routes ~> check {
@@ -289,23 +256,19 @@ class ServerTest extends WordSpec with Matchers with  ScalatestRouteTest with In
         }
       }
 
-
-
       //Remove crawler instance
-      Post(s"/deregister?Id=$id") ~> routes ~> check {
-        assert(status === StatusCodes.OK)
-        entityAs[String].toLowerCase should include("successfully removed instance")
-      }
-
+      assertValidDeregister(id)
     }
 
-    //Negative tests
+    //Invalid GET /matchingInstance
     "return bad request when ComponentType is Invalid, Component is not found and Method not allowed" in {
+
       //Invalid ComponentType
-      Get("/matchingInstance?Id=0&ComponentType=ElasticSarch") ~> Route.seal(routes) ~> check {
+      Get("/matchingInstance?Id=0&ComponentType=Search") ~> Route.seal(routes) ~> check {
         assert(status === StatusCodes.BAD_REQUEST)
       }
-      //Component Not Found
+
+      //No component of requested type present, expect 404
       Get("/matchingInstance?Id=45&ComponentType=Crawler") ~> Route.seal(routes) ~> check {
         assert(status === StatusCodes.NOT_FOUND)
       }
@@ -317,153 +280,94 @@ class ServerTest extends WordSpec with Matchers with  ScalatestRouteTest with In
 
     }
 
-    //Postive Test Fetch InstanceAsType
-    "successfully fetch instances of defined type" in {
-      Get("/instances?ComponentType=ElasticSearch") ~> routes ~> check {
-        assert(status === StatusCodes.OK)
-      }
-    }
-
-    //Negative tests
-    "return failed to deserialize parameter while fetching instance or method not allowed if wrong method is used to fetch instances" in {
-      //Failed to deserealize componentType
-      Get("/instances?ComponentType=ElastcSearch") ~> Route.seal(routes) ~> check {
-        assert(status === StatusCodes.BAD_REQUEST)
-        responseAs[String] shouldEqual "Could not deserialize parameter string ElastcSearch to ComponentType"
-      }
-
-      Post("/instances?ComponentType=ElasticSearch") ~> Route.seal(routes) ~> check {
-        assert(status === StatusCodes.METHOD_NOT_ALLOWED)
-        responseAs[String] shouldEqual "HTTP method not allowed, supported methods: GET"
-      }
-    }
-    //PositiveTest
-    "apply a matching result to the instance with the specified id" in {
-      var id1 = -1L
-      var id2 = -2L
-
+    //Valid POST /matchingResult
+    "apply a matching result if parameters are valid" in {
       //Add a webapp instance for testing
-      Post("/register", HttpEntity(ContentTypes.`application/json`,
-        webappinstance.stripMargin)) ~> Route.seal(routes) ~> check {
-        assert(status === StatusCodes.OK)
-        responseEntity match {
-          case HttpEntity.Strict(_, data) =>
-            val responseEntityString = data.utf8String
-            assert(Try(responseEntityString.toLong).isSuccess)
-            id1 = responseEntityString.toLong
-          case x =>
-            fail(s"Invalid response type $x")
-        }
-      }
+      val id1 = assertValidRegister(ComponentType.WebApp)
       //Add a WebApi instance for testing
-      Post("/register", HttpEntity(ContentTypes.`application/json`,
-        webapiinstance.stripMargin)) ~> Route.seal(routes) ~> check {
-        assert(status === StatusCodes.OK)
-        responseEntity match {
-          case HttpEntity.Strict(_, data) =>
-            val responseEntityString = data.utf8String
-            assert(Try(responseEntityString.toLong).isSuccess)
-            id2 = responseEntityString.toLong
-          case x =>
-            fail(s"Invalid response type $x")
-        }
-      }
+      val id2 = assertValidRegister(ComponentType.WebApi)
 
       Post(s"/matchingResult?CallerId=$id1&MatchedInstanceId=$id2&MatchingSuccessful=1") ~> Route.seal(routes) ~> check {
         assert(status === StatusCodes.OK)
         responseAs[String] shouldEqual "Matching result true processed."
       }
-      //Remove Instances
-      Post(s"/deregister?Id=$id1") ~> routes ~> check {
-        assert(status === StatusCodes.OK)
-        entityAs[String].toLowerCase should include("successfully removed instance")
-      }
-      Post(s"/deregister?Id=$id2") ~> routes ~> check {
-        assert(status === StatusCodes.OK)
-        entityAs[String].toLowerCase should include("successfully removed instance")
-      }
 
+      //Remove Instances
+      assertValidDeregister(id1)
+      assertValidDeregister(id2)
     }
-    //NegativeTests
-    "return no match found if there is no match, return invalid ID if input is wrong, or GET method not allowed if method is wrong in matching result" in {
-      //WrongMethod
+
+    //Invalid POST /matchingResult
+    "not process matching result if method or parameters are invalid" in {
+      //Wrong method
       Get("/matchingResult?CallerId=0&MatchedInstanceId=0&MatchingSuccessful=1") ~> Route.seal(routes) ~> check {
         assert(status === StatusCodes.METHOD_NOT_ALLOWED)
         responseAs[String] shouldEqual "HTTP method not allowed, supported methods: POST"
       }
-      //Error404 - Match Not Found
+
+      //Invalid IDs - expect 404
       Post("/matchingResult?CallerId=1&MatchedInstanceId=2&MatchingSuccessful=0") ~> routes ~> check {
         assert(status === StatusCodes.NOT_FOUND)
       }
-      //WrongParameters - Bad Request
+
+      //Wrong parameters, caller is same as callee - expect bad request
       Post("/matchingResult?CallerId=0&MatchedInstanceId=0&MatchingSuccessful=O") ~> Route.seal(routes) ~> check {
         assert(status === StatusCodes.BAD_REQUEST)
       }
     }
-    "return method POST not allowed in eventlist" in {
+
+    //Valid GET /eventList
+    "returns registry events that are associated to the instance if id is valid" in {
+      val id = assertValidRegister(ComponentType.Crawler)
+      //TestCase
+      Get(s"/eventList?Id=$id") ~> routes ~> check {
+        assert(status === StatusCodes.OK)
+        Try(responseAs[String].parseJson.convertTo[List[RegistryEvent]](listFormat(eventFormat))) match {
+          case Success(listOfEvents) =>
+            listOfEvents.size shouldBe 1
+            listOfEvents.head.eventType shouldEqual EventType.InstanceAddedEvent
+          case Failure(ex) =>
+            fail(ex)
+        }
+      }
+      //Remove crawler instance
+      assertValidDeregister(id)
+    }
+
+    //Invalid GET /eventList
+    "does not return events if method is invalid or id is not found" in {
+      //Wrong Http method
       Post("/eventList?Id=0") ~> Route.seal(routes) ~> check {
         assert(status === StatusCodes.METHOD_NOT_ALLOWED)
         responseAs[String] shouldEqual "HTTP method not allowed, supported methods: GET"
       }
-    }
-
-    " return instance ID not found in event list" in {
+      //Wrong ID
       Get("/eventList?Id=45") ~> routes ~> check {
         assert(status === StatusCodes.NOT_FOUND)
         responseAs[String] shouldEqual "Id 45 not found."
 
       }
     }
-    "returns registry events that are associated to the instance with the specified id " in {
-      var id = -1L
-      //Add a crawler instance for testing
-      Post("/register", HttpEntity(ContentTypes.`application/json`,
-        validJsonInstance.stripMargin)) ~> Route.seal(routes) ~> check {
-        assert(status === StatusCodes.OK)
-        responseEntity match {
-          case HttpEntity.Strict(_, data) =>
-            val responseEntityString = data.utf8String
-            assert(Try(responseEntityString.toLong).isSuccess)
-            id = responseEntityString.toLong
-          case x =>
-            fail(s"Invalid response type $x")
-        }
-      }
 
-      //TestCase
-      Get(s"/eventList?Id=$id") ~> routes ~> check {
-        assert(status === StatusCodes.OK)
-      }
-
-      //Remove crawler instance
-      Post(s"/deregister?Id=$id") ~> routes ~> check {
-        assert(status === StatusCodes.OK)
-        entityAs[String].toLowerCase should include("successfully removed instance")
-      }
-    }
+    //Valid GET /network
     "get the whole network graph of the current registry" in {
       Get("/network") ~> routes ~> check {
         assert(status === StatusCodes.OK)
-
+        Try(responseAs[String].parseJson.convertTo[List[Instance]](listFormat(instanceFormat))) match {
+          case Success(listOfInstances) =>
+            listOfInstances.size shouldBe 1
+            listOfInstances.head.componentType shouldEqual ComponentType.ElasticSearch
+          case Failure(ex) =>
+            fail(ex)
+        }
       }
     }
 
-    //Valid getLinksFrom
-    "get a list of links from the instance with the specified id" in {
-      var id = -1L
+    //Valid GET /linksFrom
+    "get a list of links from an instance if id is valid and links are present" in {
       //Register a crawler
-      Post("/register", HttpEntity(ContentTypes.`application/json`,
-        validJsonInstance.stripMargin)) ~> Route.seal(routes) ~> check {
-        assert(status === StatusCodes.OK)
-        responseEntity match {
-          case HttpEntity.Strict(_, data) =>
-            val responseEntityString = data.utf8String
-            assert(Try(responseEntityString.toLong).isSuccess)
-            id = responseEntityString.toLong
-          case x =>
-            fail(s"Invalid response type $x")
-        }
-      }
+      val id = assertValidRegister(ComponentType.Crawler)
+
       //Fake connection from crawler to default ES instance
       Get(s"/matchingInstance?Id=$id&ComponentType=ElasticSearch") ~> routes ~> check {
         assert(status === StatusCodes.OK)
@@ -475,6 +379,7 @@ class ServerTest extends WordSpec with Matchers with  ScalatestRouteTest with In
             fail(ex)
         }
       }
+
       //Get links from crawler, should be one link to default ES instance
       Get(s"/linksFrom?Id=$id") ~> routes ~> check {
         assert(status === StatusCodes.OK)
@@ -489,14 +394,13 @@ class ServerTest extends WordSpec with Matchers with  ScalatestRouteTest with In
             fail(ex)
         }
       }
+
       //Deregister crawler to not pollute DB
-      Post(s"/deregister?Id=$id") ~> routes ~> check {
-        assert(status === StatusCodes.OK)
-        entityAs[String].toLowerCase should include("successfully removed instance")
-      }
+      assertValidDeregister(id)
     }
 
-    "return no links found from specified id" in {
+    //Invalid GET /linksFrom
+    "return no links found for invalid id" in {
       Get("/linksFrom?Id=45") ~> routes ~> check {
         assert(status === StatusCodes.NOT_FOUND)
       }
@@ -504,20 +408,8 @@ class ServerTest extends WordSpec with Matchers with  ScalatestRouteTest with In
 
     //Valid GET /linksTo
     "get a list of links to the instance with the specified id" in {
-      var id = -1L
-      //Register a crawler
-      Post("/register", HttpEntity(ContentTypes.`application/json`,
-        validJsonInstance.stripMargin)) ~> Route.seal(routes) ~> check {
-        assert(status === StatusCodes.OK)
-        responseEntity match {
-          case HttpEntity.Strict(_, data) =>
-            val responseEntityString = data.utf8String
-            assert(Try(responseEntityString.toLong).isSuccess)
-            id = responseEntityString.toLong
-          case x =>
-            fail(s"Invalid response type $x")
-        }
-      }
+      val id = assertValidRegister(ComponentType.Crawler)
+
       //Fake connection from crawler to default ES instance
       Get(s"/matchingInstance?Id=$id&ComponentType=ElasticSearch") ~> routes ~> check {
         assert(status === StatusCodes.OK)
@@ -529,6 +421,7 @@ class ServerTest extends WordSpec with Matchers with  ScalatestRouteTest with In
             fail(ex)
         }
       }
+
       //Get links to default ES instance, should be one link from crawler
       Get(s"/linksTo?Id=0") ~> routes ~> check {
         assert(status === StatusCodes.OK)
@@ -543,39 +436,72 @@ class ServerTest extends WordSpec with Matchers with  ScalatestRouteTest with In
             fail(ex)
         }
       }
+
       //Deregister crawler to not pollute DB
-      Post(s"/deregister?Id=$id") ~> routes ~> check {
-        assert(status === StatusCodes.OK)
-        entityAs[String].toLowerCase should include("successfully removed instance")
-      }
+      assertValidDeregister(id)
     }
 
+    //Invalid GET /linksTo
     "return no links found to specified id" in {
       Get("/linksTo?Id=45") ~> routes ~> check {
         assert(status === StatusCodes.NOT_FOUND)
       }
     }
 
-    "add a generic label to the instance with the specified id" in {
+    //Valid POST /addLabel
+    "add a generic label to an instance is label and id are valid" in {
       Post("/addLabel?Id=0&Label=ElasticSearchDefaultLabel") ~> routes ~> check {
         assert(status === StatusCodes.OK)
         responseAs[String] shouldEqual "Successfully added label"
       }
     }
-    //NegativeTests
-    "fail to add label if the instance with specified id is not found, should fail to add a label is value is out of bound" in{
-      Post("/addLabel?Id=45&Label=Privat") ~> routes ~> check {
+
+    //Invalid POST /addLabel
+    "fail to add label if id is invalid or label too long" in{
+      //Unknown id - expect 404
+      Post("/addLabel?Id=45&Label=Private") ~> routes ~> check {
         assert(status === StatusCodes.NOT_FOUND)
         responseAs[String] shouldEqual "Cannot add label, id 45 not found."
-        println()
       }
-      val maximum = "Veryveryextralonglabelthatdoesnotworkswhileaddinglabel"
-      //val maximum1 = Registry.configuration.maxLabelLength+100
 
-      Post(s"/addLabel?Id=0&Label=$maximum") ~> routes ~> check {
+      val tooLongLabel = "VeryVeryExtraLongLabelThatDoesNotWorkWhileAddingLabel"
+      //Label out of bounds - expect 400
+      Post(s"/addLabel?Id=0&Label=$tooLongLabel") ~> routes ~> check {
         assert(status === StatusCodes.BAD_REQUEST)
-
+        responseAs[String].toLowerCase should include ("exceeds character limit")
       }
   }
+
   }
+  private def assertValidRegister(compType: ComponentType,
+                                  dockerId: Option[String] = Some("randomId"),
+                                  labels: List[String] = List("some_label")) : Long = {
+
+    val instanceString = Instance(id = None, host = "http://localhost", portNumber = 4242,
+      name = "ValidInstance", componentType = compType, dockerId = dockerId,
+      instanceState = InstanceState.Running, labels = labels, linksTo = List.empty, linksFrom = List.empty)
+      .toJson(instanceFormat).toString
+
+    Post("/register", HttpEntity(ContentTypes.`application/json`,
+      instanceString.stripMargin)) ~> Route.seal(routes) ~> check {
+      assert(status === StatusCodes.OK)
+      responseEntity match {
+        case HttpEntity.Strict(_, data) =>
+          val responseEntityString = data.utf8String
+          assert(Try(responseEntityString.toLong).isSuccess)
+          responseEntityString.toLong
+        case x =>
+          fail(s"Invalid response type $x")
+      }
+    }
+  }
+
+  private def assertValidDeregister(id: Long): Unit = {
+    Post(s"/deregister?Id=$id") ~> routes ~> check {
+      assert(status === StatusCodes.OK)
+      entityAs[String].toLowerCase should include("successfully removed instance")
+    }
+  }
+
+
 }
