@@ -28,3 +28,11 @@ lazy val registry = (project in file(".")).
     dockerBaseImage := "openjdk:jre-alpine"
   )
 
+libraryDependencies ++= List(
+  "com.typesafe.slick" %% "slick" % "3.2.1",
+  "com.typesafe.slick" %% "slick-hikaricp" % "3.2.1",
+  "com.typesafe.slick" %% "slick-codegen" % "3.2.1",
+  "mysql" % "mysql-connector-java" % "5.1.34"
+)
+
+trapExit := false
