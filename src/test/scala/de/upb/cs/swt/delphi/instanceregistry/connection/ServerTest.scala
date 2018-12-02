@@ -27,6 +27,7 @@ import org.scalatest.{Matchers, WordSpec}
 import de.upb.cs.swt.delphi.instanceregistry.connection.Server.routes
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.{Instance, InstanceJsonSupport, InstanceLink}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.{ComponentType, InstanceState}
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.LinkEnums.LinkState
 import spray.json._
 
 import scala.concurrent.duration.Duration
@@ -337,37 +338,37 @@ class ServerTest extends WordSpec with Matchers with  ScalatestRouteTest with In
       }
     }
     //PositiveTest
-    var id1 = -1L
-    var id2 = -2L
-
-    //Add a webapp instance for testing
-    Post("/register", HttpEntity(ContentTypes.`application/json`,
-      webappinstance.stripMargin)) ~> Route.seal(routes) ~> check {
-      assert(status === StatusCodes.OK)
-      responseEntity match {
-        case HttpEntity.Strict(_, data) =>
-          val responseEntityString = data.utf8String
-          assert(Try(responseEntityString.toLong).isSuccess)
-          id1 = responseEntityString.toLong
-        case x =>
-          fail(s"Invalid response type $x")
-      }
-    }
-    //Add a WebApi instance for testing
-    Post("/register", HttpEntity(ContentTypes.`application/json`,
-      webapiinstance.stripMargin)) ~> Route.seal(routes) ~> check {
-      assert(status === StatusCodes.OK)
-      responseEntity match {
-        case HttpEntity.Strict(_, data) =>
-          val responseEntityString = data.utf8String
-          assert(Try(responseEntityString.toLong).isSuccess)
-          id2 = responseEntityString.toLong
-        case x =>
-          fail(s"Invalid response type $x")
-      }
-    }
-
     "apply a matching result to the instance with the specified id" in {
+      var id1 = -1L
+      var id2 = -2L
+
+      //Add a webapp instance for testing
+      Post("/register", HttpEntity(ContentTypes.`application/json`,
+        webappinstance.stripMargin)) ~> Route.seal(routes) ~> check {
+        assert(status === StatusCodes.OK)
+        responseEntity match {
+          case HttpEntity.Strict(_, data) =>
+            val responseEntityString = data.utf8String
+            assert(Try(responseEntityString.toLong).isSuccess)
+            id1 = responseEntityString.toLong
+          case x =>
+            fail(s"Invalid response type $x")
+        }
+      }
+      //Add a WebApi instance for testing
+      Post("/register", HttpEntity(ContentTypes.`application/json`,
+        webapiinstance.stripMargin)) ~> Route.seal(routes) ~> check {
+        assert(status === StatusCodes.OK)
+        responseEntity match {
+          case HttpEntity.Strict(_, data) =>
+            val responseEntityString = data.utf8String
+            assert(Try(responseEntityString.toLong).isSuccess)
+            id2 = responseEntityString.toLong
+          case x =>
+            fail(s"Invalid response type $x")
+        }
+      }
+
       Post(s"/matchingResult?CallerId=$id1&MatchedInstanceId=$id2&MatchingSuccessful=1") ~> Route.seal(routes) ~> check {
         assert(status === StatusCodes.OK)
         responseAs[String] shouldEqual "Matching result true processed."
@@ -446,8 +447,11 @@ class ServerTest extends WordSpec with Matchers with  ScalatestRouteTest with In
 
       }
     }
+
+    //Valid getLinksFrom
     "get a list of links from the instance with the specified id" in {
       var id = -1L
+      //Register a crawler
       Post("/register", HttpEntity(ContentTypes.`application/json`,
         validJsonInstance.stripMargin)) ~> Route.seal(routes) ~> check {
         assert(status === StatusCodes.OK)
@@ -460,7 +464,8 @@ class ServerTest extends WordSpec with Matchers with  ScalatestRouteTest with In
             fail(s"Invalid response type $x")
         }
       }
-      Get(s"/matchingInstance?Id=$id&ComponentType=Crawler") ~> routes ~> check {
+      //Fake connection from crawler to default ES instance
+      Get(s"/matchingInstance?Id=$id&ComponentType=ElasticSearch") ~> routes ~> check {
         assert(status === StatusCodes.OK)
         Try(responseAs[String].parseJson.convertTo[Instance](instanceFormat)) match {
           case Success(esInstance) =>
@@ -470,24 +475,37 @@ class ServerTest extends WordSpec with Matchers with  ScalatestRouteTest with In
             fail(ex)
         }
       }
-
-      Get(s"/linksFrom?Id=0") ~> routes ~> check {
+      //Get links from crawler, should be one link to default ES instance
+      Get(s"/linksFrom?Id=$id") ~> routes ~> check {
         assert(status === StatusCodes.OK)
-        println(response)
+        Try(responseAs[String].parseJson.convertTo[List[InstanceLink]](listFormat(instanceLinkFormat))) match {
+          case Success(listOfLinks) =>
+            listOfLinks.size shouldEqual 1
+            val link = listOfLinks.head
+            link.idFrom shouldEqual id
+            link.idTo shouldEqual 0
+            link.linkState shouldEqual LinkState.Assigned
+          case Failure(ex) =>
+            fail(ex)
+        }
       }
-
+      //Deregister crawler to not pollute DB
       Post(s"/deregister?Id=$id") ~> routes ~> check {
         assert(status === StatusCodes.OK)
         entityAs[String].toLowerCase should include("successfully removed instance")
       }
     }
+
     "return no links found from specified id" in {
       Get("/linksFrom?Id=45") ~> routes ~> check {
         assert(status === StatusCodes.NOT_FOUND)
       }
     }
+
+    //Valid GET /linksTo
     "get a list of links to the instance with the specified id" in {
       var id = -1L
+      //Register a crawler
       Post("/register", HttpEntity(ContentTypes.`application/json`,
         validJsonInstance.stripMargin)) ~> Route.seal(routes) ~> check {
         assert(status === StatusCodes.OK)
@@ -500,7 +518,8 @@ class ServerTest extends WordSpec with Matchers with  ScalatestRouteTest with In
             fail(s"Invalid response type $x")
         }
       }
-      Get(s"/matchingInstance?Id=0&ComponentType=ElasticSearch") ~> routes ~> check {
+      //Fake connection from crawler to default ES instance
+      Get(s"/matchingInstance?Id=$id&ComponentType=ElasticSearch") ~> routes ~> check {
         assert(status === StatusCodes.OK)
         Try(responseAs[String].parseJson.convertTo[Instance](instanceFormat)) match {
           case Success(esInstance) =>
@@ -510,12 +529,21 @@ class ServerTest extends WordSpec with Matchers with  ScalatestRouteTest with In
             fail(ex)
         }
       }
-
-      Get(s"/linksto?Id=0") ~> routes ~> check {
+      //Get links to default ES instance, should be one link from crawler
+      Get(s"/linksTo?Id=0") ~> routes ~> check {
         assert(status === StatusCodes.OK)
-        println(response)
+        Try(responseAs[String].parseJson.convertTo[List[InstanceLink]](listFormat(instanceLinkFormat))) match {
+          case Success(listOfLinks) =>
+            listOfLinks.size shouldEqual 1
+            val link = listOfLinks.head
+            link.idFrom shouldEqual id
+            link.idTo shouldEqual 0
+            link.linkState shouldEqual LinkState.Assigned
+          case Failure(ex) =>
+            fail(ex)
+        }
       }
-
+      //Deregister crawler to not pollute DB
       Post(s"/deregister?Id=$id") ~> routes ~> check {
         assert(status === StatusCodes.OK)
         entityAs[String].toLowerCase should include("successfully removed instance")
