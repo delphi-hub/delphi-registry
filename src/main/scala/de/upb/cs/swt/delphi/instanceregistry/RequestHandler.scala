@@ -118,31 +118,31 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
     instanceDao.getEventsFor(id)
   }
 
-  def getMatchingInstanceOfType(callerId: Long, compType: ComponentType): Try[Instance] = {
+  def getMatchingInstanceOfType(callerId: Long, compType: ComponentType): (OperationResult.Value, Try[Instance]) = {
     log.info(s"Started matching: Instance with id $callerId is looking for instance of type $compType.")
     if(!instanceDao.hasInstance(callerId)){
       log.warning(s"Matching failed: No instance with id $callerId was found.")
-      Failure(new RuntimeException(s"Id $callerId not present."))
+      (OperationResult.IdUnknown, Failure(new RuntimeException(s"Id $callerId not present.")))
     } else {
       tryLinkMatching(callerId, compType) match {
         case Success(instance) =>
           log.info(s"Matching finished: First try yielded result $instance.")
-          Success(instance)
+          (OperationResult.Ok, Success(instance))
         case Failure(ex) =>
           log.warning(s"Matching pending: First try failed, message was ${ex.getMessage}")
           tryLabelMatching(callerId, compType) match {
             case Success(instance) =>
               log.info(s"Matching finished: Second try yielded result $instance.")
-              Success(instance)
+              (OperationResult.Ok, Success(instance))
             case Failure(ex2) =>
               log.warning(s"Matching pending: Second try failed, message was ${ex2.getMessage}")
               tryDefaultMatching(compType) match {
                 case Success(instance) =>
                   log.info(s"Matching finished: Default matching yielded result $instance.")
-                  Success(instance)
+                  (OperationResult.Ok, Success(instance))
                 case Failure(ex3) =>
                   log.warning(s"Matching failed: Default matching did not yield result, message was ${ex3.getMessage}.")
-                  Failure(ex3)
+                  (OperationResult.InternalError, Failure(ex3))
               }
           }
       }
