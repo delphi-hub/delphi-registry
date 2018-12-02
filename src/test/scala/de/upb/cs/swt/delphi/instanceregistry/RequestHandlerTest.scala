@@ -310,18 +310,18 @@ class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach 
     assert(handler.instanceDao.addInstance(buildInstance(id = 1, componentType = ComponentType.WebApp, labels = List("private"))).isSuccess)
 
     //No WebApi present, must fail
-    assert(handler.getMatchingInstanceOfType(callerId = 1, compType = ComponentType.WebApi).isFailure)
+    assert(handler.getMatchingInstanceOfType(callerId = 1, compType = ComponentType.WebApi)._2.isFailure)
 
     //Shared label with elastic search instance, still no WebApi present, must fail
     assert(handler.handleAddLabel(id = 0, label = "private") == handler.OperationResult.Ok)
-    assert(handler.getMatchingInstanceOfType(callerId = 1, compType = ComponentType.WebApi).isFailure)
+    assert(handler.getMatchingInstanceOfType(callerId = 1, compType = ComponentType.WebApi)._2.isFailure)
 
     //Try component type crawler: Must also fail
-    assert(handler.getMatchingInstanceOfType(callerId = 1, compType = ComponentType.Crawler).isFailure)
+    assert(handler.getMatchingInstanceOfType(callerId = 1, compType = ComponentType.Crawler)._2.isFailure)
 
     //Assign a link to an invalid type in the db. Must also fail
     assert(handler.instanceDao.addLink(InstanceLink(idFrom = 1, idTo = 0, linkState = LinkState.Assigned)).isSuccess)
-    assert(handler.getMatchingInstanceOfType(callerId = 1, compType = ComponentType.WebApi).isFailure)
+    assert(handler.getMatchingInstanceOfType(callerId = 1, compType = ComponentType.WebApi)._2.isFailure)
   }
 
   it must "rank assigned links higher than shared labels in matching" in {
@@ -332,13 +332,13 @@ class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach 
     assert(handler.instanceDao.addLink(InstanceLink(idFrom = 1, idTo = 2, linkState = LinkState.Assigned)).isSuccess)
 
     //Matching must yield the instance that was assigned!
-    val matching = handler.getMatchingInstanceOfType(callerId = 1, ComponentType.WebApi)
+    val matching = handler.getMatchingInstanceOfType(callerId = 1, ComponentType.WebApi)._2
     assert(matching.isSuccess)
     assert(matching.get.id.get == 2)
 
     //Now that link is outdated, shared labels "private" & "new" must be deciding factor!
     assert(handler.instanceDao.updateLink(InstanceLink(idFrom = 1, idTo = 2, linkState = LinkState.Outdated)).isSuccess)
-    val matching2 = handler.getMatchingInstanceOfType(callerId = 1, ComponentType.WebApi)
+    val matching2 = handler.getMatchingInstanceOfType(callerId = 1, ComponentType.WebApi)._2
     assert(matching2.isSuccess)
     assert(matching2.get.id.get == 3)
   }
@@ -363,7 +363,7 @@ class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach 
     assert(handler.handleMatchingResult(callerId = 0, matchedInstanceId = 1, matchingSuccess = true) == handler.OperationResult.Ok)
     assert(handler.handleMatchingResult(callerId = 0, matchedInstanceId = 1, matchingSuccess = false) == handler.OperationResult.Ok)
 
-    val matchingInstance = handler.getMatchingInstanceOfType(callerId = 2, ComponentType.ElasticSearch)
+    val matchingInstance = handler.getMatchingInstanceOfType(callerId = 2, ComponentType.ElasticSearch)._2
     assert(matchingInstance.isSuccess)
     assert(matchingInstance.get.id.get == 0)
 

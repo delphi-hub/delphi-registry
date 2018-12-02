@@ -263,20 +263,42 @@ class ServerTest
     //Invalid GET /matchingInstance
     "return bad request when ComponentType is Invalid, Component is not found and Method not allowed" in {
 
+      val webApiId = assertValidRegister(ComponentType.WebApi)
+      val crawlerId = assertValidRegister(ComponentType.Crawler)
+      val webAppId = assertValidRegister(ComponentType.WebApp)
+
       //Invalid ComponentType
-      Get("/matchingInstance?Id=0&ComponentType=Search") ~> Route.seal(routes) ~> check {
+      Get(s"/matchingInstance?Id=$webApiId&ComponentType=Search") ~> Route.seal(routes) ~> check {
         assert(status === StatusCodes.BAD_REQUEST)
       }
 
-      //No component of requested type present, expect 404
+      //Unknown callee id, expect 404
       Get("/matchingInstance?Id=45&ComponentType=Crawler") ~> Route.seal(routes) ~> check {
         assert(status === StatusCodes.NOT_FOUND)
+        responseAs[String].toLowerCase should include ("id 45 was not found")
       }
+
       //Method Not allowed
-      Post("/matchingInstance?Id=45&ComponentType=ElasticSearch") ~> Route.seal(routes) ~> check {
+      Post(s"/matchingInstance?Id=$webApiId&ComponentType=ElasticSearch") ~> Route.seal(routes) ~> check {
         assert(status === StatusCodes.METHOD_NOT_ALLOWED)
         responseAs[String] shouldEqual "HTTP method not allowed, supported methods: GET"
       }
+
+      //Incompatible types, api asks for crawler - expect 400
+      Get(s"/matchingInstance?Id=$webApiId&ComponentType=Crawler") ~> Route.seal(routes) ~> check {
+        assert(status === StatusCodes.BAD_REQUEST)
+        responseAs[String].toLowerCase should include ("invalid dependency type")
+      }
+
+      //No instance of desired type present - expect 404
+      assertValidDeregister(webApiId)
+      Get(s"/matchingInstance?Id=$webAppId&ComponentType=WebApi") ~> Route.seal(routes) ~> check {
+        assert(status === StatusCodes.NOT_FOUND)
+        responseAs[String].toLowerCase should include ("could not find matching instance")
+      }
+
+      assertValidDeregister(webAppId)
+      assertValidDeregister(crawlerId)
 
     }
 
