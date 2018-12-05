@@ -34,34 +34,23 @@ class DatabaseInstanceDAO (configuration : Configuration) extends InstanceDAO wi
 
   val db = Database.forURL(configuration.databaseHost + configuration.databaseName, driver = configuration.databaseDriver, user = configuration.databaseUsername, password = configuration.databasePassword)
 
-  override def addInstance(instance : Instance) : Try[Unit] = {
-    //Verify ID is present in instance
-    if(instance.id.isEmpty){
-      val msg = s"Cannot add instance ${instance.name}, id is empty!"
-      log.warning(msg)
-      Failure(new RuntimeException(msg))
-    } else {
-      if(!hasInstance(instance.id.get)){
-        val id = instance.id.get
-        val host = instance.host
-        val port = instance.portNumber
-        val name = instance.name
-        val componentType = instance.componentType.toString
-        val dockerId = instance.dockerId.getOrElse("")
-        val instanceState = instance.instanceState.toString
-        val labels = getListAsString(instance.labels)
+  override def addInstance(instance : Instance) : Try[Long] = {
 
-        val addFuture: Future[Long] = db.run((instances returning instances.map(_.id)) += (id, host, port, name, componentType, dockerId, instanceState, labels))
-        val instanceId = Await.result(addFuture, Duration.Inf)
+    val id = 0L //Will be set by DB
+    val host = instance.host
+    val port = instance.portNumber
+    val name = instance.name
+    val componentType = instance.componentType.toString
+    val dockerId = instance.dockerId.getOrElse("")
+    val instanceState = instance.instanceState.toString
+    val labels = getListAsString(instance.labels)
 
-        dumpToRecoveryFile()
-        Success(log.info(s"Added instance ${instance.name} with id ${instanceId} to database."))
-      } else {
-        val msg = s"Cannot add instance ${instance.name}, id ${instance.id} already present."
-        log.warning(msg)
-        Failure(new RuntimeException(msg))
-      }
-    }
+    val addFuture: Future[Long] = db.run((instances returning instances.map(_.id)) += (id, host, port, name, componentType, dockerId, instanceState, labels))
+    val instanceId = Await.result(addFuture, Duration.Inf)
+
+    dumpToRecoveryFile()
+    log.info(s"Added instance ${instance.name} with id $instanceId to database.")
+    Success(instanceId)
   }
 
   override def hasInstance(id: Long) : Boolean = {
@@ -89,6 +78,22 @@ class DatabaseInstanceDAO (configuration : Configuration) extends InstanceDAO wi
       Some(dataToObjectInstance(result))
     } else {
       None
+    }
+  }
+
+  override def updateInstance(instance: Instance) : Try[Unit] = {
+    if(hasInstance(instance.id.get)){
+
+      val host = instance.host
+      val port = instance.portNumber
+      val dockerId = instance.dockerId.getOrElse("")
+      val instanceState = instance.instanceState.toString
+
+      val q = for {i <- instances if i.id === instance.id.get} yield (i.host, i.portNumber, i.dockerId, i.instanceState)
+      Await.result(db.run(q.update(host, port, dockerId, instanceState)), Duration.Inf)
+      Success()
+    } else {
+      Failure(new RuntimeException(s"Id ${instance.id.get} not found."))
     }
   }
 
@@ -160,7 +165,7 @@ class DatabaseInstanceDAO (configuration : Configuration) extends InstanceDAO wi
         val createAction = existing.flatMap( v => {
           val names = v.map(mt => mt.name.name)
           val createIfNotExist = tables.filter( table =>
-            (!names.contains(table.baseTableRow.tableName))).map(_.schema.create)
+            !names.contains(table.baseTableRow.tableName)).map(_.schema.create)
           db.run(DBIO.sequence(createIfNotExist))
         })
         Await.result(createAction, Duration.Inf)
@@ -202,19 +207,8 @@ class DatabaseInstanceDAO (configuration : Configuration) extends InstanceDAO wi
 
   override def setStateFor(id: Long, state: InstanceState.Value) : Try[Unit] = {
     if(hasInstance(id)){
-      val instance = getInstance(id).get
-      val newInstance = Instance(instance.id,
-        instance.host,
-        instance.portNumber,
-        instance.name,
-        instance.componentType,
-        instance.dockerId,
-        state,
-        instance.labels,
-        instance.linksTo,
-        instance.linksFrom)
-      removeInstancesWithId(instance.id.get)
-      addInstance(newInstance)
+      val query = for { i <- instances if i.id === id } yield i.instanceState
+      Await.ready(db.run(query.update(state.toString)), Duration.Inf)
       Success()
     } else {
       Failure(new RuntimeException(s"Instance with id $id was not found."))
@@ -306,17 +300,9 @@ class DatabaseInstanceDAO (configuration : Configuration) extends InstanceDAO wi
   }
 
   override def updateLink(link: InstanceLink) : Try[Unit] = {
-    val linksMatching = Await.result(db.run(instanceLinks.filter( x => x.idFrom === link.idFrom && x.idTo === link.idTo).result), Duration.Inf)
-
-    if(linksMatching.nonEmpty){
-      for(l <- linksMatching){
-        removeInstanceLinksWithId(l._1)
-        addLinkFromInstanceLink(dataToObjectInstanceLinks(l._2, l._3, l._4))
-      }
-      Success()
-    } else {
-      Failure(new RuntimeException(s"Cannot update link $link, this link is not present in the dao."))
-    }
+    val query = for {l <- instanceLinks if l.idFrom === link.idFrom && l.idTo === link.idTo} yield l.linkState
+    Await.result(db.run(query.update(link.linkState.toString)), Duration.Inf)
+    Success()
   }
 
 

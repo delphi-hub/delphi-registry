@@ -10,7 +10,7 @@ import de.upb.cs.swt.delphi.instanceregistry.Docker.{ContainerAlreadyStoppedExce
 import akka.stream.scaladsl.{Keep, Sink, Source}
 import akka.stream.{ActorMaterializer, Materializer, OverflowStrategy}
 import de.upb.cs.swt.delphi.instanceregistry.connection.RestClient
-import de.upb.cs.swt.delphi.instanceregistry.daos.{DatabaseInstanceDAO, DynamicInstanceDAO, InstanceDAO}
+import de.upb.cs.swt.delphi.instanceregistry.daos.{DatabaseInstanceDAO, InstanceDAO}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.{ComponentType, InstanceState}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.LinkEnums.LinkState
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model._
@@ -67,20 +67,18 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
     * @return Newly assigned ID if successful
     */
   def handleRegister(instance: Instance): Try[Long] = {
-    val newID = generateNextId()
 
-    log.info(s"Assigned new id $newID to registering instance with name ${instance.name}.")
-
-    val newInstance = Instance(id = Some(newID), name = instance.name, host = instance.host,
+    val noIdInstance = Instance(id = None, name = instance.name, host = instance.host,
       portNumber = instance.portNumber, componentType = instance.componentType,
       dockerId = None, instanceState = InstanceState.Running, labels = instance.labels,
       linksTo = List.empty[InstanceLink], linksFrom = List.empty[InstanceLink])
 
-    instanceDao.addInstance(newInstance) match {
-      case Success(_) =>
-        fireNumbersChangedEvent(newInstance.componentType)
-        fireInstanceAddedEvent(newInstance)
-        Success(newID)
+    instanceDao.addInstance(noIdInstance) match {
+      case Success(id) =>
+        fireNumbersChangedEvent(instanceDao.getInstance(id).get.componentType)
+        fireInstanceAddedEvent(instanceDao.getInstance(id).get)
+        log.info(s"Assigned new id $id to registering instance with name ${instance.name}.")
+        Success(id)
       case Failure(x) => Failure(x)
     }
   }
@@ -243,48 +241,66 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
   }
 
   def handleDeploy(componentType: ComponentType, name: Option[String]): Try[Long] = {
-    val newId = generateNextId()
-
     log.info(s"Deploying container of type $componentType")
+    val instance = Instance(None,
+      "",
+      -1L,
+      name.getOrElse(s"Generic $componentType"),
+      componentType,
+      None,
+      InstanceState.Deploying,
+      List.empty[String],
+      List.empty[InstanceLink],
+      List.empty[InstanceLink]
+    )
 
-    implicit val timeout: Timeout = configuration.dockerOperationTimeout
+    instanceDao.addInstance(instance) match {
+      case Success(id) =>
+        implicit val timeout: Timeout = configuration.dockerOperationTimeout
 
-    val future: Future[Any] = dockerActor ? create(componentType, newId)
-    val deployResult = Await.result(future, timeout.duration).asInstanceOf[Try[(String, String, Int)]]
+        val future: Future[Any] = dockerActor ? create(componentType, id)
+        val deployResult = Await.result(future, timeout.duration).asInstanceOf[Try[(String, String, Int)]]
 
-    deployResult match {
-      case Failure(ex) =>
-        log.error(s"Failed to deploy container, docker host not reachable.")
-        fireDockerOperationErrorEvent(None, s"Deploy failed with message: ${ex.getMessage}")
-        Failure(new RuntimeException(s"Failed to deploy container, docker host not reachable (${ex.getMessage})."))
-      case Success((dockerId, host, port)) =>
-        val normalizedHost = host.substring(1,host.length - 1)
-        log.info(s"Deployed new container with id $dockerId, host $normalizedHost and port $port.")
+        deployResult match {
+          case Failure(ex) =>
+            log.error(s"Failed to deploy container, docker host not reachable.")
+            instanceDao.removeInstance(id)
+            fireDockerOperationErrorEvent(None, s"Deploy failed with message: ${ex.getMessage}")
+            Failure(new RuntimeException(s"Failed to deploy container, docker host not reachable (${ex.getMessage})."))
+          case Success((dockerId, host, port)) =>
+            val normalizedHost = host.substring(1, host.length - 1)
+            log.info(s"Deployed new container with id $dockerId, host $normalizedHost and port $port.")
 
-        val newInstance = Instance(Some(newId),
-          normalizedHost,
-          port,
-          name.getOrElse(s"Generic $componentType"),
-          componentType,
-          Some(dockerId),
-          InstanceState.Deploying,
-          List.empty[String],
-          List.empty[InstanceLink],
-          List.empty[InstanceLink]
-        )
-        log.info(s"Registering instance $newInstance....")
+            val newInstance = Instance(Some(id),
+              normalizedHost,
+              port,
+              name.getOrElse(s"Generic $componentType"),
+              componentType,
+              Some(dockerId),
+              InstanceState.Deploying,
+              List.empty[String],
+              List.empty[InstanceLink],
+              List.empty[InstanceLink]
+            )
 
-        instanceDao.addInstance(newInstance) match {
-          case Success(_) =>
-            log.info("Successfully registered.")
-            fireInstanceAddedEvent(newInstance)
-            fireNumbersChangedEvent(newInstance.componentType)
-            Success(newId)
-          case Failure(x) =>
-            log.info(s"Failed to register. Exception: $x")
-            Failure(x)
+            instanceDao.updateInstance(newInstance) match {
+              case Success(_) =>
+                log.info("Successfully registered.")
+                fireInstanceAddedEvent(newInstance)
+                fireNumbersChangedEvent(newInstance.componentType)
+                Success(id)
+              case Failure(x) =>
+                log.info(s"Failed to register. Exception: $x")
+                Failure(x)
+            }
         }
     }
+
+
+
+
+
+
   }
 
   /** *
@@ -952,14 +968,6 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
       count
     }
 
-  }
-
-  private def generateNextId(): Long = {
-    if (instanceDao.allInstances().isEmpty) {
-      0L
-    } else {
-      (instanceDao.allInstances().map(i => i.id.getOrElse(0L)) max) + 1L
-    }
   }
 
   private def assignmentAllowed(instanceType: ComponentType) : Boolean = {
