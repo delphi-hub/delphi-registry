@@ -13,7 +13,7 @@ import slick.lifted.TableQuery
 
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
-import slick.jdbc.H2Profile.api._
+import slick.jdbc.MySQLProfile.api._
 import slick.jdbc.meta.MTable
 import spray.json._
 
