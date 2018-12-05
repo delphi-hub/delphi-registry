@@ -8,7 +8,7 @@ class Instances(tag: Tag) extends Table[(Long, String, Long, String, String, Str
   def portNumber = column[Long]("portNumber", NotNull)
   def name = column[String]("name", O.Length(50), NotNull)
   def componentType = column[String]("componentType", O.Length(50), NotNull)
-  def dockerId = column[String]("dockerId", O.Length(50), NotNull)
+  def dockerId = column[String]("dockerId", O.Length(200), NotNull)
 
   def instanceState = column[String]("instanceState", O.Length(50), NotNull)
   def labels = column[String]("labels", O.Length(100), NotNull)
