@@ -30,7 +30,7 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
 
   private[instanceregistry] val instanceDao: InstanceDAO = new DynamicInstanceDAO(configuration)
 
-  val (eventActor, eventPublisher) = Source.actorRef[RegistryEvent](0, OverflowStrategy.dropNew)
+  val (eventActor, eventPublisher) = Source.actorRef[RegistryEvent](10, OverflowStrategy.dropNew)
     .toMat(Sink.asPublisher(fanout = true))(Keep.both)
     .run()
   val dockerActor: ActorRef = system.actorOf(DockerActor.props(connection))
@@ -118,31 +118,31 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
     instanceDao.getEventsFor(id)
   }
 
-  def getMatchingInstanceOfType(callerId: Long, compType: ComponentType): Try[Instance] = {
+  def getMatchingInstanceOfType(callerId: Long, compType: ComponentType): (OperationResult.Value, Try[Instance]) = {
     log.info(s"Started matching: Instance with id $callerId is looking for instance of type $compType.")
     if(!instanceDao.hasInstance(callerId)){
       log.warning(s"Matching failed: No instance with id $callerId was found.")
-      Failure(new RuntimeException(s"Id $callerId not present."))
+      (OperationResult.IdUnknown, Failure(new RuntimeException(s"Id $callerId not present.")))
     } else {
       tryLinkMatching(callerId, compType) match {
         case Success(instance) =>
           log.info(s"Matching finished: First try yielded result $instance.")
-          Success(instance)
+          (OperationResult.Ok, Success(instance))
         case Failure(ex) =>
           log.warning(s"Matching pending: First try failed, message was ${ex.getMessage}")
           tryLabelMatching(callerId, compType) match {
             case Success(instance) =>
               log.info(s"Matching finished: Second try yielded result $instance.")
-              Success(instance)
+              (OperationResult.Ok, Success(instance))
             case Failure(ex2) =>
               log.warning(s"Matching pending: Second try failed, message was ${ex2.getMessage}")
               tryDefaultMatching(compType) match {
                 case Success(instance) =>
                   log.info(s"Matching finished: Default matching yielded result $instance.")
-                  Success(instance)
+                  (OperationResult.Ok, Success(instance))
                 case Failure(ex3) =>
                   log.warning(s"Matching failed: Default matching did not yield result, message was ${ex3.getMessage}.")
-                  Failure(ex3)
+                  (OperationResult.InternalError, Failure(ex3))
               }
           }
       }
@@ -498,7 +498,7 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
       (dockerActor ? stop(instance.dockerId.get)).map{
         _ => log.info(s"Instance $id stopped.")
           instanceDao.setStateFor(instance.id.get, InstanceState.Stopped)
-          fireStateChangedEvent(instance)
+          fireStateChangedEvent(instanceDao.getInstance(instance.id.get).get)
       }.recover {
         case atx: AskTimeoutException => //Timeout: Most likely operation will be completed in the background, so update state anyway
           log.warning(s"Ask timed out with timeout $timeout. Message was ${atx.getMessage}")
@@ -920,7 +920,11 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
   }
 
   private def fireLinkAddedEvent(link: InstanceLink): Unit = {
-    val event = RegistryEventFactory.createLinkAddedEvent(link)
+    val instanceFrom = instanceDao.getInstance(link.idFrom).get
+    val instanceTo = instanceDao.getInstance(link.idTo).get
+
+    val event = RegistryEventFactory.createLinkAddedEvent(link, instanceFrom, instanceTo)
+
     eventActor ! event
 
     instanceDao.addEventFor(link.idFrom, event)
@@ -928,7 +932,11 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
   }
 
   private def fireLinkStateChangedEvent(link: InstanceLink): Unit = {
-    val event = RegistryEventFactory.createLinkStateChangedEvent(link)
+    val instanceFrom = instanceDao.getInstance(link.idFrom).get
+    val instanceTo = instanceDao.getInstance(link.idTo).get
+
+    val event = RegistryEventFactory.createLinkStateChangedEvent(link, instanceFrom, instanceTo)
+
     eventActor ! event
 
     instanceDao.addEventFor(link.idFrom, event)
