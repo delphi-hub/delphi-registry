@@ -30,7 +30,7 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
 
   private[instanceregistry] val instanceDao: InstanceDAO = new DynamicInstanceDAO(configuration)
 
-  val (eventActor, eventPublisher) = Source.actorRef[RegistryEvent](0, OverflowStrategy.dropNew)
+  val (eventActor, eventPublisher) = Source.actorRef[RegistryEvent](10, OverflowStrategy.dropNew)
     .toMat(Sink.asPublisher(fanout = true))(Keep.both)
     .run()
   val dockerActor: ActorRef = system.actorOf(DockerActor.props(connection))
@@ -498,7 +498,7 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
       (dockerActor ? stop(instance.dockerId.get)).map{
         _ => log.info(s"Instance $id stopped.")
           instanceDao.setStateFor(instance.id.get, InstanceState.Stopped)
-          fireStateChangedEvent(instance)
+          fireStateChangedEvent(instanceDao.getInstance(instance.id.get).get)
       }.recover {
         case atx: AskTimeoutException => //Timeout: Most likely operation will be completed in the background, so update state anyway
           log.warning(s"Ask timed out with timeout $timeout. Message was ${atx.getMessage}")
@@ -920,7 +920,11 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
   }
 
   private def fireLinkAddedEvent(link: InstanceLink): Unit = {
-    val event = RegistryEventFactory.createLinkAddedEvent(link)
+    val instanceFrom = instanceDao.getInstance(link.idFrom).get
+    val instanceTo = instanceDao.getInstance(link.idTo).get
+
+    val event = RegistryEventFactory.createLinkAddedEvent(link, instanceFrom, instanceTo)
+
     eventActor ! event
 
     instanceDao.addEventFor(link.idFrom, event)
@@ -928,7 +932,11 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
   }
 
   private def fireLinkStateChangedEvent(link: InstanceLink): Unit = {
-    val event = RegistryEventFactory.createLinkStateChangedEvent(link)
+    val instanceFrom = instanceDao.getInstance(link.idFrom).get
+    val instanceTo = instanceDao.getInstance(link.idTo).get
+
+    val event = RegistryEventFactory.createLinkStateChangedEvent(link, instanceFrom, instanceTo)
+
     eventActor ! event
 
     instanceDao.addEventFor(link.idFrom, event)
