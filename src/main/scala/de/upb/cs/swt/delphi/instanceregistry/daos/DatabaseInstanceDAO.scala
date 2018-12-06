@@ -1,7 +1,5 @@
 package de.upb.cs.swt.delphi.instanceregistry.daos
 
-import java.io.{File, IOException, PrintWriter}
-
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.EventEnums.EventType
@@ -18,7 +16,6 @@ import slick.jdbc.meta.MTable
 import spray.json._
 
 import scala.concurrent.duration.Duration
-import scala.io.Source
 
 
 class DatabaseInstanceDAO (configuration : Configuration) extends InstanceDAO with AppLogging with InstanceJsonSupport with EventJsonSupport{
@@ -27,6 +24,7 @@ class DatabaseInstanceDAO (configuration : Configuration) extends InstanceDAO wi
   private val instanceMatchingResults : TableQuery[InstanceMatchingResults] = TableQuery[InstanceMatchingResults]
   private val instanceEvents : TableQuery[InstanceEvents] = TableQuery[InstanceEvents]
   private val instanceLinks : TableQuery[InstanceLinks] = TableQuery[InstanceLinks]
+  private val eventMaps : TableQuery[EventMaps] = TableQuery[EventMaps]
 
   implicit val system : ActorSystem = Registry.system
   implicit val materializer : ActorMaterializer = ActorMaterializer()
@@ -41,14 +39,13 @@ class DatabaseInstanceDAO (configuration : Configuration) extends InstanceDAO wi
     val port = instance.portNumber
     val name = instance.name
     val componentType = instance.componentType.toString
-    val dockerId = instance.dockerId.getOrElse("")
+    val dockerId = instance.dockerId
     val instanceState = instance.instanceState.toString
     val labels = getListAsString(instance.labels)
 
     val addFuture: Future[Long] = db.run((instances returning instances.map(_.id)) += (id, host, port, name, componentType, dockerId, instanceState, labels))
     val instanceId = Await.result(addFuture, Duration.Inf)
 
-    dumpToRecoveryFile()
     log.info(s"Added instance ${instance.name} with id $instanceId to database.")
     Success(instanceId)
   }
@@ -61,9 +58,8 @@ class DatabaseInstanceDAO (configuration : Configuration) extends InstanceDAO wi
     if(hasInstance(id)) {
       removeInstancesWithId(id)
       removeInstanceMatchingResultsWithId(id)
-      removeinstanceEventsWithId(id)
+      removeInstanceEventsWithId(id)
       removeInstanceLinksWithId(id)
-      dumpToRecoveryFile()
       Success(log.info(s"Successfully removed instance with id $id."))
     }else{
       val msg = s"Cannot remove instance with id $id, that id is not present."
@@ -83,10 +79,9 @@ class DatabaseInstanceDAO (configuration : Configuration) extends InstanceDAO wi
 
   override def updateInstance(instance: Instance) : Try[Unit] = {
     if(hasInstance(instance.id.get)){
-
       val host = instance.host
       val port = instance.portNumber
-      val dockerId = instance.dockerId.getOrElse("")
+      val dockerId = instance.dockerId
       val instanceState = instance.instanceState.toString
 
       val q = for {i <- instances if i.id === instance.id.get} yield (i.host, i.portNumber, i.dockerId, i.instanceState)
@@ -128,7 +123,6 @@ class DatabaseInstanceDAO (configuration : Configuration) extends InstanceDAO wi
     removeAllInstanceMatchingResults()
     removeAllInstanceEvents()
     removeAllInstanceLinks()
-    dumpToRecoveryFile()
   }
 
   override def addMatchingResult(id: Long, matchingSuccessful : Boolean) : Try[Unit] = {
@@ -145,7 +139,6 @@ class DatabaseInstanceDAO (configuration : Configuration) extends InstanceDAO wi
     }
   }
 
-
   override def getMatchingResultsFor(id: Long) : Try[List[Boolean]] = {
     if(hasInstance(id) && hasMatchingResultForInstance(id)){
       val query = instanceMatchingResults.filter(_.instanceId === id).map(_.matchingSuccessful).result
@@ -160,7 +153,7 @@ class DatabaseInstanceDAO (configuration : Configuration) extends InstanceDAO wi
   override def initialize() : Unit = {
 
     if(dbTest()){
-        val tables = List(instances, instanceEvents, instanceLinks, instanceMatchingResults)
+        val tables = List(instances, instanceEvents, instanceLinks, instanceMatchingResults, eventMaps)
         val existing = db.run(MTable.getTables)
         val createAction = existing.flatMap( v => {
           val names = v.map(mt => mt.name.name)
@@ -190,7 +183,6 @@ class DatabaseInstanceDAO (configuration : Configuration) extends InstanceDAO wi
   override def shutdown(): Unit = {
     log.info("Shutting down dynamic instance DAO...")
     clearData()
-    deleteRecoveryFile()
     log.info("Shutdown complete.")
   }
 
@@ -245,11 +237,10 @@ class DatabaseInstanceDAO (configuration : Configuration) extends InstanceDAO wi
     val payload = event.payload.toJson(registryEventPayloadFormat).toString
 
     if(hasInstance(id)){
-      val addAction: DBIO[Unit] = DBIO.seq(
-        instanceEvents.map(c => (c.instanceId, c.eventType, c.payload))
-          += (id, event.eventType.toString, payload)
-      )
-      db.run(addAction)
+      val addEvent: Future[Long] = db.run(instanceEvents.map(c => (c.eventType, c.payload)) returning instanceEvents.map(_.id)  += (event.eventType.toString, payload))
+      val eventId = Await.result(addEvent, Duration.Inf)
+      db.run(eventMaps.map(c => (c.instanceId, c.eventId)) += (id, eventId))
+
       Success()
     } else {
       Failure(new RuntimeException(s"Instance with id $id was not found."))
@@ -259,9 +250,10 @@ class DatabaseInstanceDAO (configuration : Configuration) extends InstanceDAO wi
 
   override def getEventsFor(id: Long) : Try[List[RegistryEvent]] = {
     if(hasInstance(id) && hasInstanceEvents(id)){
-      val resultAll = Await.result(db.run(instanceEvents.filter(_.instanceId === id).result), Duration.Inf)
+      val eventMapIds = eventMaps.filter(_.instanceId === id).map(_.eventId)
+      val resultAll = Await.result(db.run(instanceEvents.filter(_.id in eventMapIds).result), Duration.Inf)
       val listAll = List() ++ resultAll.map(_.value)
-      val listInstance = listAll.map(c => dataToObjectRegistryEvent(c._3, c._4))
+      val listInstance = listAll.map(c => dataToObjectRegistryEvent(c._2, c._3))
       Success(listInstance)
     } else {
       log.warning(s"Cannot get events, id $id not present!")
@@ -364,56 +356,6 @@ class DatabaseInstanceDAO (configuration : Configuration) extends InstanceDAO wi
     removeAllInstanceLinks()
   }
 
-  private[daos] def dumpToRecoveryFile() : Unit = {
-    log.debug(s"Dumping data to recovery file ${configuration.recoveryFileName} ...")
-    val writer = new PrintWriter(new File(configuration.recoveryFileName))
-    writer.write(allInstances().toJson(listFormat(instanceFormat)).toString())
-    writer.flush()
-    writer.close()
-    log.debug(s"Successfully wrote to recovery file.")
-  }
-
-  private[daos] def deleteRecoveryFile() : Unit = {
-    log.info("Deleting data recovery file...")
-    if(new File(configuration.recoveryFileName).delete()){
-      log.info(s"Successfully deleted data recovery file ${configuration.recoveryFileName}.")
-    } else {
-      log.warning(s"Failed to delete data recovery file ${configuration.recoveryFileName}.")
-    }
-  }
-
-  private[daos] def tryInitFromRecoveryFile() : Unit = {
-    try {
-      log.info(s"Attempting to load data from recovery file ${configuration.recoveryFileName} ...")
-      val recoveryFileContent = Source.fromFile(configuration.recoveryFileName).getLines()
-
-      if(!recoveryFileContent.hasNext){
-        log.warning(s"Recovery file invalid, more than one line found.")
-        throw new IOException("Recovery file invalid.")
-      }
-
-      val jsonString : String = recoveryFileContent.next()
-
-      val instanceList = jsonString.parseJson.convertTo[List[Instance]](listFormat(instanceFormat))
-
-      log.info(s"Successfully loaded ${instanceList.size} instance from recovery file. Initializing...")
-
-      clearData()
-      for(instance <- instanceList){
-        addInstance(instance)
-      }
-
-      log.info(s"Successfully initialized from recovery file.")
-
-    } catch  {
-      case _ : IOException =>
-        log.info(s"Recovery file ${configuration.recoveryFileName} not found, so no data will be loaded.")
-      case dx : DeserializationException =>
-        log.error(dx, "An error occurred while deserializing the contents of the recovery file.")
-    }
-
-  }
-
   private def getComponetTypeFromString(componentType: String): ComponentType ={
     val result = componentType match {
       case "Crawler" => ComponentType.Crawler
@@ -466,14 +408,14 @@ class DatabaseInstanceDAO (configuration : Configuration) extends InstanceDAO wi
     listItems.split(",").toList
   }
 
-  private def dataToObjectInstance(options : Option[(Long, String, Long, String, String, String, String, String)]): Instance = {
+  private def dataToObjectInstance(options : Option[(Long, String, Long, String, String, Option[String], String, String)]): Instance = {
     val optionValue = options.get
     val componentTypeObj = getComponetTypeFromString(optionValue._5)
     val instanceStateObj = getInstanceStateFromString(optionValue._7)
     val labelsList = getListFromString(optionValue._8)
     val linksTo = getLinksTo(optionValue._1)
     val LinksFrom = getLinksFrom(optionValue._1)
-    Instance.apply(Option(optionValue._1), optionValue._2, optionValue._3, optionValue._4, componentTypeObj, Option(optionValue._6), instanceStateObj, labelsList, linksTo, LinksFrom)
+    Instance.apply(Option(optionValue._1), optionValue._2, optionValue._3, optionValue._4, componentTypeObj, optionValue._6, instanceStateObj, labelsList, linksTo, LinksFrom)
   }
 
   private def removeInstancesWithId(id: Long): Unit ={
@@ -488,8 +430,11 @@ class DatabaseInstanceDAO (configuration : Configuration) extends InstanceDAO wi
     db.run(action)
   }
 
-  private def removeinstanceEventsWithId(id: Long): Unit ={
-    val q = instanceEvents.filter(_.instanceId === id)
+  private def removeInstanceEventsWithId(id: Long): Unit ={
+    val resultAll = Await.result(db.run(eventMaps.filter(_.instanceId === id).result), Duration.Inf)
+    resultAll.map(c => removeEvents(c._3))
+
+    val q = eventMaps.filter(_.instanceId === id)
     val action = q.delete
     db.run(action)
   }
@@ -511,8 +456,11 @@ class DatabaseInstanceDAO (configuration : Configuration) extends InstanceDAO wi
   }
 
   private def removeAllInstanceEvents() : Unit ={
-    val action = instanceEvents.delete
-    db.run(action)
+    val deleteInstanceEvents = instanceEvents.delete
+    db.run(deleteInstanceEvents)
+
+    val deleteEventMaps = eventMaps.delete
+    db.run(deleteEventMaps)
   }
 
   private def removeAllInstanceLinks() : Unit ={
@@ -525,19 +473,24 @@ class DatabaseInstanceDAO (configuration : Configuration) extends InstanceDAO wi
   }
 
   private def hasInstanceEvents(id: Long) : Boolean = {
-    Await.result(db.run(instanceEvents.filter(_.instanceId === id).exists.result), Duration.Inf)
+    Await.result(db.run(eventMaps.filter(_.instanceId === id).exists.result), Duration.Inf)
   }
 
   private def dataToObjectRegistryEvent(eventType: String, payload: String): RegistryEvent = {
     RegistryEvent.apply(getEventTypeFromString(eventType), registryEventPayloadFormat.read(payload.parseJson))
   }
 
+  private def removeEvents(id: Long): Unit = {
+    val q = instanceEvents.filter(_.id === id)
+    val action = q.delete
+    db.run(action)
+  }
 
   def dbTest(): Boolean = {
     try {
       db.createSession.conn.isValid(5)
     } catch {
-      case e: Throwable => false
+      case e: Throwable => throw e
     }
   }
 
