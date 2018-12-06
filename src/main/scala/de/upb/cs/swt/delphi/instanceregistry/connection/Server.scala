@@ -72,7 +72,7 @@ object Server extends HttpApp
     */
   def register(InstanceString: String) : server.Route = Route.seal {
 
-    authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuth) { token =>
+    authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = "component")) { token =>
 
       post
       {

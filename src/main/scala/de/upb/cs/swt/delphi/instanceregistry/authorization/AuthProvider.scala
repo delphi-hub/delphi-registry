@@ -39,6 +39,19 @@ object AuthProvider extends AppLogging {
     }
   }
 
+  def authenticateOAuthRequire(credentials: Credentials, userType: String = "admin", scope: String = "registry.w") : Option[AccessToken] = {
+    authenticateOAuth(credentials) match {
+      case Some(token) =>
+        if(token.scope.contains(scope) && token.userType.equals(userType)){
+          Some(token)
+        } else {
+          log.warning(s"Rejecting token because required user type $userType and / or required scope $scope are not present")
+          None
+        }
+      case _ => None
+    }
+  }
+
   private def parsePayload(jwtPayload: String) : Try[AccessToken] = {
     Try[AccessToken] {
       val token = jwtPayload.parseJson.asJsObject
