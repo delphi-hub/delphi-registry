@@ -95,7 +95,7 @@ trait EventJsonSupport extends SprayJsonSupport with DefaultJsonProtocol with In
 
   //JSON format for an InstanceLinkPayload
   implicit val instanceLinkPayloadFormat: JsonFormat[InstanceLinkPayload] =
-    jsonFormat1(InstanceLinkPayload)
+    jsonFormat3(InstanceLinkPayload)
 
 }
 
@@ -161,16 +161,16 @@ object RegistryEventFactory {
     * @param link Link that was added
     * @return RegistryEvent with the respective type and payload
     */
-  def createLinkAddedEvent(link: InstanceLink) : RegistryEvent =
-    RegistryEvent(EventType.LinkAddedEvent, InstanceLinkPayload(link))
+  def createLinkAddedEvent(link: InstanceLink, instanceFrom: Instance, instanceTo: Instance) : RegistryEvent =
+    RegistryEvent(EventType.LinkAddedEvent, InstanceLinkPayload(link, instanceFrom, instanceTo))
 
   /**
     * Creates a new LinkStateChangedEvent. Sets EventType and payload accordingly.
     * @param link Link whichs state has been changed
     * @return RegistryEvent with the respective type and payload
     */
-  def createLinkStateChangedEvent(link: InstanceLink) : RegistryEvent =
-    RegistryEvent(EventType.LinkStateChangedEvent, InstanceLinkPayload(link))
+  def createLinkStateChangedEvent(link: InstanceLink, instanceFrom: Instance, instanceTo: Instance) : RegistryEvent =
+    RegistryEvent(EventType.LinkStateChangedEvent, InstanceLinkPayload(link, instanceFrom, instanceTo))
 }
 
 /**
@@ -208,7 +208,8 @@ final case class DockerOperationErrorPayload(affectedInstance: Option[Instance],
   * link that was added / changed.
   * @param link Link that caused the event
   */
-final case class InstanceLinkPayload(link: InstanceLink) extends RegistryEventPayload
+final case class InstanceLinkPayload(link: InstanceLink, instanceFrom: Instance, instanceTo: Instance)
+  extends RegistryEventPayload
 
 
 /**

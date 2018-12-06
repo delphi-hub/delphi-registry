@@ -195,11 +195,11 @@ object Server extends HttpApp
 
       if(compType != null){
         handler.getMatchingInstanceOfType(id, compType) match {
-          case Success(matchedInstance) =>
+          case (_, Success(matchedInstance)) =>
             log.info(s"Matched request from $id to $matchedInstance.")
             handler.handleInstanceLinkCreated(id, matchedInstance.id.get) match {
               case handler.OperationResult.IdUnknown =>
-                log.warning(s"Could not handle the creation of instance link, the id $id seems to be invalid.")
+                log.warning(s"Could not handle the creation of instance link, id $id was not found.")
                 complete(HttpResponse(StatusCodes.NotFound, entity = s"Could not find instance with id $id."))
               case handler.OperationResult.InvalidTypeForOperation =>
                 log.warning(s"Could not handle the creation of instance link, incompatible types found.")
@@ -209,7 +209,10 @@ object Server extends HttpApp
               case handler.OperationResult.InternalError =>
                 complete{HttpResponse(StatusCodes.InternalServerError, entity = s"An internal error occurred")}
             }
-          case Failure(x) =>
+          case (handler.OperationResult.IdUnknown, _) =>
+            log.warning(s"Cannot match to instance of type $compType, id $id was not found.")
+            complete(HttpResponse(StatusCodes.NotFound, entity = s"Cannot match to instance of type $compType, id $id was not found."))
+          case (_, Failure(x)) =>
             log.warning(s"Could not find matching instance for type $compType, message was ${x.getMessage}.")
             complete(HttpResponse(StatusCodes.NotFound, entity = s"Could not find matching instance of type $compType for instance with id $id."))
         }
