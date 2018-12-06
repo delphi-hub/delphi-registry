@@ -24,7 +24,7 @@ schemes:
   - https
   - http
 paths:
-  /register:
+  /instances/register:
     post:
       tags:
         - Basic Operations
@@ -54,7 +54,7 @@ paths:
             example: 42
         '405':
           description: Invalid input
-  /deregister:
+  /instances/{id}/deregister:
     post:
       tags:
         - Basic Operations
@@ -66,12 +66,13 @@ paths:
         anymore.
       operationId: deleteInstance
       parameters:
-        - in: query
-          name: Id
+        - name: id
+          in: path
           description: The ID of the instance to be deregistered.
           required: true
           type: integer
           format: int64
+
       responses:
         '200':
           description: Sucessfully Deregistered
@@ -81,7 +82,7 @@ paths:
           description: Instance not found
         '405':
           description: Validation exception
-  /matchingInstance:
+  /instances/componentType:
     get:
       tags:
         - Basic Operations
@@ -92,12 +93,6 @@ paths:
         on the server.
       operationId: matchingInstance
       parameters:
-        - in: query
-          name: Id
-          description: Id of the instance that is requesting a dependency
-          required: true
-          type: integer
-          format: int64
         - name: ComponentType
           in: query
           description: Type of the instance to be retrieved
@@ -116,31 +111,6 @@ paths:
             $ref: '#/definitions/Instance'
         '400':
           description: Invalid status value
-  /instance:
-    get:
-      tags:
-        - Basic Operations
-      summary: Get the instance with the specified id
-      description: >-
-        This command retrieves the instance with the specified id from the server.
-        If that id is not present, 404 will be returned.
-      operationId: instance
-      parameters:
-        - in: query
-          name: Id
-          description: Id of the instance
-          required: true
-          type: integer
-          format: int64
-      responses:
-        '200':
-          description: The instance that was requested
-          schema:
-            $ref: '#/definitions/Instance'
-        '404':
-          description: The id was not found on the server
-        '500':
-          description: Internal server error
   /instances:
     get:
       tags:
@@ -162,6 +132,12 @@ paths:
             - WebApp
             - DelphiManagement
             - ElasticSearch
+        - name : Id
+          in: query
+          description: The ID of the instance.
+          required: true
+          type: integer
+          format: int64
       responses:
         '200':
           description: List of instances of the specified type
@@ -171,7 +147,7 @@ paths:
               $ref: '#/definitions/Instance'
         '400':
           description: Invalid value
-  /numberOfInstances:
+  /instances/count:
     get:
       tags:
         - Basic Operations
@@ -203,7 +179,7 @@ paths:
           description: Invalid ID supplied
         '404':
           description: Instances not found
-  /matchingResult:
+  /instance/matchingResult:
     post:
       tags:
         - Basic Operations
@@ -216,13 +192,7 @@ paths:
       operationId: matchInstance
       parameters:
         - in: query
-          name: CallerId
-          description: The ID of the instance that is calling this endpoint
-          required: true
-          type: integer
-          format: int64
-        - in: query
-          name: MatchedInstanceId
+          name: InstanceID
           description: The ID of the instance that the sender was matched to.
           required: true
           type: integer
@@ -239,124 +209,7 @@ paths:
           description: Invalid ID supplied
         '404':
           description: No match found
-  /eventList:
-    get:
-      tags:
-        - Basic Operations
-      summary: Gets the list of events associated to the specified instance
-      description: >-
-        This command retrieves a list of events that are associated to the
-        instance with the specified id.
-      operationId: eventList
-      parameters:
-        - name: Id
-          in: query
-          description: Id of the instance
-          required: true
-          type: integer
-          format: int64
-      responses:
-        '200':
-          description: List of events for the specified instance
-          schema:
-            type: array
-            items:
-              $ref: '#/definitions/Event'
-        '404':
-          description: Instance not found
-  /linksFrom:
-    get:
-      tags:
-        - Basic Operations
-      summary: Retrieves outgoing links from an instance
-      description: >-
-        This command retreives a list of outgoing links from the instance with
-        the specified id.
-      operationId: linksFrom
-      parameters:
-        - name: Id
-          in: query
-          description: Id of the instance
-          required: true
-          type: integer
-          format: int64
-      responses:
-        '200':
-          description: List of InstanceLinks from the specified instance
-          schema:
-            type: array
-            items:
-              $ref: '#/definitions/InstanceLink'
-        '404':
-          description: Instance not found
-  /linksTo:
-    get:
-      tags:
-        - Basic Operations
-      summary: Retrieves incoming links to an instance
-      description: >-
-        This command retreives a list of incoming links from the instance with
-        the specified id.
-      operationId: linksTo
-      parameters:
-        - name: Id
-          in: query
-          description: Id of the instance
-          required: true
-          type: integer
-          format: int64
-      responses:
-        '200':
-          description: List of InstanceLinks to the specified instance
-          schema:
-            type: array
-            items:
-              $ref: '#/definitions/InstanceLink'
-        '404':
-          description: Instance not found
-  /network:
-    get:
-      tags:
-        - Basic Operations
-      summary: Retrieves the current instance network
-      description: >-
-        Retrieves the instance network, meaning a list of all instances as well
-        as a list of all links currently registered at the registry.
-      operationId: network
-      responses:
-        '200':
-          description: The instance network
-          schema:
-            $ref: '#/definitions/InstanceNetwork'
-  /addLabel:
-    post:
-      tags:
-        - Basic Operations
-      summary: Add a label to the instance with the specified id
-      description: >-
-        This command will add the specified label to the instance with the
-        specified id.
-      operationId: addLabel
-      parameters:
-        - name: Id
-          in: query
-          description: Id of the instance
-          required: true
-          type: integer
-          format: int64
-        - name: Label
-          in: query
-          description: The label to add to the instance
-          required: true
-          type: string
-      responses:
-        '200':
-          description: Label successfully added
-        '400':
-          description: 'Bad request, your label exceeded the character limit'
-        '404':
-          description: 'Not found, the id you specified could not be found'
-  /deploy:
+  /instance/componentType:
     post:
       tags:
         - Docker Operations
@@ -390,11 +243,11 @@ paths:
           description: Operation accepted
         '500':
           description: Internal server error
-  /reportStart:
+  /instances/reportStart:
     post:
       tags:
         - Docker Operations
-      summary: Reports the successful start of an instance to the registry
+      summary: Reports the successful start of an instances to the registry
       description: >-
         This command informs the registry about an instance that successfully
         reached the state 'Running'. This is only applicable to instances
@@ -404,7 +257,7 @@ paths:
       operationId: reportStart
       parameters:
         - in: query
-          name: Id
+          name: InstanceID
           description: The ID of the instance that was started
           required: true
           type: integer
@@ -420,36 +273,7 @@ paths:
           description: ID not found on server
         '500':
           description: Internal server error
-  /reportStop:
-    post:
-      tags:
-        - Docker Operations
-      summary: Reports the manual stop of an instances to the registry
-      description: >-
-        This command informs the registry about an instance that was stopped
-        manually, meaning not via calling /stop on the instance registry. This
-        is only applicable to instances running inside a docker container, as
-        non-container instances would deregister themselves when stopped. 
-      operationId: reportStop
-      parameters:
-        - in: query
-          name: Id
-          description: The ID of the instance that was stopped
-          required: true
-          type: integer
-          format: int64
-      responses:
-        '200':
-          description: Report successfully processed.
-        '400':
-          description: >-
-            Bad request, the instance with the specified ID is not deployed as a
-            docker container.
-        '404':
-          description: ID not found on server
-        '500':
-          description: Internal server error
-  /reportFailure:
+  /instances/reportFailure:
     post:
       tags:
         - Docker Operations
@@ -465,7 +289,7 @@ paths:
       operationId: reportFailure
       parameters:
         - in: query
-          name: Id
+          name: InstanceID
           description: The ID of the instance that encountered the failure
           required: true
           type: integer
@@ -486,7 +310,7 @@ paths:
           description: ID not found on server
         '500':
           description: Internal server error
-  /pause:
+  /instances/pause:
     post:
       tags:
         - Docker Operations
@@ -497,7 +321,7 @@ paths:
       operationId: pause
       parameters:
         - in: query
-          name: Id
+          name: InstanceID
           description: The ID of the instance to be paused
           required: true
           type: integer
@@ -513,7 +337,7 @@ paths:
           description: ID not found on server
         '500':
           description: Internal server error
-  /resume:
+  /instances/resume:
     post:
       tags:
         - Docker Operations
@@ -525,7 +349,7 @@ paths:
       operationId: resume
       parameters:
         - in: query
-          name: Id
+          name: InstanceID
           description: The ID of the instance to be resumed
           required: true
           type: integer
@@ -541,21 +365,19 @@ paths:
           description: ID not found on server
         '500':
           description: Internal server error
-  /stop:
+  /instances/stop:
     post:
       tags:
         - Docker Operations
       summary: Stops the specified instances' docker container
       description: >-
-        This command stops the specified instance. If the instance is running
-        inside a docker container, the container will be stopped. If not, the
-        instance will be gracefully shut down by calling its  /stop endpoint.
-        Will change the instance state to 'Stopped' for docker containers, will
-        remove the  instance for non-docker instances.
+        This command stops the docker container of the instance with the
+        specified ID. The instance will be properly shut down by calling its
+        /stop command first. Will change the instance state to 'Stopped'.
       operationId: stop
       parameters:
         - in: query
-          name: Id
+          name: InstanceID
           description: The ID of the instance to be stopped
           required: true
           type: integer
@@ -564,12 +386,14 @@ paths:
         '202':
           description: 'Accepted, the operation will be completed in the future.'
         '400':
-          description: 'Bad request, the instance with the specified ID is already stopped.'
+          description: >-
+            Bad request, the instance with the specified ID is either already
+            stopped or not deployed as a docker container at all.
         '404':
           description: ID not found on server
         '500':
           description: Internal server error
-  /start:
+  /instances/start:
     post:
       tags:
         - Docker Operations
@@ -581,7 +405,7 @@ paths:
       operationId: start
       parameters:
         - in: query
-          name: Id
+          name: InstanceID
           description: The ID of the instance to be started
           required: true
           type: integer
@@ -597,7 +421,7 @@ paths:
           description: ID not found on server
         '500':
           description: Internal server error
-  /delete:
+  /instances/delete:
     post:
       tags:
         - Docker Operations
@@ -609,7 +433,7 @@ paths:
       operationId: delete
       parameters:
         - in: query
-          name: Id
+          name: InstanceID
           description: The ID of the instance to be deleted
           required: true
           type: integer
@@ -625,97 +449,7 @@ paths:
           description: ID not found on server
         '500':
           description: Internal server error
-  /assignInstance:
-    post:
-      tags:
-        - Docker Operations
-      summary: Assignes a new dependency to the specified instance
-      description: >-
-        This command assignes a new dependency to the instance with the
-        specified id. Internally, this will stop the instance, assign the new
-        dependency and start the instance again. This is why this is only 
-        applicable to docker instances.
-      operationId: assignInstance
-      parameters:
-        - in: query
-          name: Id
-          description: The ID of the instance whichs dependency should be updated
-          required: true
-          type: integer
-          format: int64
-        - in: query
-          name: AssignedInstanceId
-          description: The ID of the instance that should be assigned as dependency
-          required: true
-          type: integer
-          format: int64
-      responses:
-        '202':
-          description: 'Accepted, the operation will be completed in the future.'
-        '400':
-          description: >-
-            Bad request, the instance with the specified ID is no running inside
-            a docker container or the assigned instance is of the wrong
-            component type.
-        '404':
-          description: One of the ids was not found on the server
-        '500':
-          description: Internal server error
 definitions:
-  InstanceNetwork:
-    type: object
-    required:
-      - instances
-      - links
-    properties:
-      instances:
-        type: array
-        items:
-          $ref: '#/definitions/Instance'
-      links:
-        type: array
-        items:
-          $ref: '#/definitions/InstanceLink'
-  InstanceLink:
-    type: object
-    required:
-      - idFrom
-      - idTo
-      - linkState
-    properties:
-      idFrom:
-        type: integer
-        format: int64
-        example: 0
-      idTo:
-        type: integer
-        format: int64
-        example: 42
-      linkState:
-        type: string
-        description: Valid states for an InstanceLink
-        example: Assigned
-        enum:
-          - Assigned
-          - Outdated
-          - Failed
-  Event:
-    type: object
-    required:
-      - eventType
-      - payload
-    properties:
-      eventType:
-        type: string
-        description: Valid types for events
-        example: NumbersChangedEvent
-        enum:
-          - NumbersChangedEvent
-          - InstanceAddedEvent
-          - InstanceRemovedEvent
-          - StateChangedEvent
-      payload:
-        type: object
   Instance:
     type: object
     required:
@@ -760,10 +494,3 @@ definitions:
           - Stopped
           - Paused
           - NotReachable
-      labels:
-        type: array
-        items:
-          type: string
-        example:
-          - private
-          - debug
