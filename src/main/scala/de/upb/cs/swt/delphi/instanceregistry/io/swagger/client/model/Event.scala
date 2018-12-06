@@ -1,6 +1,7 @@
 package de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model
 
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
+import akka.http.scaladsl.model.DateTime
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.EventEnums.EventType
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.ComponentType
 import spray.json.{DefaultJsonProtocol, DeserializationException, JsObject, JsString, JsValue, JsonFormat}
@@ -79,9 +80,21 @@ trait EventJsonSupport extends SprayJsonSupport with DefaultJsonProtocol with In
     }
 
   }
+  implicit val timestamp: JsonFormat[DateTime] = new JsonFormat[DateTime] {
+    override def write(obj: DateTime) = JsString(obj.toIsoDateTimeString())
+
+    override def read(json: JsValue): DateTime = json match {
+      case JsString(value) =>
+        DateTime.fromIsoDateTimeString(value) match {
+          case Some(date) => date
+          case _ => throw new DeserializationException("Failed to parse date time [" + value + "].")
+        }
+      case _ => throw new DeserializationException("Failed to parse json string [" + json + "].")
+    }
+  }
 
   //JSON format for RegistryEvents
-  implicit val eventFormat : JsonFormat[RegistryEvent] = jsonFormat2(RegistryEvent)
+  implicit val eventFormat : JsonFormat[RegistryEvent] = jsonFormat3(RegistryEvent)
 
   //JSON format for an NumbersChangedPayload
   implicit val numbersChangedPayloadFormat: JsonFormat[NumbersChangedPayload] = jsonFormat2(NumbersChangedPayload)
@@ -103,10 +116,12 @@ trait EventJsonSupport extends SprayJsonSupport with DefaultJsonProtocol with In
   * The RegistryEvent used for communicating with the management application
   * @param eventType Type of the event
   * @param payload Payload of the event, depends on the type
+  *  @param timestamp TimeStamp of the event
   */
 final case class RegistryEvent (
   eventType: EventType.Value,
-  payload: RegistryEventPayload
+  payload: RegistryEventPayload,
+  timestamp: DateTime
 )
 
 /**
@@ -121,7 +136,7 @@ object RegistryEventFactory {
     * @return RegistryEvent with the respective type and payload.
     */
   def createNumbersChangedEvent(componentType: ComponentType, newNumber: Int) : RegistryEvent =
-    RegistryEvent(EventType.NumbersChangedEvent, NumbersChangedPayload(componentType, newNumber))
+    RegistryEvent(EventType.NumbersChangedEvent, NumbersChangedPayload(componentType, newNumber),DateTime.now)
 
   /**
     * Creates a new InstanceAddedEvent. Sets EventType and payload accordingly.
@@ -129,7 +144,7 @@ object RegistryEventFactory {
     * @return RegistryEvent with the respective type and payload.
     */
   def createInstanceAddedEvent(instance: Instance) : RegistryEvent =
-    RegistryEvent(EventType.InstanceAddedEvent, InstancePayload(instance))
+    RegistryEvent(EventType.InstanceAddedEvent, InstancePayload(instance),DateTime.now)
 
   /**
     * Creates a new InstanceRemovedEvent. Sets EventType and payload accordingly.
@@ -137,7 +152,7 @@ object RegistryEventFactory {
     * @return RegistryEvent with the respective type and payload.
     */
   def createInstanceRemovedEvent(instance: Instance) : RegistryEvent =
-    RegistryEvent(EventType.InstanceRemovedEvent, InstancePayload(instance))
+    RegistryEvent(EventType.InstanceRemovedEvent, InstancePayload(instance),DateTime.now)
 
   /**
     * Creates a new StateChangedEvent. Sets EventType and payload accordingly.
@@ -145,7 +160,7 @@ object RegistryEventFactory {
     * @return RegistryEvent with tht respective type and payload.
     */
   def createStateChangedEvent(instance: Instance) : RegistryEvent =
-    RegistryEvent(EventType.StateChangedEvent, InstancePayload(instance))
+    RegistryEvent(EventType.StateChangedEvent, InstancePayload(instance),DateTime.now)
 
   /**
     * Creates a new DockerOperationErrorEvent. Sets EventType and payload accordingly.
@@ -154,7 +169,7 @@ object RegistryEventFactory {
     * @return RegistryEvent with the respective type and payload.
     */
   def createDockerOperationErrorEvent(affectedInstance: Option[Instance], message: String) : RegistryEvent =
-    RegistryEvent(EventType.DockerOperationErrorEvent, DockerOperationErrorPayload(affectedInstance, message))
+    RegistryEvent(EventType.DockerOperationErrorEvent, DockerOperationErrorPayload(affectedInstance, message),DateTime.now)
 
   /**
     * Creates a new LinkAddedEvent. Sets EventType and payload accordingly
@@ -162,7 +177,7 @@ object RegistryEventFactory {
     * @return RegistryEvent with the respective type and payload
     */
   def createLinkAddedEvent(link: InstanceLink, instanceFrom: Instance, instanceTo: Instance) : RegistryEvent =
-    RegistryEvent(EventType.LinkAddedEvent, InstanceLinkPayload(link, instanceFrom, instanceTo))
+    RegistryEvent(EventType.LinkAddedEvent, InstanceLinkPayload(link, instanceFrom, instanceTo),DateTime.now)
 
   /**
     * Creates a new LinkStateChangedEvent. Sets EventType and payload accordingly.
@@ -170,7 +185,7 @@ object RegistryEventFactory {
     * @return RegistryEvent with the respective type and payload
     */
   def createLinkStateChangedEvent(link: InstanceLink, instanceFrom: Instance, instanceTo: Instance) : RegistryEvent =
-    RegistryEvent(EventType.LinkStateChangedEvent, InstanceLinkPayload(link, instanceFrom, instanceTo))
+    RegistryEvent(EventType.LinkStateChangedEvent, InstanceLinkPayload(link, instanceFrom, instanceTo),DateTime.now)
 }
 
 /**
