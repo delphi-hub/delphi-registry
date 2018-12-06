@@ -81,7 +81,18 @@ trait EventJsonSupport extends SprayJsonSupport with DefaultJsonProtocol with In
       case _ => throw DeserializationException("Unexpected type for event payload!")
     }
   }
-  
+  implicit val timestamp: JsonFormat[DateTime] = new JsonFormat[DateTime] {
+    override def write(obj: DateTime) = JsString(obj.toIsoDateTimeString())
+
+    override def read(json: JsValue): DateTime = json match {
+      case JsString(value) =>
+        DateTime.fromIsoDateTimeString(value) match {
+          case Some(date) => date
+          case _ => throw new DeserializationException("Failed to parse date time [" + value + "].")
+        }
+      case _ => throw new DeserializationException("Failed to parse json string [" + json + "].")
+    }
+  }
   //JSON format for RegistryEvents
   implicit val eventFormat : JsonFormat[RegistryEvent] = jsonFormat3(RegistryEvent)
 
@@ -105,11 +116,12 @@ trait EventJsonSupport extends SprayJsonSupport with DefaultJsonProtocol with In
   * The RegistryEvent used for communicating with the management application
   * @param eventType Type of the event
   * @param payload Payload of the event, depends on the type
+  * @param DateTime timeStamp of the event
   */
 final case class RegistryEvent (
   eventType: EventType.Value,
   payload: RegistryEventPayload,
-  dateAndTime: DateTime
+  timestamp: DateTime
 )
 
 /**
