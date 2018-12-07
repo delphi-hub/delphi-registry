@@ -80,16 +80,26 @@ trait EventJsonSupport extends SprayJsonSupport with DefaultJsonProtocol with In
     }
 
   }
-  implicit val timestamp: JsonFormat[DateTime] = new JsonFormat[DateTime] {
+  //Custom JSON format for event TimeStamp.
+  implicit val timestampFormat: JsonFormat[DateTime] = new JsonFormat[DateTime] {
+    /**
+    * Custom write method for serialization of DateTime
+    * @param @obj DateTime object to serialize
+    * @throws DeserializationException Exception in case of wrong input
+    */
     override def write(obj: DateTime) = JsString(obj.toIsoDateTimeString())
-
+    /**
+      * Custom read method for deserialization of DateTime
+      * @param @json JsValue that is to be deserialized
+      * @throws DeserializationException Exception when JsValue is in incorrect format
+      */
     override def read(json: JsValue): DateTime = json match {
       case JsString(value) =>
         DateTime.fromIsoDateTimeString(value) match {
           case Some(date) => date
-          case _ => throw new DeserializationException("Failed to parse date time [" + value + "].")
+          case _ => throw DeserializationException("Failed to parse date time [" + value + "].")
         }
-      case _ => throw new DeserializationException("Failed to parse json string [" + json + "].")
+      case _ => throw DeserializationException("Failed to parse json string [" + json + "].")
     }
   }
 
@@ -116,7 +126,7 @@ trait EventJsonSupport extends SprayJsonSupport with DefaultJsonProtocol with In
   * The RegistryEvent used for communicating with the management application
   * @param eventType Type of the event
   * @param payload Payload of the event, depends on the type
-  *  @param timestamp TimeStamp of the event
+  * @param timestamp TimeStamp of the event
   */
 final case class RegistryEvent (
   eventType: EventType.Value,
@@ -133,40 +143,40 @@ object RegistryEventFactory {
     * Creates a new NumbersChangedEvent. Sets EventType and payload accordingly.
     * @param componentType ComponentType which's numbers have been updated
     * @param newNumber New number of components of the specified type
-    * @return RegistryEvent with the respective type and payload.
+    * @return RegistryEvent with the respective respective type, payload and current timestamp.
     */
   def createNumbersChangedEvent(componentType: ComponentType, newNumber: Int) : RegistryEvent =
-    RegistryEvent(EventType.NumbersChangedEvent, NumbersChangedPayload(componentType, newNumber),DateTime.now)
+    RegistryEvent(EventType.NumbersChangedEvent, NumbersChangedPayload(componentType, newNumber), DateTime.now)
 
   /**
     * Creates a new InstanceAddedEvent. Sets EventType and payload accordingly.
     * @param instance Instance that has been added.
-    * @return RegistryEvent with the respective type and payload.
+    * @return RegistryEvent with the respective type, payload and current timestamp.
     */
   def createInstanceAddedEvent(instance: Instance) : RegistryEvent =
-    RegistryEvent(EventType.InstanceAddedEvent, InstancePayload(instance),DateTime.now)
+    RegistryEvent(EventType.InstanceAddedEvent, InstancePayload(instance), DateTime.now)
 
   /**
     * Creates a new InstanceRemovedEvent. Sets EventType and payload accordingly.
     * @param instance Instance that has been removed.
-    * @return RegistryEvent with the respective type and payload.
+    * @return RegistryEvent with the respective type, payload and current timestamp.
     */
   def createInstanceRemovedEvent(instance: Instance) : RegistryEvent =
-    RegistryEvent(EventType.InstanceRemovedEvent, InstancePayload(instance),DateTime.now)
+    RegistryEvent(EventType.InstanceRemovedEvent, InstancePayload(instance), DateTime.now)
 
   /**
     * Creates a new StateChangedEvent. Sets EventType and payload accordingly.
     * @param instance Instance which's state was changed.
-    * @return RegistryEvent with tht respective type and payload.
+    * @return RegistryEvent with tht respective type, payload and current timestamp.
     */
   def createStateChangedEvent(instance: Instance) : RegistryEvent =
-    RegistryEvent(EventType.StateChangedEvent, InstancePayload(instance),DateTime.now)
+    RegistryEvent(EventType.StateChangedEvent, InstancePayload(instance), DateTime.now)
 
   /**
     * Creates a new DockerOperationErrorEvent. Sets EventType and payload accordingly.
     * @param affectedInstance Option[Instance] containing the instance that may be affected
     * @param message Error message
-    * @return RegistryEvent with the respective type and payload.
+    * @return RegistryEvent with the respective respective type, payload and current timestamp.
     */
   def createDockerOperationErrorEvent(affectedInstance: Option[Instance], message: String) : RegistryEvent =
     RegistryEvent(EventType.DockerOperationErrorEvent, DockerOperationErrorPayload(affectedInstance, message),DateTime.now)
@@ -174,7 +184,7 @@ object RegistryEventFactory {
   /**
     * Creates a new LinkAddedEvent. Sets EventType and payload accordingly
     * @param link Link that was added
-    * @return RegistryEvent with the respective type and payload
+    * @return RegistryEvent with the respective type, payload and current timestamp.
     */
   def createLinkAddedEvent(link: InstanceLink, instanceFrom: Instance, instanceTo: Instance) : RegistryEvent =
     RegistryEvent(EventType.LinkAddedEvent, InstanceLinkPayload(link, instanceFrom, instanceTo),DateTime.now)
@@ -182,7 +192,7 @@ object RegistryEventFactory {
   /**
     * Creates a new LinkStateChangedEvent. Sets EventType and payload accordingly.
     * @param link Link whichs state has been changed
-    * @return RegistryEvent with the respective type and payload
+    * @return RegistryEvent with the respective type, payload and current timestamp.
     */
   def createLinkStateChangedEvent(link: InstanceLink, instanceFrom: Instance, instanceTo: Instance) : RegistryEvent =
     RegistryEvent(EventType.LinkStateChangedEvent, InstanceLinkPayload(link, instanceFrom, instanceTo),DateTime.now)
