@@ -84,13 +84,13 @@ trait EventJsonSupport extends SprayJsonSupport with DefaultJsonProtocol with In
   implicit val timestampFormat: JsonFormat[DateTime] = new JsonFormat[DateTime] {
     /**
     * Custom write method for serialization of DateTime
-    * @param @obj DateTime object to serialize
+    * @param obj DateTime object to serialize
     * @throws DeserializationException Exception in case of wrong input
     */
     override def write(obj: DateTime) = JsString(obj.toIsoDateTimeString())
     /**
       * Custom read method for deserialization of DateTime
-      * @param @json JsValue that is to be deserialized
+      * @param json JsValue that is to be deserialized
       * @throws DeserializationException Exception when JsValue is in incorrect format
       */
     override def read(json: JsValue): DateTime = json match {
