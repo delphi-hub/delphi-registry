@@ -293,6 +293,8 @@ class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, con
                 Failure(x)
             }
         }
+      case Failure(ex) =>
+        Failure(ex)
     }
 
 
