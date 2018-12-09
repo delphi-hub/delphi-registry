@@ -5,6 +5,7 @@ import java.io.File
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import de.upb.cs.swt.delphi.instanceregistry.Docker._
+import de.upb.cs.swt.delphi.instanceregistry.daos.{DynamicInstanceDAO, InstanceDAO}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.{Instance, InstanceLink}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.{ComponentType, InstanceState}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.LinkEnums.LinkState
@@ -16,7 +17,9 @@ class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach 
   implicit val system: ActorSystem = ActorSystem()
   implicit val materializer: ActorMaterializer = ActorMaterializer()
   implicit val ec: ExecutionContext = system.dispatcher
-  val handler: RequestHandler = new RequestHandler(new Configuration(), DockerConnection.fromEnvironment())
+  val configuration: Configuration = new Configuration()
+  val dao: InstanceDAO = new DynamicInstanceDAO(configuration)
+  val handler: RequestHandler = new RequestHandler(configuration, dao, DockerConnection.fromEnvironment())
 
   private def buildInstance(id: Long, componentType: ComponentType = ComponentType.ElasticSearch, dockerId: Option[String] = None, state: InstanceState.Value = InstanceState.Stopped, labels: List[String] = List.empty[String]): Instance = {
     Instance(Some(id), "https://localhost", 12345, "TestInstance", componentType, dockerId, state, labels, List.empty[InstanceLink], List.empty[InstanceLink])
@@ -25,7 +28,7 @@ class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach 
   override protected def beforeEach(): Unit = {
     new File(Registry.configuration.recoveryFileName).delete()
     handler.initialize()
-    handler.instanceDao.removeAll()
+    dao.removeAll()
     handler.initialize()
   }
 
@@ -60,9 +63,9 @@ class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach 
 
   it must "validate preconditions on deregister" in {
     //Bypass register as it would ignore dockerId!
-    val registerDockerInstance = handler.instanceDao.addInstance(buildInstance(id = 42, dockerId = Some("RandomDockerId")))
+    val registerDockerInstance = dao.addInstance(buildInstance(id = 42, dockerId = Some("RandomDockerId")))
     assert(registerDockerInstance.isSuccess)
-    val dockerInstance = handler.getInstance(42).get
+    val dockerInstance = handler.getInstance(registerDockerInstance.get).get
 
     //Check wrong id
     assert(handler.handleDeregister(Int.MaxValue) == handler.OperationResult.IdUnknown)
@@ -83,84 +86,99 @@ class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach 
   }
 
   it must "change the instance state when matching results are applied" in {
-    val register1 = handler.instanceDao.addInstance(buildInstance(id = 42, dockerId = Some("RandomDockerId"), state = InstanceState.NotReachable))
-    val register2 = handler.instanceDao.addInstance(buildInstance(id = 43, dockerId = Some("AnotherRandomDockerID"), state = InstanceState.Running))
+    val register1 = dao.addInstance(buildInstance(id = 42, dockerId = Some("RandomDockerId"), state = InstanceState.NotReachable))
+    val register2 = dao.addInstance(buildInstance(id = 43, dockerId = Some("AnotherRandomDockerID"), state = InstanceState.Running))
     assert(register1.isSuccess)
     assert(register2.isSuccess)
+    val (id1, id2) = (register1.get, register2.get)
 
     //Add Link to prevent internal error later
-    assert(handler.instanceDao.addLink(InstanceLink(42,43, LinkState.Assigned)).isSuccess)
+    assert(dao.addLink(InstanceLink(id1,id2, LinkState.Assigned)).isSuccess)
 
-    assert(handler.handleMatchingResult(callerId = 43, matchedInstanceId = 42, matchingSuccess = true) == handler.OperationResult.Ok)
-    assert(handler.getInstance(42).get.instanceState == InstanceState.Running)
-    assert(handler.handleMatchingResult(callerId = 42, matchedInstanceId = 43, matchingSuccess = false) == handler.OperationResult.Ok)
-    assert(handler.getInstance(43).get.instanceState == InstanceState.NotReachable)
+    assert(handler.handleMatchingResult(callerId = id2, matchedInstanceId = id1, matchingSuccess = true) == handler.OperationResult.Ok)
+    assert(handler.getInstance(id1).get.instanceState == InstanceState.Running)
+    assert(handler.handleMatchingResult(callerId = id1, matchedInstanceId = id2, matchingSuccess = false) == handler.OperationResult.Ok)
+    assert(handler.getInstance(id2).get.instanceState == InstanceState.NotReachable)
   }
 
   it must "not change the instance state on invalid state transitions" in {
-    val register = handler.instanceDao.addInstance(buildInstance(id = 42, dockerId = Some("RandomDockerId"), state = InstanceState.Failed))
-    val register2 = handler.instanceDao.addInstance(buildInstance(id = 43, dockerId = Some("RandomDockerId2"), state = InstanceState.Running))
+    val register = dao.addInstance(buildInstance(id = 42, dockerId = Some("RandomDockerId"), state = InstanceState.Failed))
+    val register2 = dao.addInstance(buildInstance(id = 43, dockerId = Some("RandomDockerId2"), state = InstanceState.Running))
 
     assert(register.isSuccess)
     assert(register2.isSuccess)
 
-    assert(handler.handleMatchingResult(callerId = 43, matchedInstanceId = 42, matchingSuccess = true) == handler.OperationResult.Ok)
-    assert(handler.getInstance(42).get.instanceState == InstanceState.Failed)
+    val (id1, id2) = (register.get, register2.get)
+
+    assert(handler.handleMatchingResult(callerId = id2, matchedInstanceId = id1, matchingSuccess = true) == handler.OperationResult.Ok)
+    assert(handler.getInstance(id1).get.instanceState == InstanceState.Failed)
   }
 
   it must "validate preconditions on report operations" in {
-    val register = handler.instanceDao.addInstance(buildInstance(42))
+    val register = dao.addInstance(buildInstance(42))
 
     assert(register.isSuccess)
+
+    val id = register.get
+
     assert(handler.handleReportStart(-1) == handler.OperationResult.IdUnknown)
-    assert(handler.handleReportStart(42) == handler.OperationResult.NoDockerContainer)
+    assert(handler.handleReportStart(id) == handler.OperationResult.NoDockerContainer)
 
     assert(handler.handleReportFailure(-1L, None) == handler.OperationResult.IdUnknown)
-    assert(handler.handleReportFailure(42, None) == handler.OperationResult.NoDockerContainer)
+    assert(handler.handleReportFailure(id, None) == handler.OperationResult.NoDockerContainer)
 
     assert(handler.handleReportStop(-1) == handler.OperationResult.IdUnknown)
-    assert(handler.handleReportStop(42) == handler.OperationResult.NoDockerContainer)
+    assert(handler.handleReportStop(id) == handler.OperationResult.NoDockerContainer)
   }
 
   it must "change the state on reportStart" in {
-    val register1 = handler.instanceDao.addInstance(buildInstance(id = 42, dockerId = Some("RandomDockerId"), state = InstanceState.Stopped))
-    val register2 = handler.instanceDao.addInstance(buildInstance(id = 43, dockerId = Some("RandomDockerId2"), state = InstanceState.Failed))
+    val register1 = dao.addInstance(buildInstance(id = 42, dockerId = Some("RandomDockerId"), state = InstanceState.Stopped))
+    val register2 = dao.addInstance(buildInstance(id = 43, dockerId = Some("RandomDockerId2"), state = InstanceState.Failed))
+
     assert(register1.isSuccess)
     assert(register2.isSuccess)
 
-    assert(handler.handleReportStart(42) == handler.OperationResult.Ok)
-    assert(handler.getInstance(42).get.instanceState == InstanceState.Running)
-    assert(handler.handleReportStart(43) == handler.OperationResult.Ok)
-    assert(handler.getInstance(43).get.instanceState == InstanceState.Running)
+    val (id1, id2) = (register1.get, register2.get)
+
+    assert(handler.handleReportStart(id1) == handler.OperationResult.Ok)
+    assert(handler.getInstance(id1).get.instanceState == InstanceState.Running)
+    assert(handler.handleReportStart(id2) == handler.OperationResult.Ok)
+    assert(handler.getInstance(id2).get.instanceState == InstanceState.Running)
   }
 
   it must "change states only for valid state transitions on reportStop" in {
-    val register1 = handler.instanceDao.addInstance(buildInstance(id = 42, dockerId = Some("RandomDockerId"), state = InstanceState.Running))
-    val register2 = handler.instanceDao.addInstance(buildInstance(id = 43, dockerId = Some("RandomDockerId2"), state = InstanceState.Failed))
+    val register1 = dao.addInstance(buildInstance(id = 42, dockerId = Some("RandomDockerId"), state = InstanceState.Running))
+    val register2 = dao.addInstance(buildInstance(id = 43, dockerId = Some("RandomDockerId2"), state = InstanceState.Failed))
+
     assert(register1.isSuccess)
     assert(register2.isSuccess)
 
-    assert(handler.handleReportStop(42) == handler.OperationResult.Ok)
-    assert(handler.getInstance(42).get.instanceState == InstanceState.Stopped)
-    assert(handler.handleReportStop(43) == handler.OperationResult.Ok)
-    assert(handler.getInstance(43).get.instanceState == InstanceState.Failed)
+    val (id1, id2) = (register1.get, register2.get)
+
+    assert(handler.handleReportStop(id1) == handler.OperationResult.Ok)
+    assert(handler.getInstance(id1).get.instanceState == InstanceState.Stopped)
+    assert(handler.handleReportStop(id2) == handler.OperationResult.Ok)
+    assert(handler.getInstance(id2).get.instanceState == InstanceState.Failed)
   }
 
   it must "change the state on reportFailure" in {
-    val register1 = handler.instanceDao.addInstance(buildInstance(id = 42, dockerId  = Some("RandomDockerId"), state = InstanceState.Stopped))
-    val register2 = handler.instanceDao.addInstance(buildInstance(id = 43, dockerId = Some("RandomDockerId2"), state = InstanceState.Running))
+    val register1 = dao.addInstance(buildInstance(id = 42, dockerId  = Some("RandomDockerId"), state = InstanceState.Stopped))
+    val register2 = dao.addInstance(buildInstance(id = 43, dockerId = Some("RandomDockerId2"), state = InstanceState.Running))
+    
     assert(register1.isSuccess)
     assert(register2.isSuccess)
 
-    assert(handler.handleReportFailure(42, None) == handler.OperationResult.Ok)
-    assert(handler.getInstance(42).get.instanceState == InstanceState.Failed)
-    assert(handler.handleReportFailure(43, None) == handler.OperationResult.Ok)
-    assert(handler.getInstance(43).get.instanceState == InstanceState.Failed)
+    val (id1, id2) = (register1.get, register2.get)
+
+    assert(handler.handleReportFailure(id1, None) == handler.OperationResult.Ok)
+    assert(handler.getInstance(id1).get.instanceState == InstanceState.Failed)
+    assert(handler.handleReportFailure(id2, None) == handler.OperationResult.Ok)
+    assert(handler.getInstance(id2).get.instanceState == InstanceState.Failed)
   }
 
   it must "validate preconditions on handlePause" in {
-    val register1 = handler.instanceDao.addInstance(buildInstance(1))
-    val register2 = handler.instanceDao.addInstance(buildInstance(id = 2, dockerId = Some("RandomDockerId"), state = InstanceState.Failed))
+    val register1 = dao.addInstance(buildInstance(1))
+    val register2 = dao.addInstance(buildInstance(id = 2, dockerId = Some("RandomDockerId"), state = InstanceState.Failed))
     assert(register1.isSuccess)
     assert(register2.isSuccess)
 
@@ -171,7 +189,7 @@ class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach 
 
   //Below test is not applicable anymore, state change is managed in futures!
   /*it must "change the state on handlePause" in {
-    val register1 = handler.instanceDao.addInstance(buildInstance(1, Some("RandomDockerId"), InstanceState.Running))
+    val register1 = dao.addInstance(buildInstance(1, Some("RandomDockerId"), InstanceState.Running))
     assert(register1.isSuccess)
 
     assert(handler.handlePause(1) == handler.OperationResult.Ok)
@@ -179,8 +197,8 @@ class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach 
   }*/
 
   it must "validate preconditions on handleResume" in {
-    val register1 = handler.instanceDao.addInstance(buildInstance(1))
-    val register2 = handler.instanceDao.addInstance(buildInstance(id = 2, dockerId = Some("RandomDockerId"), state = InstanceState.Failed))
+    val register1 = dao.addInstance(buildInstance(1))
+    val register2 = dao.addInstance(buildInstance(id = 2, dockerId = Some("RandomDockerId"), state = InstanceState.Failed))
     assert(register1.isSuccess)
     assert(register2.isSuccess)
 
@@ -192,7 +210,7 @@ class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach 
   //Below test is not applicable anymore, state change is managed in futures!
   /*
   it must "change the state on handleResume" in {
-    val register1 = handler.instanceDao.addInstance(buildInstance(1, Some("RandomDockerId"), InstanceState.Paused))
+    val register1 = dao.addInstance(buildInstance(1, Some("RandomDockerId"), InstanceState.Paused))
     assert(register1.isSuccess)
 
     assert(handler.handleResume(1) == handler.OperationResult.Ok)
@@ -205,7 +223,7 @@ class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach 
 
   //Below test is not applicable anymore, state change is managed in futures!
   /*it must "change the state of the instance on handleStop" in {
-    val register1 = handler.instanceDao.addInstance(Instance(Some(1), "http://localhost", 8083, "MyCrawler", ComponentType.Crawler, Some("RandomDockerId"), InstanceState.Running))
+    val register1 = dao.addInstance(Instance(Some(1), "http://localhost", 8083, "MyCrawler", ComponentType.Crawler, Some("RandomDockerId"), InstanceState.Running))
     assert(register1.isSuccess)
 
     assert(handler.handleStop(1) == handler.OperationResult.Ok)
@@ -213,8 +231,8 @@ class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach 
   }*/
 
   it must "validate preconditions on handleStart" in {
-    val register1 = handler.instanceDao.addInstance(buildInstance(1))
-    val register2 = handler.instanceDao.addInstance(buildInstance(id = 2, dockerId = Some("RandomDockerId"), state = InstanceState.Paused))
+    val register1 = dao.addInstance(buildInstance(1))
+    val register2 = dao.addInstance(buildInstance(id = 2, dockerId = Some("RandomDockerId"), state = InstanceState.Paused))
     assert(register1.isSuccess)
     assert(register2.isSuccess)
 
@@ -224,7 +242,7 @@ class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach 
   }
 
   it must "not change the state of the instance on handleStart" in {
-    val register1 = handler.instanceDao.addInstance(buildInstance(id = 1, dockerId = Some("RandomDockerId"), state = InstanceState.Stopped))
+    val register1 = dao.addInstance(buildInstance(id = 1, dockerId = Some("RandomDockerId"), state = InstanceState.Stopped))
     assert(register1.isSuccess)
 
     assert(handler.handleStart(1) == handler.OperationResult.Ok)
@@ -232,8 +250,8 @@ class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach 
   }
 
   it must "validate preconditions on handleDeleteContainer" in {
-    val register1 = handler.instanceDao.addInstance(buildInstance(1))
-    val register2 = handler.instanceDao.addInstance(buildInstance(id = 2, dockerId = Some("RandomDockerId"), state = InstanceState.Running))
+    val register1 = dao.addInstance(buildInstance(1))
+    val register2 = dao.addInstance(buildInstance(id = 2, dockerId = Some("RandomDockerId"), state = InstanceState.Running))
     assert(register1.isSuccess)
     assert(register2.isSuccess)
 
@@ -243,7 +261,7 @@ class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach 
   }
 
   it must "remove instances on handleDeleteContainer" in {
-    val register1 = handler.instanceDao.addInstance(buildInstance(id = 1, dockerId = Some("RandomDockerId"), state = InstanceState.Stopped))
+    val register1 = dao.addInstance(buildInstance(id = 1, dockerId = Some("RandomDockerId"), state = InstanceState.Stopped))
     assert(register1.isSuccess)
 
     assert(handler.handleDeleteContainer(1) == handler.OperationResult.Ok)
@@ -257,11 +275,11 @@ class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach 
   }
 
   it must "validate preconditions before adding a label" in {
-    assert(handler.instanceDao.addInstance(buildInstance(id = 1, labels = List("private"))).isSuccess)
+    assert(dao.addInstance(buildInstance(id = 1, labels = List("private"))).isSuccess)
 
     assert(handler.handleAddLabel(42, "private") == handler.OperationResult.IdUnknown)
     assert(handler.handleAddLabel(1, "PrivATe") == handler.OperationResult.Ok)
-    assert(handler.instanceDao.getInstance(1).get.labels.size == 1) //Do not add same value twice (ignore case)
+    assert(dao.getInstance(1).get.labels.size == 1) //Do not add same value twice (ignore case)
 
     val sb: StringBuilder = new StringBuilder("foo")
     while(sb.length <= Registry.configuration.maxLabelLength){
@@ -270,12 +288,12 @@ class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach 
     assert(handler.handleAddLabel(1, sb.toString()) == handler.OperationResult.InternalError)
 
     assert(handler.handleAddLabel(1, "public") == handler.OperationResult.Ok)
-    assert(handler.instanceDao.getInstance(1).get.labels.size == 2)
+    assert(dao.getInstance(1).get.labels.size == 2)
   }
 
   it must "validate preconditions before creating a link" in {
-    assert(handler.instanceDao.addInstance(buildInstance(id = 1, componentType = ComponentType.WebApi)).isSuccess)
-    assert(handler.instanceDao.addInstance(buildInstance(id = 2, componentType = ComponentType.WebApp)).isSuccess)
+    assert(dao.addInstance(buildInstance(id = 1, componentType = ComponentType.WebApi)).isSuccess)
+    assert(dao.addInstance(buildInstance(id = 2, componentType = ComponentType.WebApp)).isSuccess)
 
     assert(handler.handleInstanceLinkCreated(-1, Int.MaxValue) == handler.OperationResult.IdUnknown)
     assert(handler.handleInstanceLinkCreated(Int.MaxValue, 0) == handler.OperationResult.IdUnknown)
@@ -283,22 +301,22 @@ class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach 
     assert(handler.handleInstanceLinkCreated(2,0) == handler.OperationResult.InvalidTypeForOperation)
 
     assert(handler.handleInstanceLinkCreated(2,1) == handler.OperationResult.Ok)
-    assert(handler.instanceDao.getLinksFrom(2).size == 1)
+    assert(dao.getLinksFrom(2).size == 1)
   }
 
   it must "validate preconditions before assigning new dependencies" in {
-    assert(handler.instanceDao.addInstance(buildInstance(id = 1, componentType = ComponentType.WebApi)).isSuccess)
-    assert(handler.instanceDao.addInstance(buildInstance(id = 2, componentType = ComponentType.WebApi)).isSuccess)
-    assert(handler.instanceDao.addInstance(buildInstance(id = 3, dockerId = Some("random"), componentType = ComponentType.WebApp)).isSuccess)
-    assert(handler.instanceDao.addInstance(buildInstance(id = 4, dockerId = None, componentType = ComponentType.WebApp)).isSuccess)
+    assert(dao.addInstance(buildInstance(id = 1, componentType = ComponentType.WebApi)).isSuccess)
+    assert(dao.addInstance(buildInstance(id = 2, componentType = ComponentType.WebApi)).isSuccess)
+    assert(dao.addInstance(buildInstance(id = 3, dockerId = Some("random"), componentType = ComponentType.WebApp)).isSuccess)
+    assert(dao.addInstance(buildInstance(id = 4, dockerId = None, componentType = ComponentType.WebApp)).isSuccess)
 
-    assert(handler.instanceDao.addLink(InstanceLink(3,1, linkState = LinkState.Assigned)).isSuccess)
+    assert(dao.addLink(InstanceLink(3,1, linkState = LinkState.Assigned)).isSuccess)
 
     assert(handler.handleInstanceAssignment(3, Integer.MAX_VALUE) == handler.OperationResult.IdUnknown)
     assert(handler.handleInstanceAssignment(4, 3) == handler.OperationResult.NoDockerContainer)
     assert(handler.handleInstanceAssignment(3,2) == handler.OperationResult.Ok)
 
-    assert(handler.instanceDao.getLinksFrom(3).filter(i => i.linkState == LinkState.Assigned).head.idTo == 2)
+    assert(dao.getLinksFrom(3).filter(i => i.linkState == LinkState.Assigned).head.idTo == 2)
   }
 
   /**
@@ -306,8 +324,8 @@ class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach 
     */
 
   it must "not match to any instance if no instance of requested type is present" in {
-    assert(handler.isInstanceIdPresent(0) && handler.instanceDao.getInstance(0).get.componentType == ComponentType.ElasticSearch)
-    assert(handler.instanceDao.addInstance(buildInstance(id = 1, componentType = ComponentType.WebApp, labels = List("private"))).isSuccess)
+    assert(handler.isInstanceIdPresent(0) && dao.getInstance(0).get.componentType == ComponentType.ElasticSearch)
+    assert(dao.addInstance(buildInstance(id = 1, componentType = ComponentType.WebApp, labels = List("private"))).isSuccess)
 
     //No WebApi present, must fail
     assert(handler.getMatchingInstanceOfType(callerId = 1, compType = ComponentType.WebApi)._2.isFailure)
@@ -320,16 +338,16 @@ class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach 
     assert(handler.getMatchingInstanceOfType(callerId = 1, compType = ComponentType.Crawler)._2.isFailure)
 
     //Assign a link to an invalid type in the db. Must also fail
-    assert(handler.instanceDao.addLink(InstanceLink(idFrom = 1, idTo = 0, linkState = LinkState.Assigned)).isSuccess)
+    assert(dao.addLink(InstanceLink(idFrom = 1, idTo = 0, linkState = LinkState.Assigned)).isSuccess)
     assert(handler.getMatchingInstanceOfType(callerId = 1, compType = ComponentType.WebApi)._2.isFailure)
   }
 
   it must "rank assigned links higher than shared labels in matching" in {
-    assert(handler.instanceDao.addInstance(buildInstance(id = 1, componentType = ComponentType.WebApp, labels = List("private", "new"))).isSuccess)
-    assert(handler.instanceDao.addInstance(buildInstance(id = 2, componentType = ComponentType.WebApi, labels = List("public", "new"))).isSuccess)
-    assert(handler.instanceDao.addInstance(buildInstance(id = 3, componentType = ComponentType.WebApi, labels = List("private", "new"))).isSuccess)
+    assert(dao.addInstance(buildInstance(id = 1, componentType = ComponentType.WebApp, labels = List("private", "new"))).isSuccess)
+    assert(dao.addInstance(buildInstance(id = 2, componentType = ComponentType.WebApi, labels = List("public", "new"))).isSuccess)
+    assert(dao.addInstance(buildInstance(id = 3, componentType = ComponentType.WebApi, labels = List("private", "new"))).isSuccess)
 
-    assert(handler.instanceDao.addLink(InstanceLink(idFrom = 1, idTo = 2, linkState = LinkState.Assigned)).isSuccess)
+    assert(dao.addLink(InstanceLink(idFrom = 1, idTo = 2, linkState = LinkState.Assigned)).isSuccess)
 
     //Matching must yield the instance that was assigned!
     val matching = handler.getMatchingInstanceOfType(callerId = 1, ComponentType.WebApi)._2
@@ -337,7 +355,7 @@ class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach 
     assert(matching.get.id.get == 2)
 
     //Now that link is outdated, shared labels "private" & "new" must be deciding factor!
-    assert(handler.instanceDao.updateLink(InstanceLink(idFrom = 1, idTo = 2, linkState = LinkState.Outdated)).isSuccess)
+    assert(dao.updateLink(InstanceLink(idFrom = 1, idTo = 2, linkState = LinkState.Outdated)).isSuccess)
     val matching2 = handler.getMatchingInstanceOfType(callerId = 1, ComponentType.WebApi)._2
     assert(matching2.isSuccess)
     assert(matching2.get.id.get == 3)
@@ -353,8 +371,8 @@ class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach 
     assert(crawlerId.get == 2)
 
     //Add Links to prevent errors later
-    assert(handler.instanceDao.addLink(InstanceLink(1,0,LinkState.Assigned)).isSuccess)
-    assert(handler.instanceDao.addLink(InstanceLink(0,1,LinkState.Assigned)).isSuccess)
+    assert(dao.addLink(InstanceLink(1,0,LinkState.Assigned)).isSuccess)
+    assert(dao.addLink(InstanceLink(0,1,LinkState.Assigned)).isSuccess)
 
     assert(handler.handleMatchingResult(callerId = 1, matchedInstanceId = 0, matchingSuccess = false) == handler.OperationResult.Ok)
     assert(handler.handleMatchingResult(callerId = 1, matchedInstanceId = 0, matchingSuccess = true) == handler.OperationResult.Ok)

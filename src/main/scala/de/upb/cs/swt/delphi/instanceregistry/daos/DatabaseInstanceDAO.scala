@@ -165,7 +165,7 @@ class DatabaseInstanceDAO (configuration : Configuration) extends InstanceDAO wi
         Await.result(createAction, Duration.Inf)
 
 
-      log.info("Initializing dynamic instance DAO...")
+      log.info("Initializing sql instance DAO...")
       clearData()
       log.info("Successfully initialized.")
     } else {

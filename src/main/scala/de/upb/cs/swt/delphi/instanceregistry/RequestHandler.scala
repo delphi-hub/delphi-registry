@@ -10,7 +10,7 @@ import de.upb.cs.swt.delphi.instanceregistry.Docker.{ContainerAlreadyStoppedExce
 import akka.stream.scaladsl.{Keep, Sink, Source}
 import akka.stream.{ActorMaterializer, Materializer, OverflowStrategy}
 import de.upb.cs.swt.delphi.instanceregistry.connection.RestClient
-import de.upb.cs.swt.delphi.instanceregistry.daos.{DatabaseInstanceDAO, InstanceDAO}
+import de.upb.cs.swt.delphi.instanceregistry.daos.InstanceDAO
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.{ComponentType, InstanceState}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.LinkEnums.LinkState
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model._
@@ -20,7 +20,7 @@ import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
 
-class RequestHandler(configuration: Configuration, connection: DockerConnection) extends AppLogging {
+class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, connection: DockerConnection) extends AppLogging {
 
 
 
@@ -28,7 +28,6 @@ class RequestHandler(configuration: Configuration, connection: DockerConnection)
   implicit val materializer : Materializer = ActorMaterializer()
   implicit val ec: ExecutionContext = system.dispatcher
 
-  private[instanceregistry] val instanceDao: InstanceDAO = new DatabaseInstanceDAO(configuration)
 
   val (eventActor, eventPublisher) = Source.actorRef[RegistryEvent](10, OverflowStrategy.dropNew)
     .toMat(Sink.asPublisher(fanout = true))(Keep.both)
