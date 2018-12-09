@@ -1,5 +1,9 @@
 package de.upb.cs.swt.delphi.instanceregistry.daos
-import slick.jdbc.H2Profile.api._
+import java.sql.Timestamp
+
+import akka.http.scaladsl.model.DateTime
+import slick.jdbc.MySQLProfile
+import slick.jdbc.MySQLProfile.api._
 import slick.sql.SqlProfile.ColumnOption.NotNull
 
 class Instances(tag: Tag) extends Table[(Long, String, Long, String, String, Option[String], String, String)](tag, "instances") {
@@ -24,12 +28,19 @@ class InstanceMatchingResults(tag: Tag) extends Table[(Long, Long, Boolean)](tag
   def * = (id, instanceId, matchingSuccessful)
 }
 
-class InstanceEvents(tag: Tag) extends Table[(Long, String, String)](tag, "instance_events") {
+class InstanceEvents(tag: Tag) extends Table[(Long, String, DateTime, String)](tag, "instance_events") {
   def id = column[Long]("id", O.PrimaryKey, O.AutoInc) // This is the primary key column
   def eventType = column[String]("eventType", O.Length(100), NotNull)
+  def timestamp = column[DateTime]("timestamp", NotNull)
   def payload = column[String]("payload", O.Length(1000), NotNull)
 
-  def * = (id, eventType, payload)
+  def * = (id, eventType, timestamp, payload)
+
+  implicit def dateTime : MySQLProfile.BaseColumnType[DateTime] =
+    MappedColumnType.base[DateTime, Timestamp](
+      dt => new Timestamp(dt.clicks),
+      ts => DateTime(ts.getTime)
+    )
 }
 
 class EventMaps(tag: Tag) extends Table[(Long, Long, Long)](tag, "event_maps") {

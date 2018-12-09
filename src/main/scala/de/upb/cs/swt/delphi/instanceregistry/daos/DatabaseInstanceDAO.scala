@@ -1,6 +1,7 @@
 package de.upb.cs.swt.delphi.instanceregistry.daos
 
 import akka.actor.ActorSystem
+import akka.http.scaladsl.model.DateTime
 import akka.stream.ActorMaterializer
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.EventEnums.EventType
 import de.upb.cs.swt.delphi.instanceregistry.{AppLogging, Configuration, Registry}
@@ -252,9 +253,8 @@ class DatabaseInstanceDAO (configuration : Configuration) extends InstanceDAO wi
     if(hasInstance(id) && hasInstanceEvents(id)){
       val eventMapIds = eventMaps.filter(_.instanceId === id).map(_.eventId)
       val resultAll = Await.result(db.run(instanceEvents.filter(_.id in eventMapIds).result), Duration.Inf)
-      val listAll = List() ++ resultAll.map(_.value)
-      val listInstance = listAll.map(c => dataToObjectRegistryEvent(c._2, c._3))
-      Success(listInstance)
+      val listAll = List() ++ resultAll.map(result => dataToObjectRegistryEvent(result._2, result._3, result._4))
+      Success(listAll)
     } else {
       log.warning(s"Cannot get events, id $id not present!")
       Failure(new RuntimeException(s"Cannot get events, id $id not present!"))
@@ -476,8 +476,8 @@ class DatabaseInstanceDAO (configuration : Configuration) extends InstanceDAO wi
     Await.result(db.run(eventMaps.filter(_.instanceId === id).exists.result), Duration.Inf)
   }
 
-  private def dataToObjectRegistryEvent(eventType: String, payload: String): RegistryEvent = {
-    RegistryEvent.apply(getEventTypeFromString(eventType), registryEventPayloadFormat.read(payload.parseJson))
+  private def dataToObjectRegistryEvent(eventType: String, timestamp: DateTime, payload: String): RegistryEvent = {
+    RegistryEvent.apply(getEventTypeFromString(eventType), registryEventPayloadFormat.read(payload.parseJson), timestamp)
   }
 
   private def removeEvents(id: Long): Unit = {
