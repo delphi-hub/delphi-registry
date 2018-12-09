@@ -71,7 +71,7 @@ class DatabaseInstanceDAO (configuration : Configuration) extends InstanceDAO wi
 
   override def getInstance(id: Long) : Option[Instance] = {
     if(hasInstance(id)) {
-      var result = Await.result(db.run(instances.filter(_.id === id).result.headOption), Duration.Inf)
+      val result = Await.result(db.run(instances.filter(_.id === id).result.headOption), Duration.Inf)
       Some(dataToObjectInstance(result))
     } else {
       None
@@ -331,23 +331,6 @@ class DatabaseInstanceDAO (configuration : Configuration) extends InstanceDAO wi
     InstanceLink.apply(eventType, payload, getLinkStateFromString(state))
   }
 
-  private def addLinksToInstance(instance: Instance): Instance = {
-    val linksTo = getLinksTo(instance.id.getOrElse(-1))
-    val linksFrom = getLinksFrom(instance.id.getOrElse(-1))
-
-    Instance(
-      instance.id,
-      instance.host,
-      instance.portNumber,
-      instance.name,
-      instance.componentType,
-      instance.dockerId,
-      instance.instanceState,
-      instance.labels,
-      linksTo,
-      linksFrom
-    )
-  }
 
   private[daos] def clearData() : Unit = {
     removeAllInstances()
@@ -356,7 +339,7 @@ class DatabaseInstanceDAO (configuration : Configuration) extends InstanceDAO wi
     removeAllInstanceLinks()
   }
 
-  private def getComponetTypeFromString(componentType: String): ComponentType ={
+  private def getComponentTypeFromString(componentType: String): ComponentType ={
     val result = componentType match {
       case "Crawler" => ComponentType.Crawler
       case "WebApi" => ComponentType.WebApi
@@ -410,7 +393,7 @@ class DatabaseInstanceDAO (configuration : Configuration) extends InstanceDAO wi
 
   private def dataToObjectInstance(options : Option[(Long, String, Long, String, String, Option[String], String, String)]): Instance = {
     val optionValue = options.get
-    val componentTypeObj = getComponetTypeFromString(optionValue._5)
+    val componentTypeObj = getComponentTypeFromString(optionValue._5)
     val instanceStateObj = getInstanceStateFromString(optionValue._7)
     val labelsList = getListFromString(optionValue._8)
     val linksTo = getLinksTo(optionValue._1)
@@ -432,7 +415,7 @@ class DatabaseInstanceDAO (configuration : Configuration) extends InstanceDAO wi
 
   private def removeInstanceEventsWithId(id: Long): Unit ={
     val resultAll = Await.result(db.run(eventMaps.filter(_.instanceId === id).result), Duration.Inf)
-    resultAll.map(c => removeEvents(c._3))
+    resultAll.foreach(c => removeEvents(c._3))
 
     val q = eventMaps.filter(_.instanceId === id)
     val action = q.delete
