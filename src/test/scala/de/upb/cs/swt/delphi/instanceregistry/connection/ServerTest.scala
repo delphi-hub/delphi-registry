@@ -20,9 +20,10 @@ import akka.http.javadsl.model.StatusCodes
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.testkit.ScalatestRouteTest
-import de.upb.cs.swt.delphi.instanceregistry.Registry
+import de.upb.cs.swt.delphi.instanceregistry.Docker.DockerConnection
+import de.upb.cs.swt.delphi.instanceregistry.{Configuration, Registry, RequestHandler}
 import org.scalatest.{Matchers, WordSpec}
-import de.upb.cs.swt.delphi.instanceregistry.connection.Server.routes
+import de.upb.cs.swt.delphi.instanceregistry.daos.{DynamicInstanceDAO, InstanceDAO}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.EventEnums.EventType
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model._
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.{ComponentType, InstanceState}
@@ -41,6 +42,11 @@ class ServerTest
   with InstanceJsonSupport
   with EventJsonSupport {
 
+  private val configuration: Configuration = new Configuration()
+  private val dao: InstanceDAO = new DynamicInstanceDAO(configuration)
+  private val requestHandler: RequestHandler = new RequestHandler(configuration, dao, DockerConnection.fromEnvironment())
+  private val server: Server = new Server(requestHandler)
+
   //JSON CONSTANTS
   private val validJsonInstance = Instance(id = None, host = "http://localhost", portNumber = 4242,
     name = "ValidInstance", componentType = ComponentType.Crawler, dockerId = Some("randomId"),
@@ -58,14 +64,14 @@ class ServerTest
     * Before all tests: Initialize handler and wait for server binding to be ready.
     */
   override def beforeAll(): Unit = {
-    Registry.requestHandler.initialize()
+    requestHandler.initialize()
   }
 
   /**
     * After all tests: Unbind the server, shutdown handler and await termination of both actor systems.
     */
   override def afterAll(): Unit = {
-    Registry.requestHandler.shutdown()
+    requestHandler.shutdown()
     Await.ready(Registry.system.terminate(), Duration.Inf)
     Await.ready(system.terminate(), Duration.Inf)
   }
@@ -83,25 +89,25 @@ class ServerTest
     //Invalid register
     "not register when entity is invalid" in {
       //No entity
-      Post("/register") ~> routes ~> check {
+      Post("/register") ~> server.routes ~> check {
         assert(status === StatusCodes.BAD_REQUEST)
         responseAs[String].toLowerCase should include("failed to parse json")
       }
 
       //Wrong JSON syntax
-      Post("/register", HttpEntity(ContentTypes.`application/json`, invalidJsonInstance.stripMargin)) ~> routes ~> check {
+      Post("/register", HttpEntity(ContentTypes.`application/json`, invalidJsonInstance.stripMargin)) ~> server.routes ~> check {
         assert(status === StatusCodes.BAD_REQUEST)
         responseAs[String].toLowerCase should include("failed to parse json")
       }
 
       //Missing required JSON members
-      Post("/register", HttpEntity(ContentTypes.`application/json`, validJsonInstanceMissingRequiredMember.stripMargin)) ~> routes ~> check {
+      Post("/register", HttpEntity(ContentTypes.`application/json`, validJsonInstanceMissingRequiredMember.stripMargin)) ~> server.routes ~> check {
         assert(status === StatusCodes.BAD_REQUEST)
         responseAs[String].toLowerCase should include("could not deserialize parameter instance")
       }
 
       //Invalid HTTP method
-      Get("/register?InstanceString=25") ~> Route.seal(routes) ~> check {
+      Get("/register?InstanceString=25") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.METHOD_NOT_ALLOWED)
         responseAs[String] shouldEqual "HTTP method not allowed, supported methods: POST"
       }
@@ -111,25 +117,25 @@ class ServerTest
     //Invalid deregister
     "not deregister if method is invalid, id is missing or invalid" in {
       //Id missing
-      Post("/deregister") ~> Route.seal(routes) ~> check {
+      Post("/deregister") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.NOT_FOUND)
         responseAs[String].toLowerCase should include("missing required query parameter")
       }
 
       //Id wrong type
-      Post("/deregister?Id=kilo") ~> Route.seal(routes) ~> check {
+      Post("/deregister?Id=kilo") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.BAD_REQUEST)
         responseAs[String].toLowerCase should include("not a valid 64-bit signed integer value")
       }
 
       //Id not present
-      Post(s"/deregister?Id=${Long.MaxValue}") ~> Route.seal(routes) ~> check {
+      Post(s"/deregister?Id=${Long.MaxValue}") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.NOT_FOUND)
         responseAs[String].toLowerCase should include("not known to the server")
       }
 
       //Wrong HTTP method
-      Get("/deregister?Id=0") ~> Route.seal(routes) ~> check {
+      Get("/deregister?Id=0") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.METHOD_NOT_ALLOWED)
         responseAs[String] shouldEqual "HTTP method not allowed, supported methods: POST"
       }
@@ -137,7 +143,7 @@ class ServerTest
 
     //Valid get instances
     "successfully retrieve list of instances if parameter is valid" in {
-      Get("/instances?ComponentType=ElasticSearch") ~> routes ~> check {
+      Get("/instances?ComponentType=ElasticSearch") ~> server.routes ~> check {
         assert(status === StatusCodes.OK)
         Try(responseAs[String].parseJson.convertTo[List[Instance]](listFormat(instanceFormat))) match {
           case Success(listOfESInstances) =>
@@ -149,7 +155,7 @@ class ServerTest
 
       }
       //No instances of that type present, still need to be 200 OK
-      Get("/instances?ComponentType=WebApp") ~> routes ~> check {
+      Get("/instances?ComponentType=WebApp") ~> server.routes ~> check {
         assert(status === StatusCodes.OK)
       }
     }
@@ -157,13 +163,13 @@ class ServerTest
     //Invalid get instances
     "not retrieve instances if method is invalid, ComponentType is missing or invalid" in {
       //Wrong HTTP method
-      Post("/instances?ComponentType=Crawler") ~> Route.seal(routes) ~> check {
+      Post("/instances?ComponentType=Crawler") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.METHOD_NOT_ALLOWED)
         responseAs[String] shouldEqual "HTTP method not allowed, supported methods: GET"
       }
 
       //Wrong parameter value
-      Get("/instances?ComponentType=Car") ~> routes ~> check {
+      Get("/instances?ComponentType=Car") ~> server.routes ~> check {
         assert(status === StatusCodes.BAD_REQUEST)
         responseAs[String].toLowerCase should include("could not deserialize parameter")
       }
@@ -171,7 +177,7 @@ class ServerTest
 
     //Valid get number of instances
     "successfully retrieve number of instances if parameter is valid" in {
-      Get("/numberOfInstances?ComponentType=ElasticSearch") ~> routes ~> check {
+      Get("/numberOfInstances?ComponentType=ElasticSearch") ~> server.routes ~> check {
         assert(status === StatusCodes.OK)
         Try(responseAs[String].toLong) match {
           case Success(numberOfEsInstances) =>
@@ -182,7 +188,7 @@ class ServerTest
       }
 
       //No instances of that type present, still need to be 200 OK
-      Get("/numberOfInstances?ComponentType=WebApp") ~> routes ~> check {
+      Get("/numberOfInstances?ComponentType=WebApp") ~> server.routes ~> check {
         assert(status === StatusCodes.OK)
         Try(responseAs[String].toLong) match {
           case Success(numberOfEsInstances) =>
@@ -196,13 +202,13 @@ class ServerTest
     //Invalid get number of instances
     "not retrieve number of instances if method is invalid, ComponentType is missing or invalid" in {
       //Wrong HTTP method
-      Post("/numberOfInstances?ComponentType=Crawler") ~> Route.seal(routes) ~> check {
+      Post("/numberOfInstances?ComponentType=Crawler") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.METHOD_NOT_ALLOWED)
         responseAs[String] shouldEqual "HTTP method not allowed, supported methods: GET"
       }
 
       //Wrong parameter value
-      Get("/numberOfInstances?ComponentType=Car") ~> routes ~> check {
+      Get("/numberOfInstances?ComponentType=Car") ~> server.routes ~> check {
         assert(status === StatusCodes.BAD_REQUEST)
         responseAs[String].toLowerCase should include("could not deserialize parameter")
       }
@@ -210,7 +216,7 @@ class ServerTest
 
     //Valid GET /instance
     "return an instance if id is valid and instance is present" in {
-      Get("/instance?Id=0") ~> routes ~> check {
+      Get("/instance?Id=0") ~> server.routes ~> check {
         assert(status === StatusCodes.OK)
         Try(responseAs[String].parseJson.convertTo[Instance](instanceFormat)) match {
           case Success(instance) =>
@@ -224,7 +230,7 @@ class ServerTest
 
     //Invalid GET /instance
     "return 404 if instance id is not known" in {
-      Get("/instance?Id=45") ~> routes ~> check {
+      Get("/instance?Id=45") ~> server.routes ~> check {
         assert(status === StatusCodes.NOT_FOUND)
         responseAs[String] shouldEqual "Id 45 was not found on the server."
       }
@@ -237,7 +243,7 @@ class ServerTest
       val id = assertValidRegister(ComponentType.Crawler, dockerId = None)
 
       //Actual test
-      Get(s"/matchingInstance?Id=$id&ComponentType=ElasticSearch") ~> routes ~> check {
+      Get(s"/matchingInstance?Id=$id&ComponentType=ElasticSearch") ~> server.routes ~> check {
         assert(status === StatusCodes.OK)
         Try(responseAs[String].parseJson.convertTo[Instance](instanceFormat)) match {
           case Success(esInstance) =>
@@ -260,31 +266,31 @@ class ServerTest
       val webAppId = assertValidRegister(ComponentType.WebApp)
 
       //Invalid ComponentType
-      Get(s"/matchingInstance?Id=$webApiId&ComponentType=Search") ~> Route.seal(routes) ~> check {
+      Get(s"/matchingInstance?Id=$webApiId&ComponentType=Search") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.BAD_REQUEST)
       }
 
       //Unknown callee id, expect 404
-      Get("/matchingInstance?Id=45&ComponentType=Crawler") ~> Route.seal(routes) ~> check {
+      Get("/matchingInstance?Id=45&ComponentType=Crawler") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.NOT_FOUND)
         responseAs[String].toLowerCase should include ("id 45 was not found")
       }
 
       //Method Not allowed
-      Post(s"/matchingInstance?Id=$webApiId&ComponentType=ElasticSearch") ~> Route.seal(routes) ~> check {
+      Post(s"/matchingInstance?Id=$webApiId&ComponentType=ElasticSearch") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.METHOD_NOT_ALLOWED)
         responseAs[String] shouldEqual "HTTP method not allowed, supported methods: GET"
       }
 
       //Incompatible types, api asks for crawler - expect 400
-      Get(s"/matchingInstance?Id=$webApiId&ComponentType=Crawler") ~> Route.seal(routes) ~> check {
+      Get(s"/matchingInstance?Id=$webApiId&ComponentType=Crawler") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.BAD_REQUEST)
         responseAs[String].toLowerCase should include ("invalid dependency type")
       }
 
       //No instance of desired type present - expect 404
       assertValidDeregister(webApiId)
-      Get(s"/matchingInstance?Id=$webAppId&ComponentType=WebApi") ~> Route.seal(routes) ~> check {
+      Get(s"/matchingInstance?Id=$webAppId&ComponentType=WebApi") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.NOT_FOUND)
         responseAs[String].toLowerCase should include ("could not find matching instance")
       }
@@ -301,7 +307,7 @@ class ServerTest
       //Add a WebApi instance for testing
       val id2 = assertValidRegister(ComponentType.WebApi)
 
-      Post(s"/matchingResult?CallerId=$id1&MatchedInstanceId=$id2&MatchingSuccessful=1") ~> Route.seal(routes) ~> check {
+      Post(s"/matchingResult?CallerId=$id1&MatchedInstanceId=$id2&MatchingSuccessful=1") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.OK)
         responseAs[String] shouldEqual "Matching result true processed."
       }
@@ -314,18 +320,18 @@ class ServerTest
     //Invalid POST /matchingResult
     "not process matching result if method or parameters are invalid" in {
       //Wrong method
-      Get("/matchingResult?CallerId=0&MatchedInstanceId=0&MatchingSuccessful=1") ~> Route.seal(routes) ~> check {
+      Get("/matchingResult?CallerId=0&MatchedInstanceId=0&MatchingSuccessful=1") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.METHOD_NOT_ALLOWED)
         responseAs[String] shouldEqual "HTTP method not allowed, supported methods: POST"
       }
 
       //Invalid IDs - expect 404
-      Post("/matchingResult?CallerId=1&MatchedInstanceId=2&MatchingSuccessful=0") ~> routes ~> check {
+      Post("/matchingResult?CallerId=1&MatchedInstanceId=2&MatchingSuccessful=0") ~> server.routes ~> check {
         assert(status === StatusCodes.NOT_FOUND)
       }
 
       //Wrong parameters, caller is same as callee - expect bad request
-      Post("/matchingResult?CallerId=0&MatchedInstanceId=0&MatchingSuccessful=O") ~> Route.seal(routes) ~> check {
+      Post("/matchingResult?CallerId=0&MatchedInstanceId=0&MatchingSuccessful=O") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.BAD_REQUEST)
       }
     }
@@ -334,7 +340,7 @@ class ServerTest
     "returns registry events that are associated to the instance if id is valid" in {
       val id = assertValidRegister(ComponentType.Crawler)
       //TestCase
-      Get(s"/eventList?Id=$id") ~> routes ~> check {
+      Get(s"/eventList?Id=$id") ~> server.routes ~> check {
         assert(status === StatusCodes.OK)
         Try(responseAs[String].parseJson.convertTo[List[RegistryEvent]](listFormat(eventFormat))) match {
           case Success(listOfEvents) =>
@@ -351,12 +357,12 @@ class ServerTest
     //Invalid GET /eventList
     "does not return events if method is invalid or id is not found" in {
       //Wrong Http method
-      Post("/eventList?Id=0") ~> Route.seal(routes) ~> check {
+      Post("/eventList?Id=0") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.METHOD_NOT_ALLOWED)
         responseAs[String] shouldEqual "HTTP method not allowed, supported methods: GET"
       }
       //Wrong ID
-      Get("/eventList?Id=45") ~> routes ~> check {
+      Get("/eventList?Id=45") ~> server.routes ~> check {
         assert(status === StatusCodes.NOT_FOUND)
         responseAs[String] shouldEqual "Id 45 not found."
 
@@ -365,7 +371,7 @@ class ServerTest
 
     //Valid GET /network
     "get the whole network graph of the current registry" in {
-      Get("/network") ~> routes ~> check {
+      Get("/network") ~> server.routes ~> check {
         assert(status === StatusCodes.OK)
         Try(responseAs[String].parseJson.convertTo[List[Instance]](listFormat(instanceFormat))) match {
           case Success(listOfInstances) =>
@@ -383,7 +389,7 @@ class ServerTest
       val id = assertValidRegister(ComponentType.Crawler)
 
       //Fake connection from crawler to default ES instance
-      Get(s"/matchingInstance?Id=$id&ComponentType=ElasticSearch") ~> routes ~> check {
+      Get(s"/matchingInstance?Id=$id&ComponentType=ElasticSearch") ~> server.routes ~> check {
         assert(status === StatusCodes.OK)
         Try(responseAs[String].parseJson.convertTo[Instance](instanceFormat)) match {
           case Success(esInstance) =>
@@ -395,7 +401,7 @@ class ServerTest
       }
 
       //Get links from crawler, should be one link to default ES instance
-      Get(s"/linksFrom?Id=$id") ~> routes ~> check {
+      Get(s"/linksFrom?Id=$id") ~> server.routes ~> check {
         assert(status === StatusCodes.OK)
         Try(responseAs[String].parseJson.convertTo[List[InstanceLink]](listFormat(instanceLinkFormat))) match {
           case Success(listOfLinks) =>
@@ -415,7 +421,7 @@ class ServerTest
 
     //Invalid GET /linksFrom
     "return no links found for invalid id" in {
-      Get("/linksFrom?Id=45") ~> routes ~> check {
+      Get("/linksFrom?Id=45") ~> server.routes ~> check {
         assert(status === StatusCodes.NOT_FOUND)
       }
     }
@@ -425,7 +431,7 @@ class ServerTest
       val id = assertValidRegister(ComponentType.Crawler)
 
       //Fake connection from crawler to default ES instance
-      Get(s"/matchingInstance?Id=$id&ComponentType=ElasticSearch") ~> routes ~> check {
+      Get(s"/matchingInstance?Id=$id&ComponentType=ElasticSearch") ~> server.routes ~> check {
         assert(status === StatusCodes.OK)
         Try(responseAs[String].parseJson.convertTo[Instance](instanceFormat)) match {
           case Success(esInstance) =>
@@ -437,7 +443,7 @@ class ServerTest
       }
 
       //Get links to default ES instance, should be one link from crawler
-      Get(s"/linksTo?Id=0") ~> routes ~> check {
+      Get(s"/linksTo?Id=0") ~> server.routes ~> check {
         assert(status === StatusCodes.OK)
         Try(responseAs[String].parseJson.convertTo[List[InstanceLink]](listFormat(instanceLinkFormat))) match {
           case Success(listOfLinks) =>
@@ -457,14 +463,14 @@ class ServerTest
 
     //Invalid GET /linksTo
     "return no links found to specified id" in {
-      Get("/linksTo?Id=45") ~> routes ~> check {
+      Get("/linksTo?Id=45") ~> server.routes ~> check {
         assert(status === StatusCodes.NOT_FOUND)
       }
     }
 
     //Valid POST /addLabel
     "add a generic label to an instance is label and id are valid" in {
-      Post("/addLabel?Id=0&Label=ElasticSearchDefaultLabel") ~> routes ~> check {
+      Post("/addLabel?Id=0&Label=ElasticSearchDefaultLabel") ~> server.routes ~> check {
         assert(status === StatusCodes.OK)
         responseAs[String] shouldEqual "Successfully added label"
       }
@@ -473,14 +479,14 @@ class ServerTest
     //Invalid POST /addLabel
     "fail to add label if id is invalid or label too long" in{
       //Unknown id - expect 404
-      Post("/addLabel?Id=45&Label=Private") ~> routes ~> check {
+      Post("/addLabel?Id=45&Label=Private") ~> server.routes ~> check {
         assert(status === StatusCodes.NOT_FOUND)
         responseAs[String] shouldEqual "Cannot add label, id 45 not found."
       }
 
       val tooLongLabel = "VeryVeryExtraLongLabelThatDoesNotWorkWhileAddingLabel"
       //Label out of bounds - expect 400
-      Post(s"/addLabel?Id=0&Label=$tooLongLabel") ~> routes ~> check {
+      Post(s"/addLabel?Id=0&Label=$tooLongLabel") ~> server.routes ~> check {
         assert(status === StatusCodes.BAD_REQUEST)
         responseAs[String].toLowerCase should include ("exceeds character limit")
       }
@@ -489,46 +495,46 @@ class ServerTest
     /**Minimal tests for docker operations**/
 
     "fail to deploy if component type is invalid" in {
-      Post("/deploy?ComponentType=Car") ~> routes ~> check {
+      Post("/deploy?ComponentType=Car") ~> server.routes ~> check {
         status shouldEqual StatusCodes.BAD_REQUEST
         responseAs[String].toLowerCase should include ("could not deserialize")
       }
     }
 
     "fail to execute docker operations if id is invalid" in {
-      Post("/reportStart?Id=42") ~> routes ~> check {
+      Post("/reportStart?Id=42") ~> server.routes ~> check {
         status shouldEqual StatusCodes.NOT_FOUND
         responseAs[String].toLowerCase should include ("not found")
       }
-      Post("/reportStop?Id=42") ~> routes ~> check {
+      Post("/reportStop?Id=42") ~> server.routes ~> check {
         status shouldEqual StatusCodes.NOT_FOUND
         responseAs[String].toLowerCase should include ("not found")
       }
-      Post("/reportFailure?Id=42") ~> routes ~> check {
+      Post("/reportFailure?Id=42") ~> server.routes ~> check {
         status shouldEqual StatusCodes.NOT_FOUND
         responseAs[String].toLowerCase should include ("not found")
       }
-      Post("/pause?Id=42") ~> routes ~> check {
+      Post("/pause?Id=42") ~> server.routes ~> check {
         status shouldEqual StatusCodes.NOT_FOUND
         responseAs[String].toLowerCase should include ("not found")
       }
-      Post("/resume?Id=42") ~> routes ~> check {
+      Post("/resume?Id=42") ~> server.routes ~> check {
         status shouldEqual StatusCodes.NOT_FOUND
         responseAs[String].toLowerCase should include ("not found")
       }
-      Post("/stop?Id=42") ~> routes ~> check {
+      Post("/stop?Id=42") ~> server.routes ~> check {
         status shouldEqual StatusCodes.NOT_FOUND
         responseAs[String].toLowerCase should include ("not found")
       }
-      Post("/start?Id=42") ~> routes ~> check {
+      Post("/start?Id=42") ~> server.routes ~> check {
         status shouldEqual StatusCodes.NOT_FOUND
         responseAs[String].toLowerCase should include ("not found")
       }
-      Post("/delete?Id=42") ~> routes ~> check {
+      Post("/delete?Id=42") ~> server.routes ~> check {
         status shouldEqual StatusCodes.NOT_FOUND
         responseAs[String].toLowerCase should include ("not found")
       }
-      Post("/assignInstance?Id=42&AssignedInstanceId=43") ~> routes ~> check {
+      Post("/assignInstance?Id=42&AssignedInstanceId=43") ~> server.routes ~> check {
         status shouldEqual StatusCodes.NOT_FOUND
         responseAs[String].toLowerCase should include ("not found")
       }
@@ -536,25 +542,25 @@ class ServerTest
 
     "fail to execute docker operations if instance is no docker container" in {
       val id = assertValidRegister(ComponentType.Crawler, dockerId = None)
-      Post(s"/reportStart?Id=$id") ~> routes ~> check {
+      Post(s"/reportStart?Id=$id") ~> server.routes ~> check {
         status shouldEqual StatusCodes.BAD_REQUEST
       }
-      Post(s"/reportStop?Id=$id") ~> routes ~> check {
+      Post(s"/reportStop?Id=$id") ~> server.routes ~> check {
         status shouldEqual StatusCodes.BAD_REQUEST
       }
-      Post(s"/reportFailure?Id=$id") ~> routes ~> check {
+      Post(s"/reportFailure?Id=$id") ~> server.routes ~> check {
         status shouldEqual StatusCodes.BAD_REQUEST
       }
-      Post(s"/pause?Id=$id") ~> routes ~> check {
+      Post(s"/pause?Id=$id") ~> server.routes ~> check {
         status shouldEqual StatusCodes.BAD_REQUEST
       }
-      Post(s"/resume?Id=$id") ~> routes ~> check {
+      Post(s"/resume?Id=$id") ~> server.routes ~> check {
         status shouldEqual StatusCodes.BAD_REQUEST
       }
-      Post(s"/start?Id=$id") ~> routes ~> check {
+      Post(s"/start?Id=$id") ~> server.routes ~> check {
         status shouldEqual StatusCodes.BAD_REQUEST
       }
-      Post(s"/delete?Id=$id") ~> routes ~> check {
+      Post(s"/delete?Id=$id") ~> server.routes ~> check {
         status shouldEqual StatusCodes.BAD_REQUEST
       }
     }
@@ -569,7 +575,7 @@ class ServerTest
       .toJson(instanceFormat).toString
 
     Post("/register", HttpEntity(ContentTypes.`application/json`,
-      instanceString.stripMargin)) ~> Route.seal(routes) ~> check {
+      instanceString.stripMargin)) ~> Route.seal(server.routes) ~> check {
       assert(status === StatusCodes.OK)
       responseEntity match {
         case HttpEntity.Strict(_, data) =>
@@ -583,7 +589,7 @@ class ServerTest
   }
 
   private def assertValidDeregister(id: Long): Unit = {
-    Post(s"/deregister?Id=$id") ~> routes ~> check {
+    Post(s"/deregister?Id=$id") ~> server.routes ~> check {
       assert(status === StatusCodes.OK)
       entityAs[String].toLowerCase should include("successfully removed instance")
     }

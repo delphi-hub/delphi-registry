@@ -21,7 +21,7 @@ import scala.util.{Failure, Success}
 /**
   * Web server configuration for Instance Registry API.
   */
-object Server extends HttpApp
+class Server (handler: RequestHandler) extends HttpApp
   with InstanceJsonSupport
   with EventJsonSupport
   with InstanceLinkJsonSupport
@@ -30,8 +30,6 @@ object Server extends HttpApp
   implicit val system : ActorSystem = Registry.system
   implicit val materializer : ActorMaterializer = ActorMaterializer()
   implicit val ec : ExecutionContext = system.dispatcher
-
-  private val handler : RequestHandler = Registry.requestHandler
 
   //Routes that map http endpoints to methods in this object
   override def routes : server.Route =

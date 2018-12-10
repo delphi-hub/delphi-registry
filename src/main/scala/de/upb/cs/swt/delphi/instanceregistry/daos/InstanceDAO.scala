@@ -13,10 +13,9 @@ trait InstanceDAO {
 
   /***
     * Add a new instance to the DAO.
-    * @param instance Instance to add (attribute 'id' must not be empty!)
-    * @return Success if id was not already present, Failure otherwise
+    * @param instance Instance to add
     */
-  def addInstance(instance : Instance) : Try[Unit]
+  def addInstance(instance : Instance) : Try[Long]
 
   /**
     * Checks whether the DAO holds an instance with the specified id.
@@ -38,6 +37,13 @@ trait InstanceDAO {
     * @return Some(instance) if present, else None
     */
   def getInstance(id: Long) : Option[Instance]
+
+  /**
+    * Updates the given instance
+    * @param instance instance with updated values
+    * @return Success if successful, Failure otherwise
+    */
+  def updateInstance(instance: Instance) : Try[Unit]
 
   /**
     * Retrieves all instances of the specified ComponentType from the DAO

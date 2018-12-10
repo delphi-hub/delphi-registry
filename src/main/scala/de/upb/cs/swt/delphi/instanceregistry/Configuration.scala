@@ -1,6 +1,7 @@
 package de.upb.cs.swt.delphi.instanceregistry
 
 import akka.util.Timeout
+
 import scala.concurrent.duration.DurationInt
 
 class Configuration( ) {
@@ -35,5 +36,15 @@ class Configuration( ) {
   val jwtSecretKey: String = sys.env.getOrElse("JWT_SECRET", "changeme")
 
 }
+  //Database configurations
+  val useInMemoryDB = false
+  val databaseHost = "jdbc:mysql://localhost/"
+  val databaseName = ""
+  val databaseDriver = "com.mysql.jdbc.Driver"
+  val databaseUsername = ""
+  val databasePassword = ""
+
+
+  }
 
 

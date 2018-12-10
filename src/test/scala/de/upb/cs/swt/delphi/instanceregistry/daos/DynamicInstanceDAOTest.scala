@@ -23,19 +23,23 @@ class DynamicInstanceDAOTest extends FlatSpec with Matchers with BeforeAndAfterE
   }
 
   "The instance DAO" must "be able to add an get an instance with a new id" in {
-    assert(dao.addInstance(buildInstance(4)).isSuccess)
+    val idOption = dao.addInstance(buildInstance(id = 42))
+    assert(idOption.isSuccess)
     assert(dao.allInstances().size == 4)
-    assert(dao.hasInstance(4))
-    assert(dao.removeInstance(4).isSuccess)
+    assert(dao.hasInstance(idOption.get))
+    assert(dao.removeInstance(idOption.get).isSuccess)
   }
 
-  it must "not allow the addition of any id twice" in {
-    assert(dao.addInstance(buildInstance(3)).isFailure)
-    assert(dao.allInstances().size == 3)
+  it must "not assign unique ids ignoring the ones provided by the parameter" in {
+    val idOption = dao.addInstance(buildInstance(3))
+    assert(idOption.isSuccess)
+    assert(dao.allInstances().size == 4)
+    assert(dao.hasInstance(idOption.get))
+    assert(dao.removeInstance(idOption.get).isSuccess)
   }
 
   it must "return true on hasInstance for any present id" in {
-    for(i <- 1 to 3){
+    for(i <- 0 to 2){
       assert(dao.hasInstance(i))
     }
   }
@@ -47,7 +51,7 @@ class DynamicInstanceDAOTest extends FlatSpec with Matchers with BeforeAndAfterE
   }
 
   it must "return instances with the correct id on getInstance" in {
-    for(i <- 1 to 3){
+    for(i <- 0 to 2){
       val instance = dao.getInstance(i)
       assert(instance.isDefined)
       assert(instance.get.id.isDefined)
@@ -65,7 +69,7 @@ class DynamicInstanceDAOTest extends FlatSpec with Matchers with BeforeAndAfterE
   }
 
   it must "remove instances that are present in the DAO" in {
-    for(i <- 1 to 3){
+    for(i <- 0 to 2){
       assert(dao.removeInstance(i).isSuccess)
       assert(!dao.hasInstance(i))
     }
@@ -84,26 +88,26 @@ class DynamicInstanceDAOTest extends FlatSpec with Matchers with BeforeAndAfterE
   }
 
   it must "have an empty list of matching results for newly added instances" in {
-    dao.addInstance(buildInstance(4))
-    assert(dao.getMatchingResultsFor(4).isSuccess)
-    assert(dao.getMatchingResultsFor(4).get.isEmpty)
+    val idOption = dao.addInstance(buildInstance(4))
+    assert(dao.getMatchingResultsFor(idOption.get).isSuccess)
+    assert(dao.getMatchingResultsFor(idOption.get).get.isEmpty)
   }
 
   it must "keep the correct order of matching results posted" in {
-    assert(dao.addMatchingResult(3, matchingSuccessful = true).isSuccess)
-    assert(dao.addMatchingResult(3, matchingSuccessful = true).isSuccess)
-    assert(dao.addMatchingResult(3, matchingSuccessful = false).isSuccess)
+    assert(dao.addMatchingResult(2, matchingSuccessful = true).isSuccess)
+    assert(dao.addMatchingResult(2, matchingSuccessful = true).isSuccess)
+    assert(dao.addMatchingResult(2, matchingSuccessful = false).isSuccess)
 
-    assert(dao.getMatchingResultsFor(3).isSuccess)
-    assert(dao.getMatchingResultsFor(3).get.head)
-    assert(dao.getMatchingResultsFor(3).get (1))
-    assert(!dao.getMatchingResultsFor(3).get (2))
+    assert(dao.getMatchingResultsFor(2).isSuccess)
+    assert(dao.getMatchingResultsFor(2).get.head)
+    assert(dao.getMatchingResultsFor(2).get (1))
+    assert(!dao.getMatchingResultsFor(2).get (2))
 
   }
 
   it must "remove the matching results when the instance is removed" in {
-    assert(dao.removeInstance(3).isSuccess)
-    assert(dao.getMatchingResultsFor(3).isFailure)
+    assert(dao.removeInstance(2).isSuccess)
+    assert(dao.getMatchingResultsFor(2).isFailure)
   }
 
   it must "be able to change the state for arbitrary state transitions" in {
@@ -125,11 +129,11 @@ class DynamicInstanceDAOTest extends FlatSpec with Matchers with BeforeAndAfterE
   }
 
   it must "return the correct docker ids for instances with a docker id" in {
-    assert(dao.addInstance
-    (Instance(Some(42), "http://localhost", 33449, "AnyName",
-      ComponentType.WebApi, Some("dockerId"), InstanceState.Running, List.empty[String], List.empty[InstanceLink], List.empty[InstanceLink] )).isSuccess)
-    assert(dao.getDockerIdFor(42).isSuccess)
-    assert(dao.getDockerIdFor(42).get.equals("dockerId"))
+    val idOption = dao.addInstance(Instance(Some(42), "http://localhost", 33449, "AnyName",
+      ComponentType.WebApi, Some("dockerId"), InstanceState.Running, List.empty[String], List.empty[InstanceLink], List.empty[InstanceLink] ))
+    assert(idOption.isSuccess)
+    assert(dao.getDockerIdFor(idOption.get).isSuccess)
+    assert(dao.getDockerIdFor(idOption.get).get.equals("dockerId"))
   }
 
   it must "add events only to instances that have been registered" in {
@@ -151,15 +155,15 @@ class DynamicInstanceDAOTest extends FlatSpec with Matchers with BeforeAndAfterE
   }
 
   it must "update old links in state 'Assigned' on adding a new assigned link." in {
-    assert(dao.addLink(InstanceLink(1,2, LinkState.Assigned)).isSuccess)
-    assert(dao.getLinksFrom(1, Some(LinkState.Assigned)).size == 1)
-    assert(dao.addLink(InstanceLink(1,3, LinkState.Assigned)).isSuccess)
+    assert(dao.addLink(InstanceLink(0,1, LinkState.Assigned)).isSuccess)
+    assert(dao.getLinksFrom(0, Some(LinkState.Assigned)).size == 1)
+    assert(dao.addLink(InstanceLink(0,2, LinkState.Assigned)).isSuccess)
 
-    assert(dao.getLinksFrom(1, Some(LinkState.Outdated)).size == 1)
-    assert(dao.getLinksFrom(1, Some(LinkState.Outdated)).head.idTo == 2)
+    assert(dao.getLinksFrom(0, Some(LinkState.Outdated)).size == 1)
+    assert(dao.getLinksFrom(0, Some(LinkState.Outdated)).head.idTo == 1)
 
-    assert(dao.getLinksFrom(1, Some(LinkState.Assigned)).size == 1)
-    assert(dao.getLinksFrom(1, Some(LinkState.Assigned)).head.idTo == 3)
+    assert(dao.getLinksFrom(0, Some(LinkState.Assigned)).size == 1)
+    assert(dao.getLinksFrom(0, Some(LinkState.Assigned)).head.idTo == 2)
   }
 
   override protected def afterEach() : Unit = {
