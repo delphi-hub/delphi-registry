@@ -19,6 +19,7 @@ The Delphi registry is a server that provides access to all information and oper
 
 ## Requirements
 In order to compile or execute the instance registry, you must have the latest version of the *Scala Build Tool* (SBT) installed. You can get it [here](https://www.scala-sbt.org/).
+
 The Delphi registry requires a docker host to deploy containers to. The following images must be registered at the docker registry:
 * The Delphi Crawler ( ```delphi-crawler:1.0.0-SNAPSHOT``` )
 * The Delphi WebApi ( ```delphi-webapi:1.0.0-SNAPSHOT``` )
