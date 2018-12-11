@@ -35,7 +35,6 @@ class Configuration( ) {
 
   val jwtSecretKey: String = sys.env.getOrElse("JWT_SECRET", "changeme")
 
-}
   //Database configurations
   val useInMemoryDB = false
   val databaseHost = "jdbc:mysql://localhost/"
@@ -45,6 +44,6 @@ class Configuration( ) {
   val databasePassword = ""
 
 
-  }
+}
 
 

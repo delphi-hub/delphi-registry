@@ -1,7 +1,9 @@
 package de.upb.cs.swt.delphi.instanceregistry.authorization
 
 import akka.actor.ActorSystem
+import akka.http.scaladsl.model.DateTime
 import akka.http.scaladsl.server.directives.Credentials
+import de.upb.cs.swt.delphi.instanceregistry.authorization.AccessTokenEnums.UserType
 import pdi.jwt.{Jwt, JwtAlgorithm}
 import de.upb.cs.swt.delphi.instanceregistry.{AppLogging, Registry}
 import spray.json._
@@ -39,13 +41,13 @@ object AuthProvider extends AppLogging {
     }
   }
 
-  def authenticateOAuthRequire(credentials: Credentials, userType: String = "admin", scope: String = "registry.w") : Option[AccessToken] = {
+  def authenticateOAuthRequire(credentials: Credentials, userType: UserType = UserType.Admin) : Option[AccessToken] = {
     authenticateOAuth(credentials) match {
       case Some(token) =>
-        if(token.scope.contains(scope) && token.userType.equals(userType)){
+        if(canAccess(token.userType, userType)){
           Some(token)
         } else {
-          log.warning(s"Rejecting token because required user type $userType and / or required scope $scope are not present")
+          log.warning(s"Rejecting token because required user type $userType is not present")
           None
         }
       case _ => None
@@ -62,14 +64,27 @@ object AuthProvider extends AppLogging {
       val notBeforeRaw = token.fields("nbf").asInstanceOf[JsNumber].value.toLongExact
       val issuedAtRaw = token.fields("iat").asInstanceOf[JsNumber].value.toLongExact
 
+      val userTypeEnum: UserType = UserType.withName(userTypeRaw) //Will throw exception if not valid, which is fine inside try
+      val expiresAtDate: DateTime = DateTime(expiresAtRaw)
+      val notBeforeDate: DateTime = DateTime(notBeforeRaw)
+      val issuedAtDate: DateTime = DateTime(issuedAtRaw)
+
       AccessToken(
         userId = userIdRaw,
-        userType = userTypeRaw,
-        expiresAt = expiresAtRaw,
-        issuedAt = issuedAtRaw,
-        notBefore = notBeforeRaw,
+        userType = userTypeEnum,
+        expiresAt = expiresAtDate,
+        issuedAt = issuedAtDate,
+        notBefore = notBeforeDate,
         scope = List() ++ scopeRaw
       )
+    }
+  }
+
+  private def canAccess(tokenType: UserType, requiredType: UserType) = {
+    if(tokenType == UserType.Admin){
+      true
+    } else {
+      tokenType == requiredType
     }
   }
 }

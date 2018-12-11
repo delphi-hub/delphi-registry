@@ -1,10 +1,23 @@
 package de.upb.cs.swt.delphi.instanceregistry.authorization
 
-//TODO: Type this class
+import akka.http.scaladsl.model.DateTime
+import de.upb.cs.swt.delphi.instanceregistry.authorization.AccessTokenEnums.UserType
+
 final case class AccessToken(userId: String,
-                             userType: String,
-                             expiresAt: Long,
-                             issuedAt: Long,
-                             notBefore: Long,
+                             userType: UserType,
+                             expiresAt: DateTime,
+                             issuedAt: DateTime,
+                             notBefore: DateTime,
                              scope: List[String])
+
+object AccessTokenEnums {
+
+  type UserType = UserType.Value
+
+  object UserType extends Enumeration {
+    val User : Value = Value("User")
+    val Admin: Value = Value("Admin")
+    val Component: Value = Value("Component")
+  }
+}
 
