@@ -57,7 +57,6 @@ object AuthProvider extends AppLogging {
   private def parsePayload(jwtPayload: String) : Try[AccessToken] = {
     Try[AccessToken] {
       val token = jwtPayload.parseJson.asJsObject
-      val scopeRaw = token.fields("scope").asInstanceOf[JsArray].elements.map(jsScope => jsScope.toString)
       val userIdRaw = token.fields("user_id").asInstanceOf[JsString].toString
       val userTypeRaw = token.fields("user_type").asInstanceOf[JsString].toString
       val expiresAtRaw = token.fields("exp").asInstanceOf[JsNumber].value.toLongExact
@@ -74,8 +73,7 @@ object AuthProvider extends AppLogging {
         userType = userTypeEnum,
         expiresAt = expiresAtDate,
         issuedAt = issuedAtDate,
-        notBefore = notBeforeDate,
-        scope = List() ++ scopeRaw
+        notBefore = notBeforeDate
       )
     }
   }

@@ -7,8 +7,7 @@ final case class AccessToken(userId: String,
                              userType: UserType,
                              expiresAt: DateTime,
                              issuedAt: DateTime,
-                             notBefore: DateTime,
-                             scope: List[String])
+                             notBefore: DateTime)
 
 object AccessTokenEnums {
 
