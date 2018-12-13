@@ -14,9 +14,10 @@ import org.scalatest.{BeforeAndAfterEach, FlatSpec, Matchers}
 import scala.concurrent.ExecutionContext
 
 class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach {
-  implicit val system: ActorSystem = ActorSystem()
-  implicit val materializer: ActorMaterializer = ActorMaterializer()
-  implicit val ec: ExecutionContext = system.dispatcher
+
+  implicit val system : ActorSystem = ActorSystem("test_system")
+  implicit val materializer : ActorMaterializer = ActorMaterializer()
+
   val configuration: Configuration = new Configuration()
   val dao: InstanceDAO = new DynamicInstanceDAO(configuration)
   val handler: RequestHandler = new RequestHandler(configuration, dao, DockerConnection.fromEnvironment())
