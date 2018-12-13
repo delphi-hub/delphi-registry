@@ -28,7 +28,7 @@ class DynamicInstanceDAO (configuration : Configuration) extends InstanceDAO wit
   private val instanceLinks: mutable.Set[InstanceLink] = new mutable.HashSet[InstanceLink]()
 
   implicit val system : ActorSystem = Registry.system
-  implicit val materializer : ActorMaterializer = Registry.materializer
+  implicit val materializer : ActorMaterializer = ActorMaterializer()
   implicit val ec : ExecutionContext = system.dispatcher
 
 
