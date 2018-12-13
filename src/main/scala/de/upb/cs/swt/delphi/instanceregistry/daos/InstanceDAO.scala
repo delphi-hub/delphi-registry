@@ -1,7 +1,8 @@
 package de.upb.cs.swt.delphi.instanceregistry.daos
 
-import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.{Instance, RegistryEvent}
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.{Instance, InstanceLink, RegistryEvent}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.{ComponentType, InstanceState}
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.LinkEnums.LinkState
 
 import scala.util.Try
 
@@ -12,10 +13,9 @@ trait InstanceDAO {
 
   /***
     * Add a new instance to the DAO.
-    * @param instance Instance to add (attribute 'id' must not be empty!)
-    * @return Success if id was not already present, Failure otherwise
+    * @param instance Instance to add
     */
-  def addInstance(instance : Instance) : Try[Unit]
+  def addInstance(instance : Instance) : Try[Long]
 
   /**
     * Checks whether the DAO holds an instance with the specified id.
@@ -37,6 +37,13 @@ trait InstanceDAO {
     * @return Some(instance) if present, else None
     */
   def getInstance(id: Long) : Option[Instance]
+
+  /**
+    * Updates the given instance
+    * @param instance instance with updated values
+    * @return Success if successful, Failure otherwise
+    */
+  def updateInstance(instance: Instance) : Try[Unit]
 
   /**
     * Retrieves all instances of the specified ComponentType from the DAO
@@ -108,4 +115,41 @@ trait InstanceDAO {
     */
   def getEventsFor(id: Long) : Try[List[RegistryEvent]]
 
+  /**
+    * Adds a new instance link to the dao. Will fail if the ids referenced in the link object are not present.
+    * @param link Link to add
+    * @return Success if both ids are present, Failure otherwise
+    */
+  def addLink(link: InstanceLink) : Try[Unit]
+
+  /**
+    * Update the link between the two instances specified by the parameter.
+    * @param link Link to update
+    * @return Success if link is present, Failure otherwise
+    */
+  def updateLink(link: InstanceLink) : Try[Unit]
+
+  /**
+    * Get all outgoing links from the specified instance. Optionally a LinkState can be specified as filter
+    * @param idFrom Id of the instance
+    * @param state Option[LinkState] to filter for certain LinkStates. If None, no filter will be applied.
+    * @return List of matching InstanceLinks
+    */
+  def getLinksFrom(idFrom: Long, state: Option[LinkState] = None) : List[InstanceLink]
+
+  /**
+    * Get all incoming links to the specified instance. Optionally a LinkState can be specified as filter
+    * @param idFrom Id of the instance
+    * @param state Option[LinkState] to filter for certain LinkStates. If None, no filter will be applied.
+    * @return List of matching InstanceLinks
+    */
+  def getLinksTo(idFrom: Long, state: Option[LinkState] = None) : List[InstanceLink]
+
+  /**
+    * Adds a label to the instance with the specified id
+    * @param id Id of the instance
+    * @param label Label to add
+    * @return Success if instance is present and label does not exceed character limit, false otherwise.
+    */
+  def addLabelFor(id: Long, label: String) : Try[Unit]
 }
