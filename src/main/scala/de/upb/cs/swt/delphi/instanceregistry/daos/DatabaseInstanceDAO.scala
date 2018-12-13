@@ -28,11 +28,10 @@ class DatabaseInstanceDAO (configuration : Configuration) extends InstanceDAO wi
   private val eventMaps : TableQuery[EventMaps] = TableQuery[EventMaps]
 
   implicit val system : ActorSystem = Registry.system
-  implicit val materializer : ActorMaterializer = ActorMaterializer()
+  implicit val materializer : ActorMaterializer = Registry.materializer
   implicit val ec : ExecutionContext = system.dispatcher
 
-  val db = Database.forURL(configuration.databaseHost + configuration.databaseName, driver = configuration.databaseDriver, user = configuration.databaseUsername, password = configuration.databasePassword)
-
+  private var db = Database.forURL(configuration.databaseHost + configuration.databaseName, driver = configuration.databaseDriver, user = configuration.databaseUsername, password = configuration.databasePassword)
   override def addInstance(instance : Instance) : Try[Long] = {
 
     val id = 0L //Will be set by DB
@@ -452,7 +451,7 @@ class DatabaseInstanceDAO (configuration : Configuration) extends InstanceDAO wi
   }
 
   private def hasMatchingResultForInstance(id: Long): Boolean = {
-    Await.result(db.run(instanceMatchingResults.filter(_.id === id).exists.result), Duration.Inf)
+    Await.result(db.run(instanceMatchingResults.filter(_.instanceId === id).exists.result), Duration.Inf)
   }
 
   private def hasInstanceEvents(id: Long) : Boolean = {
@@ -475,6 +474,11 @@ class DatabaseInstanceDAO (configuration : Configuration) extends InstanceDAO wi
     } catch {
       case e: Throwable => throw e
     }
+  }
+
+  def setDatabaseConfiguration(databaseHost: String = "", databaseName: String = "", databaseDriver: String = "", databaseUsername: String = "", databasePassword: String = "") ={
+    db = Database.forURL(databaseHost + databaseName, driver = databaseDriver, user = databaseUsername, password = databasePassword)
+    initialize()
   }
 
 }
