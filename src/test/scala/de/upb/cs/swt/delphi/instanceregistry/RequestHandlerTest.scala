@@ -15,7 +15,7 @@ import scala.concurrent.ExecutionContext
 
 class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach {
   implicit val system: ActorSystem = ActorSystem()
-  implicit val materializer: ActorMaterializer = Registry.materializer
+  implicit val materializer: ActorMaterializer = ActorMaterializer()
   implicit val ec: ExecutionContext = system.dispatcher
   val configuration: Configuration = new Configuration()
   val dao: InstanceDAO = new DynamicInstanceDAO(configuration)

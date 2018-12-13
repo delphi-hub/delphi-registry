@@ -28,7 +28,7 @@ class DatabaseInstanceDAO (configuration : Configuration) extends InstanceDAO wi
   private val eventMaps : TableQuery[EventMaps] = TableQuery[EventMaps]
 
   implicit val system : ActorSystem = Registry.system
-  implicit val materializer : ActorMaterializer = Registry.materializer
+  implicit val materializer : ActorMaterializer = ActorMaterializer()
   implicit val ec : ExecutionContext = system.dispatcher
 
   private var db = Database.forURL(configuration.databaseHost + configuration.databaseName, driver = configuration.databaseDriver, user = configuration.databaseUsername, password = configuration.databasePassword)
