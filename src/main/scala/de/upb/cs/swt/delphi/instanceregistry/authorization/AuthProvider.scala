@@ -17,12 +17,9 @@ object AuthProvider extends AppLogging {
   def authenticateOAuth(credentials: Credentials) : Option[AccessToken] = {
     credentials match {
       case _ @ Credentials.Provided(tokenString) =>
-        log.info(s"Validation authorization for token $tokenString")
-
+        log.debug(s"Validation authorization for token $tokenString")
         Jwt.decodeRawAll(tokenString, Registry.configuration.jwtSecretKey, Seq(JwtAlgorithm.HS256)) match {
-          case Success((header, payload, _)) =>
-            log.info(s"Token valid, headers are: $header")
-
+          case Success((_, payload, _)) =>
             parsePayload(payload) match {
               case Success(token) =>
                 log.info(s"Successfully parsed token to $token")
@@ -56,17 +53,19 @@ object AuthProvider extends AppLogging {
 
   private def parsePayload(jwtPayload: String) : Try[AccessToken] = {
     Try[AccessToken] {
-      val token = jwtPayload.parseJson.asJsObject
-      val userIdRaw = token.fields("user_id").asInstanceOf[JsString].toString
-      val userTypeRaw = token.fields("user_type").asInstanceOf[JsString].toString
-      val expiresAtRaw = token.fields("exp").asInstanceOf[JsNumber].value.toLongExact
-      val notBeforeRaw = token.fields("nbf").asInstanceOf[JsNumber].value.toLongExact
-      val issuedAtRaw = token.fields("iat").asInstanceOf[JsNumber].value.toLongExact
+      val json = jwtPayload.parseJson.asJsObject
+
+      val expiresAtRaw = json.fields("exp").asInstanceOf[JsNumber].value.toLongExact
+      val notBeforeRaw = json.fields("nbf").asInstanceOf[JsNumber].value.toLongExact
+      val issuedAtRaw = json.fields("iat").asInstanceOf[JsNumber].value.toLongExact
+
+      val userTypeRaw = json.fields("user_type").asInstanceOf[JsString].value
+      val userIdRaw = json.fields("user_id").asInstanceOf[JsString].value
 
       val userTypeEnum: UserType = UserType.withName(userTypeRaw) //Will throw exception if not valid, which is fine inside try
-      val expiresAtDate: DateTime = DateTime(expiresAtRaw)
-      val notBeforeDate: DateTime = DateTime(notBeforeRaw)
-      val issuedAtDate: DateTime = DateTime(issuedAtRaw)
+      val expiresAtDate: DateTime = DateTime(expiresAtRaw * 1000L) //Convert to milliseconds for akka DateTime
+      val notBeforeDate: DateTime = DateTime(notBeforeRaw * 1000L)
+      val issuedAtDate: DateTime = DateTime(issuedAtRaw * 1000L)
 
       AccessToken(
         userId = userIdRaw,
