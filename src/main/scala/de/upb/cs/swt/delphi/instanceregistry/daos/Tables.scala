@@ -4,7 +4,7 @@ import java.sql.Timestamp
 import akka.http.scaladsl.model.DateTime
 import slick.jdbc.MySQLProfile
 import slick.jdbc.MySQLProfile.api._
-import slick.sql.SqlProfile.ColumnOption.NotNull
+import slick.sql.SqlProfile.ColumnOption.{NotNull, SqlType}
 
 class Instances(tag: Tag) extends Table[(Long, String, Long, String, String, Option[String], String, String)](tag, "instances") {
   def id = column[Long]("id", O.PrimaryKey, O.AutoInc) // This is the primary key column
@@ -31,7 +31,7 @@ class InstanceMatchingResults(tag: Tag) extends Table[(Long, Long, Boolean)](tag
 class InstanceEvents(tag: Tag) extends Table[(Long, String, DateTime, String)](tag, "instance_events") {
   def id = column[Long]("id", O.PrimaryKey, O.AutoInc) // This is the primary key column
   def eventType = column[String]("eventType", O.Length(100), NotNull)
-  def timestamp = column[DateTime]("timestamp", NotNull)
+  def timestamp = column[DateTime]("timestamp", SqlType("timestamp not null default CURRENT_TIMESTAMP"))
   def payload = column[String]("payload", O.Length(1000), NotNull)
 
   def * = (id, eventType, timestamp, payload)
