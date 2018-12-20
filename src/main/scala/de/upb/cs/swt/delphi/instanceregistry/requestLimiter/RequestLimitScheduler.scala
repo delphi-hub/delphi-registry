@@ -6,13 +6,12 @@ import akka.NotUsed
 import akka.actor.{ActorRef, ActorSystem}
 import akka.http.scaladsl.server.Directives.{complete, extractClientIP, onSuccess}
 import akka.http.scaladsl.server.Route
-import akka.pattern.BackoffSupervisor.Reset
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.Source
 import akka.util.Timeout
 import de.upb.cs.swt.delphi.instanceregistry.Configuration
 import de.upb.cs.swt.delphi.instanceregistry.Docker.JsonSupport
-import de.upb.cs.swt.delphi.instanceregistry.requestLimiter.IpLogActor.Accepted
+import de.upb.cs.swt.delphi.instanceregistry.requestLimiter.IpLogActor.{Accepted, Reset}
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._

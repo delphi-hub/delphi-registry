@@ -43,7 +43,7 @@ class Configuration( ) {
 
   //Request Limiter
   val maxTotalNoRequest = 2000
-  val maxIndividualIpReq = 1
+  val maxIndividualIpReq = 200
   val ipLogRefreshRate: FiniteDuration = 5.minutes
   val defaultTimeout = 5 //seconds
 
