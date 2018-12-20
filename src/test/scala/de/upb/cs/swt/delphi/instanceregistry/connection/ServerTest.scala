@@ -18,6 +18,7 @@ package de.upb.cs.swt.delphi.instanceregistry.connection
 
 import akka.http.javadsl.model.StatusCodes
 import akka.http.javadsl.model.headers.Authorization
+import akka.http.javadsl.server.AuthenticationFailedRejection
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.testkit.ScalatestRouteTest
@@ -114,6 +115,18 @@ class ServerTest
         responseAs[String] shouldEqual "HTTP method not allowed, supported methods: POST"
       }
 
+      //Wrong user type
+      Post("/register?InstanceString=25") ~> addAuthorization("User") ~> Route.seal(server.routes) ~> check {
+        assert(status === StatusCodes.UNAUTHORIZED)
+        responseAs[String] shouldEqual "The supplied authentication is invalid"
+      }
+
+      //No authorization
+      Post("/register?InstanceString=25") ~> Route.seal(server.routes) ~> check {
+        assert(status === StatusCodes.UNAUTHORIZED)
+        responseAs[String].toLowerCase should include ("not supplied with the request")
+      }
+
     }
 
     //Invalid deregister
@@ -140,6 +153,18 @@ class ServerTest
       Get("/deregister?Id=0") ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.METHOD_NOT_ALLOWED)
         responseAs[String] shouldEqual "HTTP method not allowed, supported methods: POST"
+      }
+
+      //Wrong user type
+      Post("/deregister?Id=0") ~> addAuthorization("User") ~> Route.seal(server.routes) ~> check {
+        assert(status === StatusCodes.UNAUTHORIZED)
+        responseAs[String] shouldEqual "The supplied authentication is invalid"
+      }
+
+      //No authorization
+      Post("/deregister?Id=0") ~> Route.seal(server.routes) ~> check {
+        assert(status === StatusCodes.UNAUTHORIZED)
+        responseAs[String].toLowerCase should include ("not supplied with the request")
       }
     }
 
@@ -174,6 +199,18 @@ class ServerTest
       Get("/instances?ComponentType=Car") ~> addAuthorization("User") ~> server.routes ~> check {
         assert(status === StatusCodes.BAD_REQUEST)
         responseAs[String].toLowerCase should include("could not deserialize parameter")
+      }
+
+      //Wrong user type
+      Get("/instances?ComponentType=Crawler") ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
+        assert(status === StatusCodes.UNAUTHORIZED)
+        responseAs[String] shouldEqual "The supplied authentication is invalid"
+      }
+
+      //No authorization
+      Get("/instances?ComponentType=Crawler") ~> Route.seal(server.routes) ~> check {
+        assert(status === StatusCodes.UNAUTHORIZED)
+        responseAs[String].toLowerCase should include ("not supplied with the request")
       }
     }
 
@@ -214,6 +251,18 @@ class ServerTest
         assert(status === StatusCodes.BAD_REQUEST)
         responseAs[String].toLowerCase should include("could not deserialize parameter")
       }
+
+      //Wrong user type
+      Get("/numberOfInstances?ComponentType=Crawler") ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
+        assert(status === StatusCodes.UNAUTHORIZED)
+        responseAs[String] shouldEqual "The supplied authentication is invalid"
+      }
+
+      //No authorization
+      Get("/numberOfInstances?ComponentType=Crawler") ~> Route.seal(server.routes) ~> check {
+        assert(status === StatusCodes.UNAUTHORIZED)
+        responseAs[String].toLowerCase should include ("not supplied with the request")
+      }
     }
 
     //Valid GET /instance
@@ -235,6 +284,18 @@ class ServerTest
       Get("/instance?Id=45") ~> addAuthorization("User") ~> server.routes ~> check {
         assert(status === StatusCodes.NOT_FOUND)
         responseAs[String] shouldEqual "Id 45 was not found on the server."
+      }
+
+      //Wrong user type
+      Get("/instance?Id=0") ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
+        assert(status === StatusCodes.UNAUTHORIZED)
+        responseAs[String] shouldEqual "The supplied authentication is invalid"
+      }
+
+      //No authorization
+      Get("/instance?Id=0") ~> Route.seal(server.routes) ~> check {
+        assert(status === StatusCodes.UNAUTHORIZED)
+        responseAs[String].toLowerCase should include ("not supplied with the request")
       }
     }
 
@@ -297,6 +358,18 @@ class ServerTest
         responseAs[String].toLowerCase should include ("could not find matching instance")
       }
 
+      //Wrong user type
+      Get(s"/matchingInstance?Id=$webAppId&ComponentType=WebApi") ~> addAuthorization("User") ~> Route.seal(server.routes) ~> check {
+        assert(status === StatusCodes.UNAUTHORIZED)
+        responseAs[String] shouldEqual "The supplied authentication is invalid"
+      }
+
+      //No authorization
+      Get(s"/matchingInstance?Id=$webAppId&ComponentType=WebApi") ~> Route.seal(server.routes) ~> check {
+        assert(status === StatusCodes.UNAUTHORIZED)
+        responseAs[String].toLowerCase should include ("not supplied with the request")
+      }
+
       assertValidDeregister(webAppId)
       assertValidDeregister(crawlerId)
 
@@ -336,6 +409,18 @@ class ServerTest
       Post("/matchingResult?CallerId=0&MatchedInstanceId=0&MatchingSuccessful=O") ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.BAD_REQUEST)
       }
+
+      //Wrong user type
+      Post("/matchingResult?CallerId=1&MatchedInstanceId=2&MatchingSuccessful=0") ~> addAuthorization("User") ~> Route.seal(server.routes) ~> check {
+        assert(status === StatusCodes.UNAUTHORIZED)
+        responseAs[String] shouldEqual "The supplied authentication is invalid"
+      }
+
+      //No authorization
+      Post("/matchingResult?CallerId=1&MatchedInstanceId=2&MatchingSuccessful=0") ~> Route.seal(server.routes) ~> check {
+        assert(status === StatusCodes.UNAUTHORIZED)
+        responseAs[String].toLowerCase should include ("not supplied with the request")
+      }
     }
 
     //Valid GET /eventList
@@ -368,6 +453,18 @@ class ServerTest
         assert(status === StatusCodes.NOT_FOUND)
         responseAs[String] shouldEqual "Id 45 not found."
 
+      }
+
+      //Wrong user type
+      Get("/eventList?Id=0") ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
+        assert(status === StatusCodes.UNAUTHORIZED)
+        responseAs[String] shouldEqual "The supplied authentication is invalid"
+      }
+
+      //No authorization
+      Get("/eventList?Id=0") ~> Route.seal(server.routes) ~> check {
+        assert(status === StatusCodes.UNAUTHORIZED)
+        responseAs[String].toLowerCase should include ("not supplied with the request")
       }
     }
 
@@ -426,6 +523,18 @@ class ServerTest
       Get("/linksFrom?Id=45") ~> addAuthorization("User") ~> server.routes ~> check {
         assert(status === StatusCodes.NOT_FOUND)
       }
+
+      //Wrong user type
+      Get("/linksFrom?Id=0") ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
+        assert(status === StatusCodes.UNAUTHORIZED)
+        responseAs[String] shouldEqual "The supplied authentication is invalid"
+      }
+
+      //No authorization
+      Get("/linksFrom?Id=0") ~> Route.seal(server.routes) ~> check {
+        assert(status === StatusCodes.UNAUTHORIZED)
+        responseAs[String].toLowerCase should include ("not supplied with the request")
+      }
     }
 
     //Valid GET /linksTo
@@ -468,6 +577,18 @@ class ServerTest
       Get("/linksTo?Id=45") ~> addAuthorization("User") ~> server.routes ~> check {
         assert(status === StatusCodes.NOT_FOUND)
       }
+
+      //Wrong user type
+      Get("/linksTo?Id=0") ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
+        assert(status === StatusCodes.UNAUTHORIZED)
+        responseAs[String] shouldEqual "The supplied authentication is invalid"
+      }
+
+      //No authorization
+      Get("/linksTo?Id=0") ~> Route.seal(server.routes) ~> check {
+        assert(status === StatusCodes.UNAUTHORIZED)
+        responseAs[String].toLowerCase should include ("not supplied with the request")
+      }
     }
 
     //Valid POST /addLabel
@@ -492,6 +613,24 @@ class ServerTest
         assert(status === StatusCodes.BAD_REQUEST)
         responseAs[String].toLowerCase should include ("exceeds character limit")
       }
+
+      //Wrong user type
+      Post("/addLabel?Id=0&Label=Private") ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
+        assert(status === StatusCodes.UNAUTHORIZED)
+        responseAs[String] shouldEqual "The supplied authentication is invalid"
+      }
+
+      //Wrong user type
+      Post("/addLabel?Id=0&Label=Private") ~> addAuthorization("User") ~> Route.seal(server.routes) ~> check {
+        assert(status === StatusCodes.UNAUTHORIZED)
+        responseAs[String] shouldEqual "The supplied authentication is invalid"
+      }
+
+      //No authorization
+      Post("/addLabel?Id=0&Label=Private") ~> Route.seal(server.routes) ~> check {
+        assert(status === StatusCodes.UNAUTHORIZED)
+        responseAs[String].toLowerCase should include ("not supplied with the request")
+      }
     }
 
     /**Minimal tests for docker operations**/
@@ -500,6 +639,16 @@ class ServerTest
       Post("/deploy?ComponentType=Car") ~> addAuthorization("Admin") ~> server.routes ~> check {
         status shouldEqual StatusCodes.BAD_REQUEST
         responseAs[String].toLowerCase should include ("could not deserialize")
+      }
+
+      //Wrong user type
+      Post("/deploy?ComponentType=Crawler") ~> addAuthorization("User") ~> server.routes ~> check {
+        rejection.isInstanceOf[AuthenticationFailedRejection] shouldBe true
+      }
+
+      //No authorization
+      Post("/deploy?ComponentType=Crawler") ~> server.routes ~> check {
+        rejection.isInstanceOf[AuthenticationFailedRejection] shouldBe true
       }
     }
 
@@ -565,6 +714,33 @@ class ServerTest
       Post(s"/delete?Id=$id") ~> addAuthorization("Admin") ~> server.routes ~> check {
         status shouldEqual StatusCodes.BAD_REQUEST
       }
+      assertValidDeregister(id)
+    }
+
+    "fail to execute docker operations with wrong authorization supplied" in {
+      val id = assertValidRegister(ComponentType.Crawler, dockerId = None)
+      Post(s"/reportStart?Id=$id") ~> server.routes ~> check {
+        rejection.isInstanceOf[AuthenticationFailedRejection] shouldBe true
+      }
+      Post(s"/reportStop?Id=$id") ~> server.routes ~> check {
+        rejection.isInstanceOf[AuthenticationFailedRejection] shouldBe true
+      }
+      Post(s"/reportFailure?Id=$id") ~> server.routes ~> check {
+        rejection.isInstanceOf[AuthenticationFailedRejection] shouldBe true
+      }
+      Post(s"/pause?Id=$id") ~> addAuthorization("User") ~> server.routes ~> check {
+        rejection.isInstanceOf[AuthenticationFailedRejection] shouldBe true
+      }
+      Post(s"/resume?Id=$id") ~> addAuthorization("User") ~> server.routes ~> check {
+        rejection.isInstanceOf[AuthenticationFailedRejection] shouldBe true
+      }
+      Post(s"/start?Id=$id") ~> addAuthorization("User") ~> server.routes ~> check {
+        rejection.isInstanceOf[AuthenticationFailedRejection] shouldBe true
+      }
+      Post(s"/delete?Id=$id") ~> server.routes ~> check {
+        rejection.isInstanceOf[AuthenticationFailedRejection] shouldBe true
+      }
+      assertValidDeregister(id)
     }
   }
   private def assertValidRegister(compType: ComponentType,
