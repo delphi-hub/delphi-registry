@@ -4,6 +4,7 @@ import java.util.concurrent.TimeUnit
 
 import akka.NotUsed
 import akka.actor.{ActorRef, ActorSystem}
+import akka.http.scaladsl.model.{HttpResponse, StatusCode, StatusCodes}
 import akka.http.scaladsl.server.Directives.{complete, extractClientIP, onSuccess}
 import akka.http.scaladsl.server.Route
 import akka.stream.ActorMaterializer
@@ -39,7 +40,7 @@ class RequestLimitScheduler(ipLogActor: ActorRef) extends JsonSupport {
             apiRoutes
           } else {
             val res = Map("msg" -> "Request limit exceeded")
-            complete(res.toJson)
+            complete(HttpResponse(StatusCodes.BadRequest, entity = res.toJson.toString()))
           }
       }
     }
