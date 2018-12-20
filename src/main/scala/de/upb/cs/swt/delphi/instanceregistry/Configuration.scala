@@ -2,7 +2,7 @@ package de.upb.cs.swt.delphi.instanceregistry
 
 import akka.util.Timeout
 
-import scala.concurrent.duration.DurationInt
+import scala.concurrent.duration.{DurationInt, FiniteDuration}
 
 class Configuration( ) {
   //Where to host the http server
@@ -41,6 +41,11 @@ class Configuration( ) {
   val databaseUsername = ""
   val databasePassword = ""
 
+  //Request Limiter
+  val maxTotalNoRequest = 2000
+  val maxIndividualIpReq = 1
+  val ipLogRefreshRate: FiniteDuration = 5.minutes
+  val defaultTimeout = 5 //seconds
 
   }
 
