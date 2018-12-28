@@ -54,7 +54,7 @@ paths:
             example: 42
         '405':
           description: Invalid input
-  /instances/{id}/deregister:
+  '/instances/{id}/deregister':
     post:
       tags:
         - Basic Operations
@@ -72,7 +72,6 @@ paths:
           required: true
           type: integer
           format: int64
-
       responses:
         '200':
           description: Sucessfully Deregistered
@@ -124,7 +123,7 @@ paths:
         - name: ComponentType
           in: query
           description: Type of the instances to be retrieved
-          required: true
+          required: false
           type: string
           enum:
             - Crawler
@@ -132,12 +131,6 @@ paths:
             - WebApp
             - DelphiManagement
             - ElasticSearch
-        - name : Id
-          in: query
-          description: The ID of the instance.
-          required: true
-          type: integer
-          format: int64
       responses:
         '200':
           description: List of instances of the specified type
@@ -160,7 +153,7 @@ paths:
         - name: ComponentType
           in: query
           description: Type of the instances to be counted
-          required: true
+          required: false
           type: string
           enum:
             - Crawler
@@ -243,7 +236,7 @@ paths:
           description: Operation accepted
         '500':
           description: Internal server error
-  /instances/reportStart:
+  /instances/{id}/reportStart:
     post:
       tags:
         - Docker Operations
@@ -256,9 +249,9 @@ paths:
         /deploy is called.
       operationId: reportStart
       parameters:
-        - in: query
-          name: InstanceID
-          description: The ID of the instance that was started
+        - name: id
+          in: path
+          description: The ID of the instance.
           required: true
           type: integer
           format: int64
@@ -273,7 +266,7 @@ paths:
           description: ID not found on server
         '500':
           description: Internal server error
-  /instances/reportFailure:
+  /instances/{id}/reportFailure:
     post:
       tags:
         - Docker Operations
@@ -288,9 +281,9 @@ paths:
         restarted.
       operationId: reportFailure
       parameters:
-        - in: query
-          name: InstanceID
-          description: The ID of the instance that encountered the failure
+        - name: id
+          in: path
+          description: The ID of the instance.
           required: true
           type: integer
           format: int64
@@ -310,7 +303,34 @@ paths:
           description: ID not found on server
         '500':
           description: Internal server error
-  /instances/pause:
+  /instances/{id}/reportStop:
+    post:
+      tags:
+        - Docker Operations
+      summary: Reports the successful start of an instances to the registry
+      description: >-
+        This command informs the registry about an instance that successfully
+        reached the state 'Stopped'.
+      operationId: reportStop
+      parameters:
+        - name: id
+          in: path
+          description: The ID of the instance.
+          required: true
+          type: integer
+          format: int64
+      responses:
+        '200':
+          description: Report successfully processed.
+        '400':
+          description: >-
+            Bad request, the instance with the specified ID is not deployed as a
+            docker container.
+        '404':
+          description: ID not found on server
+        '500':
+          description: Internal server error        
+  /instances/{id}/pause:
     post:
       tags:
         - Docker Operations
@@ -320,9 +340,9 @@ paths:
         specified ID. Will change the instance state from 'Running' to 'Paused'
       operationId: pause
       parameters:
-        - in: query
-          name: InstanceID
-          description: The ID of the instance to be paused
+        - name: id
+          in: path
+          description: The ID of the instance.
           required: true
           type: integer
           format: int64
@@ -337,7 +357,7 @@ paths:
           description: ID not found on server
         '500':
           description: Internal server error
-  /instances/resume:
+  /instances/{id}/resume:
     post:
       tags:
         - Docker Operations
@@ -348,9 +368,9 @@ paths:
         'Paused' to 'Running'.
       operationId: resume
       parameters:
-        - in: query
-          name: InstanceID
-          description: The ID of the instance to be resumed
+        - name: id
+          in: path
+          description: The ID of the instance.
           required: true
           type: integer
           format: int64
@@ -365,7 +385,7 @@ paths:
           description: ID not found on server
         '500':
           description: Internal server error
-  /instances/stop:
+  /instances/{id}/stop:
     post:
       tags:
         - Docker Operations
@@ -376,9 +396,9 @@ paths:
         /stop command first. Will change the instance state to 'Stopped'.
       operationId: stop
       parameters:
-        - in: query
-          name: InstanceID
-          description: The ID of the instance to be stopped
+        - name: id
+          in: path
+          description: The ID of the instance.
           required: true
           type: integer
           format: int64
@@ -393,7 +413,7 @@ paths:
           description: ID not found on server
         '500':
           description: Internal server error
-  /instances/start:
+  /instances/{id}/start:
     post:
       tags:
         - Docker Operations
@@ -404,9 +424,9 @@ paths:
         'Running'.
       operationId: start
       parameters:
-        - in: query
-          name: InstanceID
-          description: The ID of the instance to be started
+        - name: id
+          in: path
+          description: The ID of the instance.
           required: true
           type: integer
           format: int64
@@ -421,7 +441,7 @@ paths:
           description: ID not found on server
         '500':
           description: Internal server error
-  /instances/delete:
+  /instances/{id}/delete:
     post:
       tags:
         - Docker Operations
@@ -432,9 +452,9 @@ paths:
         any data the instance registry holds about the instance.
       operationId: delete
       parameters:
-        - in: query
-          name: InstanceID
-          description: The ID of the instance to be deleted
+        - name: id
+          in: path
+          description: The ID of the instance.
           required: true
           type: integer
           format: int64
