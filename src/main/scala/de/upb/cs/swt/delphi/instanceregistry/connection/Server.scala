@@ -8,8 +8,8 @@ import akka.http.scaladsl.server.HttpApp
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.{Flow, Sink, Source}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.ComponentType
-import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model._
-import de.upb.cs.swt.delphi.instanceregistry._
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.{EventJsonSupport, InstanceJsonSupport, InstanceLinkJsonSupport, Instance}
+import de.upb.cs.swt.delphi.instanceregistry.{AppLogging, Registry, RequestHandler}
 import spray.json.JsonParser.ParsingException
 import spray.json._
 
