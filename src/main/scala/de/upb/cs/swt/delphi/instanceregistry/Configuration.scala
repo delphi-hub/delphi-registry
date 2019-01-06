@@ -33,6 +33,8 @@ class Configuration( ) {
 
   val dockerOperationTimeout: Timeout = Timeout(20 seconds)
 
+  val jwtSecretKey: String = sys.env.getOrElse("JWT_SECRET", "changeme")
+
   //Database configurations
   val useInMemoryDB = false
   val databaseHost = "jdbc:mysql://localhost/"
@@ -46,6 +48,6 @@ class Configuration( ) {
   val maxIndividualIpReq: Int = 200
   val ipLogRefreshRate: FiniteDuration = 2.minutes
 
-  }
+}
 
 
