@@ -42,10 +42,9 @@ class Configuration( ) {
   val databasePassword = ""
 
   //Request Limiter
-  val maxTotalNoRequest = 2000
-  val maxIndividualIpReq = 200
+  val maxTotalNoRequest: Int = 2000
+  val maxIndividualIpReq: Int = 200
   val ipLogRefreshRate: FiniteDuration = 2.minutes
-  val defaultTimeout = 5 //seconds
 
   }
 

@@ -10,7 +10,7 @@ import akka.http.scaladsl.server.Route
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.Source
 import akka.util.Timeout
-import de.upb.cs.swt.delphi.instanceregistry.Configuration
+import de.upb.cs.swt.delphi.instanceregistry.{Configuration, Registry}
 import de.upb.cs.swt.delphi.instanceregistry.Docker.JsonSupport
 import de.upb.cs.swt.delphi.instanceregistry.requestLimiter.IpLogActor.{Accepted, Reset}
 
@@ -20,13 +20,15 @@ import akka.pattern.ask
 import spray.json._
 
 class RequestLimitScheduler(ipLogActor: ActorRef) extends JsonSupport {
-  implicit val system: ActorSystem = ActorSystem()
+
+  implicit val system: ActorSystem = Registry.system
   implicit val materializer: ActorMaterializer = ActorMaterializer()
   implicit val ec: ExecutionContext = system.dispatcher
-  implicit val configuration: Configuration = new Configuration()
-  implicit val timeout: Timeout = Timeout(configuration.defaultTimeout, TimeUnit.SECONDS)
 
-  Source.tick(0.second, configuration.ipLogRefreshRate, NotUsed)
+
+  implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
+
+  Source.tick(0.second, Registry.configuration.ipLogRefreshRate, NotUsed)
     .runForeach(_ => {
       ipLogActor ! Reset
     })(materializer)
