@@ -57,6 +57,9 @@ Before you can start the application, you have to make sure your configuration f
 |```databaseDriver``` | ```String``` | ```"com.mysql.jdbc.Driver"``` | Driver to use for the MySQL connection (only necessary if *useInMemoryDB* is false).|
 |```databaseUsername``` | ```String``` | ```""``` | Username to use for the MySQL connection (only necessary if *useInMemoryDB* is false).|
 |```databasePassword``` | ```String``` | ```""``` | Password to use for the MySQL connection (only necessary if *useInMemoryDB* is false).|
+|```maxTotalNoRequest``` | ```Int``` | ```2000``` | Maximum number of requests that are allowed to be executed during the current refresh period regardless of their origin.|
+|```maxIndividualIpReq``` | ```Int``` | ```200``` | Maximum number of requests that are allowed to be executed during the current refresh period for one specific origin ip.|
+|```ipLogRefreshRate``` | ```FiniteDuration``` | ```2.minutes``` | Duration of the log refresh period.|
 
 By default, Docker is expected to be reachable at *http://localhost:9095*, but you can override this setting by specifying the docker host URI in the environment variable *DOCKER_HOST*.
 To change the port of your http docker API to 9095, execute
