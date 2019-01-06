@@ -10,14 +10,14 @@ import akka.stream.scaladsl.{Flow, Sink, Source}
 import de.upb.cs.swt.delphi.instanceregistry.authorization.AccessTokenEnums.UserType
 import de.upb.cs.swt.delphi.instanceregistry.authorization.{AccessToken, AuthProvider}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.ComponentType
-import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model._
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.{EventJsonSupport, InstanceJsonSupport, InstanceLinkJsonSupport, Instance}
 import de.upb.cs.swt.delphi.instanceregistry.{AppLogging, Registry, RequestHandler}
 import spray.json.JsonParser.ParsingException
 import spray.json._
 
 import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Success}
-
+import de.upb.cs.swt.delphi.instanceregistry.requestLimiter.{IpLogActor, RequestLimitScheduler}
 
 /**
   * Web server configuration for Instance Registry API.
@@ -32,8 +32,16 @@ class Server (handler: RequestHandler) extends HttpApp
   implicit val materializer : ActorMaterializer = ActorMaterializer()
   implicit val ec : ExecutionContext = system.dispatcher
 
+  private val ipLogActor = system.actorOf(IpLogActor.props)
+  private val requestLimiter = new RequestLimitScheduler(ipLogActor)
+
+  override def routes: server.Route = {
+    requestLimiter.acceptOnValidLimit {
+      apiRoutes
+    }
+  }
   //Routes that map http endpoints to methods in this object
-  override def routes : server.Route =
+  def apiRoutes : server.Route =
       /****************BASIC OPERATIONS****************/
       path("register") {entity(as[String]) { jsonString => register(jsonString) }} ~
       path("deregister") { deregister() } ~
@@ -699,5 +707,4 @@ class Server (handler: RequestHandler) extends HttpApp
 
 
 }
-
 

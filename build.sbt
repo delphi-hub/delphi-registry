@@ -25,9 +25,10 @@ lazy val registry = (project in file(".")).
   enablePlugins(JavaAppPackaging).
   enablePlugins(DockerPlugin).
   enablePlugins(ScalastylePlugin).
-  settings (
+  settings(
     dockerBaseImage := "openjdk:jre-alpine"
-  )
+  ).
+  enablePlugins(AshScriptPlugin)
 
 libraryDependencies ++= List(
   "com.typesafe.slick" %% "slick" % "3.2.3",

@@ -742,6 +742,19 @@ class ServerTest
       }
       assertValidDeregister(id)
     }
+
+    "Requests" should {
+      "throttle when limit reached" in {
+        for(i <- 1 to configuration.maxIndividualIpReq){
+          Get(s"/linksTo?Id=0")~> server.routes ~> check {}
+        }
+
+        Get(s"/linksTo?Id=0") ~> server.routes ~> check {
+          status shouldEqual StatusCodes.BAD_REQUEST
+          responseAs[String].toLowerCase should include ("request limit exceeded")
+        }
+      }
+    }
   }
   private def assertValidRegister(compType: ComponentType,
                                   dockerId: Option[String] = Some("randomId"),
