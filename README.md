@@ -69,7 +69,7 @@ Before you can start the application, you have to make sure your configuration f
 |```maxLabelLength``` | ```Int``` | ```50``` | Maximum number of characters for instance labels. Longer labels will be rejected.|
 |```dockerOperationTimeout``` | ```Timeout``` | ```Timeout(20 seconds)``` | Default timeout for docker operations. If any of the async Docker operations (deploy, stop, pause, ..) takes longer than this, it will be aborted.|
 |```jwtSecretKey``` | ```String``` | ```changeme``` | Secret key to use for JWT signature (HS256). This setting can be overridden by specifying the ```JWT_SECRET``` environment variable.|
-|```useInMemoryDB``` | ```Boolean``` | ```false``` | If set to true, all instance data will be kept in memory instead of using a MySQL database.|
+|```useInMemoryDB``` | ```Boolean``` | ```true``` | If set to true, all instance data will be kept in memory instead of using a MySQL database.|
 |```databaseHost``` | ```String``` | ```"jdbc:mysql://localhost/"``` | Host that the MySQL database is reachable at (only necessary if *useInMemoryDB* is false).|
 |```databaseName``` | ```String``` | ```""``` | Name of the MySQL database to use (only necessary if *useInMemoryDB* is false).|
 |```databaseDriver``` | ```String``` | ```"com.mysql.jdbc.Driver"``` | Driver to use for the MySQL connection (only necessary if *useInMemoryDB* is false).|
