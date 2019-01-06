@@ -33,6 +33,22 @@ sbt docker:publishLocal
 inside their root directory. This will build the docker images and register them directly at the local docker registry.
 The registry requires an initial instance of ElasticSearch to be running.
 
+## Authorization
+This application relies on *JSON Web Tokens* (JWTs) using the *HMAC with SHA-256* (HS256) algorithm for authorization purposes. A valid, base64-encoded token must be put into the ```Authorization``` header of every HTTP request that is being issued to the registry. You can find more about JWTs [here](https://jwt.io).
+
+To create valid JWTs for this application, the following fields have to be specified:
+|Attribute | Type | Explanation |
+| :---: | :---: | :--- |
+|```iat``` (Issued at) | ```Int``` | Time this token was issued at. Specified in seconds since Jan 01 1970.|
+|```nbf``` (Not valid before) | ```Int``` | Time this token becomes valid at. Specified in seconds since Jan 01 1970.|
+|```exp``` (Expiration time) | ```Int``` | Time this token expires at. Specified in seconds since Jan 01 1970.|
+|```user_id``` | ```String``` | Id of the user this token was issued to.|
+|```user_type``` | ```String``` | Type of user that this token was issued to. Valid values are ```Admin``` (full access), ```User``` (read access) and ```Component``` (access to report operations).|
+
+The secret key that is used for validating the tokens can either be set in the configuration file (see section below), or by setting the envirnment variable ```JWT_SECRET```. The default value is ```changeme``` and **has to be replaced for productive use!**
+
+You can create tokens for development purposes using the JWT debugger at [jwt.io](https://jwt.io).
+
 ## Adapt the configuration file
 Before you can start the application, you have to make sure your configuration file contains valid data. The file can be found at *src/main/scala/de/upb/cs/swt/delphi/instanceregistry/Configuration.scala*, and most of its attributes are string or integer values. The following table describes the attributes in more detail.
 
@@ -51,6 +67,7 @@ Before you can start the application, you have to make sure your configuration f
 |```uriInLocalNetwork``` | ```String``` | ```"http://172.17.0.1:8087"``` | URI that the registry is reachable at for all docker containers. In most of the use-cases this is going to be the gateway of the default docker bridge.|
 |```maxLabelLength``` | ```Int``` | ```50``` | Maximum number of characters for instance labels. Longer labels will be rejected.|
 |```dockerOperationTimeout``` | ```Timeout``` | ```Timeout(20 seconds)``` | Default timeout for docker operations. If any of the async Docker operations (deploy, stop, pause, ..) takes longer than this, it will be aborted.|
+|```jwtSecretKey``` | ```String``` | ```changeme``` | Secret key to use for JWT signature (HS256). This setting can be overridden by specifying the ```JWT_SECRET``` environment variable.|
 |```useInMemoryDB``` | ```Boolean``` | ```false``` | If set to true, all instance data will be kept in memory instead of using a MySQL database.|
 |```databaseHost``` | ```String``` | ```"jdbc:mysql://localhost/"``` | Host that the MySQL database is reachable at (only necessary if *useInMemoryDB* is false).|
 |```databaseName``` | ```String``` | ```""``` | Name of the MySQL database to use (only necessary if *useInMemoryDB* is false).|
