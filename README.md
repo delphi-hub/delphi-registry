@@ -37,6 +37,7 @@ The registry requires an initial instance of ElasticSearch to be running.
 This application relies on *JSON Web Tokens* (JWTs) using the *HMAC with SHA-256* (HS256) algorithm for authorization purposes. A valid, base64-encoded token must be put into the ```Authorization``` header of every HTTP request that is being issued to the registry. You can find more about JWTs [here](https://jwt.io).
 
 To create valid JWTs for this application, the following fields have to be specified:
+
 |Attribute | Type | Explanation |
 | :---: | :---: | :--- |
 |```iat``` (Issued at) | ```Int``` | Time this token was issued at. Specified in seconds since Jan 01 1970.|
