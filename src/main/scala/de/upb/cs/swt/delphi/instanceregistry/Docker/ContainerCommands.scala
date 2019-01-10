@@ -1,19 +1,26 @@
 package de.upb.cs.swt.delphi.instanceregistry.Docker
 
 
-import akka.NotUsed
-import akka.actor.ActorSystem
+import akka.{Done, NotUsed}
+import akka.actor.{ActorSystem, PoisonPill}
 import akka.http.scaladsl.client.RequestBuilding._
 import akka.http.scaladsl.model.MediaTypes.`application/json`
 import akka.http.scaladsl.model.Uri.{Path, Query}
 import akka.http.scaladsl.model.{HttpEntity, HttpResponse, StatusCodes}
 import akka.http.scaladsl.unmarshalling.Unmarshal
-import akka.stream.scaladsl.{Flow, Source}
+import akka.stream.scaladsl.{Flow, Framing, Keep, Sink, Source}
 import de.upb.cs.swt.delphi.instanceregistry.{AppLogging, Registry}
 import spray.json._
 import PostDataFormatting.commandJsonRequest
+import akka.http.scaladsl.Http
+import akka.http.scaladsl.model.ws.{Message, TextMessage, WebSocketRequest}
+import akka.stream.OverflowStrategy
+import akka.util.ByteString
+import org.reactivestreams.Publisher
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.collection.mutable
+import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.util.{Failure, Success, Try}
 
 
 class ContainerCommands(connection: DockerConnection) extends JsonSupport with Commands with AppLogging {
@@ -184,25 +191,89 @@ class ContainerCommands(connection: DockerConnection) extends JsonSupport with C
     }
   }
 
-  def logs(
-            containerId: String
-          )(implicit ec: ExecutionContext): Source[String, NotUsed] = {
-    val query = Query("stdout" -> "true" )
+  def retrieveLogs(
+            containerId: String,
+            stdErrSelected: Boolean
+          )(implicit ec: ExecutionContext): Future[String] = {
+
+    val query = Query("stdout" -> (!stdErrSelected).toString, "stderr" -> stdErrSelected.toString, "follow" -> "false", "tail" -> "all", "timestamps" -> "true")
     val request = Get(buildUri(containersPath / containerId.substring(0,11) / "logs", query))
 
-    val flow =
-      Flow[HttpResponse].map {
-        case HttpResponse(StatusCodes.OK, _, HttpEntity.Chunked(_, chunks), _) =>
-          chunks.map(_.data().utf8String)
-        case HttpResponse(StatusCodes.NotFound, _, HttpEntity.Strict(_, data), _) =>
-          log.warning(s"DOCKER LOGS FAILED: ${data.utf8String}")
+    connection.sendRequest(request).flatMap {response =>
+      response.status match {
+        case StatusCodes.OK =>
+          Unmarshal(response.entity).to[String]
+        case StatusCodes.UpgradeRequired =>
+          log.warning(s"Unexpected upgrade response while reading logs for container $containerId")
+          log.warning(s"Got $response")
+          unknownResponseFuture(response)
+        case StatusCodes.NotFound =>
           throw ContainerNotFoundException(containerId)
-        case response =>
-          unknownResponse(response)
-      }.flatMapConcat(identity)
+        case _ =>
+          unknownResponseFuture(response)
+      }
+    }
+  }
 
-    Source.fromFuture(connection.sendRequest(request))
-      .via(flow)
+  def streamLogs(containerId: String, stdErrSelected: Boolean) (implicit ec: ExecutionContext) : Try[Publisher[Message]] = {
+
+    val queryParams = Query("stdout" -> (!stdErrSelected).toString, "stderr" -> stdErrSelected.toString, "follow" -> "true", "tail" -> "all", "timestamps" -> "true")
+
+    val (streamActor, streamPublisher) = Source.actorRef[Message](bufferSize = 10, OverflowStrategy.dropNew)
+      .toMat(Sink.asPublisher(fanout = true))(Keep.both)
+      .run()
+
+    val sink = Sink.foreach[String] { msg =>
+      println(s"Got log message: $msg")
+      streamActor ! TextMessage(msg)
+    }
+
+    val flow: Flow[String, Message, Future[Done]] = Flow.fromSinkAndSourceMat(sink, Source.empty[Message]) (Keep.left)
+
+    val delimiter: Flow[ByteString, ByteString, NotUsed] = Framing.delimiter(
+      ByteString("\uFFFD"), //TODO: Understand and implement dockers MUX - protocol for log entries ...
+      maximumFrameLength = 100000,
+      allowTruncation = true
+    )
+
+    val request = Get(buildUri(containersPath / containerId.substring(0,11) / "logs", queryParams))
+
+    val res = connection.sendRequest(request).flatMap { res =>
+      val logLines = res.entity.dataBytes.via(delimiter).map(_.utf8String)
+      logLines.runForeach { line =>
+        println(s"Got log message $line")
+        streamActor ! TextMessage(line)
+      }
+    }
+
+    /*
+
+    val (upgradeResponseFuture, closed) = Http().singleWebSocketRequest(WebSocketRequest(buildUri(containersPath / containerId.substring(0,11) / "logs", queryParams).withScheme("http")), flow)
+
+    val connected = upgradeResponseFuture.map { upgrade =>
+
+      if(upgrade.response.status == StatusCodes.OK){
+        println(s"Response: ${upgrade.response}")
+        println(s"Response Headers: ${upgrade.response.headers}")
+        println(s"Response Entity: ${Unmarshal(upgrade.response.entity).to[String]}")
+        Done
+      } else {
+        throw new RuntimeException(s"Connection failed: ${upgrade.response.status}")
+      }
+
+    }
+
+    connected.onComplete(println)
+    closed.onComplete { _ =>
+      streamActor ! PoisonPill
+      println("Closed completed.")
+    }
+  */
+    res.onComplete{ _ =>
+      println("Closed")
+      streamActor ! PoisonPill
+    }
+    Success(streamPublisher)
   }
 
   def commandCreate(

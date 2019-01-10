@@ -1,8 +1,8 @@
 package de.upb.cs.swt.delphi.instanceregistry
 
-import akka.NotUsed
 import akka.actor._
 import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.model.ws.Message
 import akka.pattern.{AskTimeoutException, ask}
 import akka.util.Timeout
 import de.upb.cs.swt.delphi.instanceregistry.Docker.DockerActor._
@@ -14,6 +14,7 @@ import de.upb.cs.swt.delphi.instanceregistry.daos.InstanceDAO
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.{ComponentType, InstanceState}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.LinkEnums.LinkState
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model._
+import org.reactivestreams.Publisher
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
@@ -27,7 +28,6 @@ class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, con
   implicit val system: ActorSystem = Registry.system
   implicit val materializer : Materializer = ActorMaterializer()
   implicit val ec: ExecutionContext = system.dispatcher
-
 
   val (eventActor, eventPublisher) = Source.actorRef[RegistryEvent](10, OverflowStrategy.dropNew)
     .toMat(Sink.asPublisher(fanout = true))(Keep.both)
@@ -674,7 +674,7 @@ class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, con
     * @param id Id of the instance
     * @return Tuple of OperationResult and Option[Source[...] ]
     */
-  def handleGetLogs(id: Long) : (OperationResult.Value, Option[Source[String, NotUsed]]) = {
+  def handleGetLogs(id: Long, stdErrSelected: Boolean) : (OperationResult.Value, Option[String]) = {
     if(!instanceDao.hasInstance(id)){
       (OperationResult.IdUnknown, None)
     } else if(!isInstanceDockerContainer(id)){
@@ -682,15 +682,51 @@ class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, con
     } else {
       val instance = instanceDao.getInstance(id).get
 
-      val f : Future[(OperationResult.Value, Option[Source[String, NotUsed]])]= (dockerActor ? logs(instance.dockerId.get))(configuration.dockerOperationTimeout).map{
-        source: Any =>
-          (OperationResult.Ok, Option(source.asInstanceOf[Source[String, NotUsed]]))
+      val f : Future[(OperationResult.Value, Option[String])] = (dockerActor ? logs(instance.dockerId.get, stdErrSelected, stream = false))(configuration.dockerOperationTimeout).map{
+        logVal: Any =>
+          val logResult = logVal.asInstanceOf[Try[String]]
+          logResult match {
+            case Success(logContent) =>
+              (OperationResult.Ok, Some(logContent))
+            case Failure(ex) =>
+              log.warning(s"Failed to get logs from actor, exception: ${ex.getMessage}")
+              (OperationResult.InternalError, None)
+          }
+
       }.recover{
         case ex: Exception =>
           fireDockerOperationErrorEvent(Some(instance), errorMessage = s"Failed to get logs with message: ${ex.getMessage}")
           (OperationResult.InternalError, None)
       }
-      Await.result(f, Duration.Inf)
+      Await.result(f, configuration.dockerOperationTimeout.duration)
+    }
+  }
+
+  def handleStreamLogs(id: Long, stdErrSelected: Boolean) : (OperationResult.Value, Option[Publisher[Message]]) = {
+    if(!instanceDao.hasInstance(id)){
+      (OperationResult.IdUnknown, None)
+    } else if(!isInstanceDockerContainer(id)){
+      (OperationResult.NoDockerContainer, None)
+    } else {
+      val instance = instanceDao.getInstance(id).get
+
+      val f : Future[(OperationResult.Value, Option[Publisher[Message]])] = (dockerActor ? logs(instance.dockerId.get, stdErrSelected, stream = true))(configuration.dockerOperationTimeout).map{
+        publisherVal: Any =>
+          val publisherResult = publisherVal.asInstanceOf[Try[Publisher[Message]]]
+          publisherResult match {
+            case Success(publisher) =>
+              (OperationResult.Ok, Some(publisher))
+            case Failure(ex) =>
+              log.warning(s"Failed to stream logs from actor, exception: ${ex.getMessage}")
+              (OperationResult.InternalError, None)
+          }
+
+      }.recover{
+        case ex: Exception =>
+          fireDockerOperationErrorEvent(Some(instance), errorMessage = s"Failed to stream logs with message: ${ex.getMessage}")
+          (OperationResult.InternalError, None)
+      }
+      Await.result(f, configuration.dockerOperationTimeout.duration)
     }
   }
 

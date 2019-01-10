@@ -67,6 +67,8 @@ class Server (handler: RequestHandler) extends HttpApp
       path("delete") { deleteContainer()} ~
       path("assignInstance") { assignInstance()} ~
       path("command") { runCommandInContainer()} ~
+      path("logs") { retrieveLogs()} ~
+      path("attach") { streamLogs()} ~
       /****************EVENT OPERATIONS****************/
       path("events") { streamEvents()}
 
@@ -673,6 +675,64 @@ class Server (handler: RequestHandler) extends HttpApp
         }
       }
     }
+  }
+
+  def retrieveLogs(): server.Route = parameters('Id.as[Long], 'StdErr.as[Boolean].?) { (id, stdErrOption) =>
+    authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Admin)){ token =>
+      get {
+        log.debug(s"GET /logs?Id=$id has been called")
+
+        val stdErrSelected = stdErrOption.isDefined && stdErrOption.get
+
+        handler.handleGetLogs(id, stdErrSelected) match {
+          case (handler.OperationResult.IdUnknown, _) =>
+            log.warning(s"Cannot get logs, id $id not found.")
+            complete{HttpResponse(StatusCodes.NotFound, entity = s"Cannot get logs, id $id not found.")}
+          case (handler.OperationResult.NoDockerContainer, _) =>
+            log.warning(s"Cannot get logs, id $id is no docker container.")
+            complete{HttpResponse(StatusCodes.BadRequest,entity = s"Cannot get logs, id $id is no docker container.")}
+          case (handler.OperationResult.Ok, Some(logString)) =>
+            complete{logString}
+          case (handler.OperationResult.InternalError, _) =>
+            complete{HttpResponse(StatusCodes.InternalServerError, entity = s"Internal server error")}
+          case _ =>
+            complete{HttpResponse(StatusCodes.InternalServerError, entity = s"Internal server error")}
+        }
+      }
+    }
+  }
+
+  def streamLogs(): server.Route = parameters('Id.as[Long], 'StdErr.as[Boolean].?) { (id, stdErrOption) =>
+
+
+    val stdErrSelected = stdErrOption.isDefined && stdErrOption.get
+
+    handler.handleStreamLogs(id, stdErrSelected) match {
+      case (handler.OperationResult.IdUnknown, _) =>
+        complete{HttpResponse(StatusCodes.NotFound, entity = s"Cannot stream logs, id $id not found.")}
+      case (handler.OperationResult.NoDockerContainer, _) =>
+        complete{HttpResponse(StatusCodes.BadRequest, entity = s"Cannot stream logs, id $id is no docker container.")}
+      case (handler.OperationResult.Ok, Some(publisher)) =>
+        handleWebSocketMessages {
+          Flow[Message]
+            .via(
+              Flow.fromSinkAndSource(Sink.ignore, Source.fromPublisher(publisher))
+            )
+            .watchTermination() {(_, done) =>
+              done.onComplete {
+                case Success(_) =>
+                  log.info("Log stream route completed successfully")
+                case Failure(ex) =>
+                  log.error(s"Log stream route completed with failure : $ex")
+              }
+            }
+        }
+      case (handler.OperationResult.InternalError, _) =>
+        complete{HttpResponse(StatusCodes.InternalServerError, entity = s"Internal server error")}
+      case _ =>
+        complete{HttpResponse(StatusCodes.InternalServerError, entity = s"Internal server error")}
+    }
+
   }
 
   /**
