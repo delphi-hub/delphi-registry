@@ -1,6 +1,8 @@
 package de.upb.cs.swt.delphi.instanceregistry.Docker
 
 
+import java.nio.ByteOrder
+
 import akka.{Done, NotUsed}
 import akka.actor.{ActorSystem, PoisonPill}
 import akka.http.scaladsl.client.RequestBuilding._
@@ -223,54 +225,20 @@ class ContainerCommands(connection: DockerConnection) extends JsonSupport with C
       .toMat(Sink.asPublisher(fanout = true))(Keep.both)
       .run()
 
-    val sink = Sink.foreach[String] { msg =>
-      println(s"Got log message: $msg")
-      streamActor ! TextMessage(msg)
-    }
-
-    val flow: Flow[String, Message, Future[Done]] = Flow.fromSinkAndSourceMat(sink, Source.empty[Message]) (Keep.left)
-
-    val delimiter: Flow[ByteString, ByteString, NotUsed] = Framing.delimiter(
-      ByteString("\uFFFD"), //TODO: Understand and implement dockers MUX - protocol for log entries ...
-      maximumFrameLength = 100000,
-      allowTruncation = true
-    )
+    val delimiter: Flow[ByteString, ByteString, NotUsed] = Framing.lengthField(4, 4, 100000, ByteOrder.BIG_ENDIAN)
 
     val request = Get(buildUri(containersPath / containerId.substring(0,11) / "logs", queryParams))
 
     val res = connection.sendRequest(request).flatMap { res =>
       val logLines = res.entity.dataBytes.via(delimiter).map(_.utf8String)
       logLines.runForeach { line =>
-        println(s"Got log message $line")
+        log.debug(s"Streaming log message $line")
         streamActor ! TextMessage(line)
       }
     }
 
-    /*
-
-    val (upgradeResponseFuture, closed) = Http().singleWebSocketRequest(WebSocketRequest(buildUri(containersPath / containerId.substring(0,11) / "logs", queryParams).withScheme("http")), flow)
-
-    val connected = upgradeResponseFuture.map { upgrade =>
-
-      if(upgrade.response.status == StatusCodes.OK){
-        println(s"Response: ${upgrade.response}")
-        println(s"Response Headers: ${upgrade.response.headers}")
-        println(s"Response Entity: ${Unmarshal(upgrade.response.entity).to[String]}")
-        Done
-      } else {
-        throw new RuntimeException(s"Connection failed: ${upgrade.response.status}")
-      }
-
-    }
-
-    connected.onComplete(println)
-    closed.onComplete { _ =>
-      streamActor ! PoisonPill
-      println("Closed completed.")
-    }
-  */
     res.onComplete{ _ =>
-      println("Closed")
+      log.info("Log stream finished successfully.")
       streamActor ! PoisonPill
     }
     Success(streamPublisher)
