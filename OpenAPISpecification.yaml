@@ -661,6 +661,36 @@ paths:
           description: One of the ids was not found on the server
         '500':
           description: Internal server error
+  /command:
+    post:
+      tags:
+        - Docker Operations
+      summary: Runs a command into a docker container
+      description: >-
+        This command runs a specified command inside a docker container.
+      operationId: command
+      parameters:
+        - in: query
+          name: Id
+          description: The ID of the instance to be deleted
+          required: true
+          type: integer
+          format: int64
+        - in: query
+          name: Command
+          description: The Command thet will run inside a container
+          required: true
+          type: string
+      responses:
+        '200':
+          description: 'OK'
+        '400':
+          description: >-
+            Cannot run command, ID is no docker container.
+        '404':
+          description: Cannot run command, ID not found.
+        '500':
+          description: Internal server error, unknown operation result DESCRIPTION
 definitions:
   InstanceNetwork:
     type: object
