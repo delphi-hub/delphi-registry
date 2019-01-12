@@ -672,7 +672,7 @@ paths:
       parameters:
         - in: query
           name: Id
-          description: The ID of the instance to be deleted
+          description: The ID of the instance that is a docker container
           required: true
           type: integer
           format: int64
