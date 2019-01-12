@@ -649,7 +649,7 @@ class Server (handler: RequestHandler) extends HttpApp
 
   /**
     * Called to run a command in a  docker container. The Id an Command is the required parameter there are other optional parameter can be passed
-    * a query with required parameter Command and Id (so the resulting call is /delete?Id=42&Command=ls).
+    * a query with required parameter Command and Id (so the resulting call is /command?Id=42&Command=ls).
     * @return Server route that either maps to 200 Ok or the respective error codes.
     */
   def runCommandInContainer() : server.Route = parameters('Id.as[Long], 'Command.as[String],
