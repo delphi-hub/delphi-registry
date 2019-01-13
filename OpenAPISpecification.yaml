@@ -1,0 +1,786 @@
+swagger: '2.0'
+info:
+  description: >-
+    The interface of the Delphi instance registry, which is responsible for
+    connecting instances within the system as well as providing basic status
+    information about them. For more information on Delphi, see
+    https://github.com/delphi-hub/.
+  version: 1.5.0
+  title: Delphi Instance Registry
+host: 'localhost:8087'
+consumes:
+  - application/json
+produces:
+  - application/json
+basePath: /
+tags:
+  - name: Basic Operations
+    description: >-
+      Operations on instances that are not necessarily running in docker
+      containers
+  - name: Docker Operations
+    description: Operations on instances that are running in a docker container
+schemes:
+  - https
+  - http
+paths:
+  /instances:
+    post:
+      tags:
+        - Basic Operations
+      summary: Register a new instance at the registry
+      description: >-
+        This commands registers the given instance at the registry and will
+        return the ID that was assigned to that instance. This is meant for
+        instances that are not running inside a docker container, as those will
+        be registered on calling /deploy.
+      operationId: addInstance
+      parameters:
+        - in: body
+          name: InstanceToRegister
+          description: >-
+            The instance that will be registered with this call. The ID
+            attribute is optional and will be ignored, as the registry assignes
+            a new unique id to the instance.
+          required: true
+          schema:
+            $ref: '#/definitions/Instance'
+      responses:
+        '200':
+          description: The ID of the registered instance
+          schema:
+            type: integer
+            format: int64
+            example: 42
+        '405':
+          description: Invalid input
+    get:
+      tags:
+        - Basic Operations
+      summary: Get all instances of the specified type
+      description: >-
+        This command retrieves a list of all instances that are registered at
+        the registry and that have the specified type. If no type is specified, 
+        all instances are being returned.
+      operationId: instanceOfType
+      parameters:
+        - name: ComponentType
+          in: query
+          description: Type of the instances to be retrieved
+          required: false
+          type: string
+          enum:
+            - Crawler
+            - WebApi
+            - WebApp
+            - DelphiManagement
+            - ElasticSearch
+      responses:
+        '200':
+          description: List of instances of the specified type
+          schema:
+            type: array
+            items:
+              $ref: '#/definitions/Instance'
+        '400':
+          description: Invalid value
+  '/instances/{Id}/deregister':
+    post:
+      tags:
+        - Basic Operations
+      summary: Deregister an instance from the registry
+      description: >-
+        This command deregisteres the instance with the given ID from the
+        registry. This means that it can no longer be matched to other
+        instances, and it can not be monitored by the management application
+        anymore.
+      operationId: deregisterInstance
+      parameters:
+        - name: Id
+          in: path
+          description: The ID of the instance to be deregistered.
+          required: true
+          type: integer
+          format: int64
+      responses:
+        '200':
+          description: Sucessfully Deregistered
+        '400':
+          description: Invalid Status Value
+        '404':
+          description: Instance not found
+        '405':
+          description: Validation exception
+  '/instances/{Id}/matchingInstance':
+    get:
+      tags:
+        - Basic Operations
+      summary: Get a matching instance of the specified type
+      description: >-
+        This command retrieves an instance from the registry that has the
+        specified type and is currently running / has the best matching results
+        on the server.
+      operationId: matchingInstance
+      parameters:
+        - in: path
+          name: Id
+          description: Id of the instance that is requesting a dependency
+          required: true
+          type: integer
+          format: int64
+        - name: ComponentType
+          in: query
+          description: Type of the instance to be retrieved
+          required: true
+          type: string
+          enum:
+            - Crawler
+            - WebApi
+            - WebApp
+            - DelphiManagement
+            - ElasticSearch
+      responses:
+        '200':
+          description: The instance that the registry matched with
+          schema:
+            $ref: '#/definitions/Instance'
+        '400':
+          description: Invalid status value
+  '/instances/{Id}':
+    get:
+      tags:
+        - Basic Operations
+      summary: Get the instance with the specified id
+      description: >-
+        This command retrieves the instance with the specified id from the
+        server. If that id is not present, 404 will be returned.
+      operationId: instance
+      parameters:
+        - in: path
+          name: Id
+          description: Id of the instance
+          required: true
+          type: integer
+          format: int64
+      responses:
+        '200':
+          description: The instance that was requested
+          schema:
+            $ref: '#/definitions/Instance'
+        '404':
+          description: The id was not found on the server
+        '500':
+          description: Internal server error
+  /instances/count:
+    get:
+      tags:
+        - Basic Operations
+      summary: Gets the number of instances running for the specified type
+      description: >-
+        This command retrieves the number of registered instances of the
+        specified type that are currently running. If no type is specified, 
+        the number of all instances is being returned
+      operationId: numberOfInstances
+      parameters:
+        - name: ComponentType
+          in: query
+          description: Type of the instances to be counted
+          required: false
+          type: string
+          enum:
+            - Crawler
+            - WebApi
+            - WebApp
+            - DelphiManagement
+            - ElasticSearch
+      responses:
+        '200':
+          description: Number of instances running for the specified type
+          schema:
+            type: integer
+            format: int32
+            example: 7
+        '400':
+          description: Invalid ID supplied
+        '404':
+          description: Instances not found
+  '/instances/{Id}/matchingResult':
+    post:
+      tags:
+        - Basic Operations
+      summary: Posts a matching result to the instance registry
+      description: >-
+        This command posts a matching result to the instance registry. This
+        means that the sender tried to connect to the instance with the
+        specified ID, and it was either successful or not (indicated by the
+        parameter 'MatchingSuccessful').
+      operationId: matchInstance
+      consumes:
+        - application/json
+      parameters:
+        - in: body
+          name: MatchingData
+          description: Data necessary for processing the matching result
+          required: true
+          schema:
+            type: object
+            required:
+              - MatchingSuccessful
+              - SenderId
+            properties:
+              MatchingSuccessful:
+                description: Boolean value indicating whether the matching was successful or not
+                type: boolean
+              SenderId:
+                description: Id of the instance that is submitting the result
+                type: integer
+                format: int64
+        - in: path
+          name: Id
+          description: The ID of the instance that the sender was trying to reach.
+          required: true
+          type: integer
+          format: int64
+      responses:
+        '200':
+          description: successful operation
+        '400':
+          description: Invalid ID supplied
+        '404':
+          description: No match found
+  '/instances/{Id}/eventList':
+    get:
+      tags:
+        - Basic Operations
+      summary: Gets the list of events associated to the specified instance
+      description: >-
+        This command retrieves a list of events that are associated to the
+        instance with the specified id.
+      operationId: eventList
+      parameters:
+        - name: Id
+          in: path
+          description: Id of the instance
+          required: true
+          type: integer
+          format: int64
+      responses:
+        '200':
+          description: List of events for the specified instance
+          schema:
+            type: array
+            items:
+              $ref: '#/definitions/Event'
+        '404':
+          description: Instance not found
+  '/instances/{Id}/linksFrom':
+    get:
+      tags:
+        - Basic Operations
+      summary: Retrieves outgoing links from an instance
+      description: >-
+        This command retreives a list of outgoing links from the instance with
+        the specified id.
+      operationId: linksFrom
+      parameters:
+        - name: Id
+          in: path
+          description: Id of the instance
+          required: true
+          type: integer
+          format: int64
+      responses:
+        '200':
+          description: List of InstanceLinks from the specified instance
+          schema:
+            type: array
+            items:
+              $ref: '#/definitions/InstanceLink'
+        '404':
+          description: Instance not found
+  '/instances/{Id}/linksTo':
+    get:
+      tags:
+        - Basic Operations
+      summary: Retrieves incoming links to an instance
+      description: >-
+        This command retreives a list of incoming links from the instance with
+        the specified id.
+      operationId: linksTo
+      parameters:
+        - name: Id
+          in: path
+          description: Id of the instance
+          required: true
+          type: integer
+          format: int64
+      responses:
+        '200':
+          description: List of InstanceLinks to the specified instance
+          schema:
+            type: array
+            items:
+              $ref: '#/definitions/InstanceLink'
+        '404':
+          description: Instance not found
+  /instances/network:
+    get:
+      tags:
+        - Basic Operations
+      summary: Retrieves the current instance network
+      description: >-
+        Retrieves the instance network, meaning a list of all instances currently registered at the registry.
+      operationId: network
+      responses:
+        '200':
+          description: The instance network
+          schema:
+            type: array
+            items:
+              $ref: '#/definitions/Instance'
+  '/instances/{Id}/label':
+    post:
+      tags:
+        - Basic Operations
+      consumes: 
+        - text/plain
+      summary: Add a label to the instance with the specified id
+      description: >-
+        This command will add the specified label to the instance with the
+        specified id.
+      operationId: addLabel
+      parameters:
+        - name: Id
+          in: path
+          description: Id of the instance
+          required: true
+          type: integer
+          format: int64
+        - in: body
+          name: Label
+          description: Label added to the instance.
+          required: true
+          schema:
+            type: string
+            example: private
+      responses:
+        '200':
+          description: Label successfully added
+        '400':
+          description: 'Bad request, your label exceeded the character limit'
+        '404':
+          description: 'Not found, the id you specified could not be found'
+  /instances/deploy:
+    post:
+      tags:
+        - Docker Operations
+      summary: Deploys a new instance of the specified type
+      description: >-
+        This command deploys a new instance of the specified ComponentType onto
+        the docker host. It will also initiate the registration process.
+        Immediatley after this call is finished the instance will be contained
+        in the registry, but its state will be 'Stopped' until the instance
+        itself called /reportStart, which will change the state to 'Running'
+      operationId: deploy
+      parameters:
+        - name: DeploymentData
+          in: body
+          required: true
+          schema:
+            type: object
+            required:
+              - ComponentType
+            properties:
+              ComponentType:
+                description: Type of the instance to be deployed
+                enum:
+                  - Crawler
+                  - WebApi
+                  - WebApp
+                  - DelphiManagement
+                  - ElasticSearch
+                example: Crawler
+              InstanceName:
+                description: Name for the new instance
+                type: string
+                example: "MyCrawler"
+      responses:
+        '202':
+          description: Operation accepted
+        '500':
+          description: Internal server error
+  '/instances/{Id}/reportStart':
+    post:
+      tags:
+        - Docker Operations
+      summary: Reports the successful start of an instances to the registry
+      description: >-
+        This command informs the registry about an instance that successfully
+        reached the state 'Running'. This is only applicable to instances
+        running inside a docker container, as non-container instances would not
+        be registered before startup. Container instances are registered when
+        /deploy is called.
+      operationId: reportStart
+      parameters:
+        - name: Id
+          in: path
+          description: The ID of the instance.
+          required: true
+          type: integer
+          format: int64
+      responses:
+        '200':
+          description: Report successfully processed.
+        '400':
+          description: >-
+            Bad request, the instance with the specified ID is not deployed as a
+            docker container.
+        '404':
+          description: ID not found on server
+        '500':
+          description: Internal server error
+  '/instances/{Id}/reportStop':
+    post:
+      tags:
+        - Docker Operations
+      summary: Reports the manual stop of an instances to the registry
+      description: >-
+        This command informs the registry about an instance that was stopped
+        manually, meaning not via calling /stop on the instance registry. This
+        is only applicable to instances running inside a docker container, as
+        non-container instances would deregister themselves when stopped. 
+      operationId: reportStop
+      parameters:
+        - name: Id
+          in: path
+          description: The ID of the instance.
+          required: true
+          type: integer
+          format: int64
+      responses:
+        '200':
+          description: Report successfully processed.
+        '400':
+          description: >-
+            Bad request, the instance with the specified ID is not deployed as a
+            docker container.
+        '404':
+          description: ID not found on server
+        '500':
+          description: Internal server error
+  '/instances/{Id}/reportFailure':
+    post:
+      tags:
+        - Docker Operations
+      summary: Report the failure of an instance to the registry
+      description: >-
+        This commands allows instances to report a failure that lead to the
+        termination of their execution. The instanceregistry will update the
+        state of the component accordingly and not use this component for
+        matching in the future. This is only applicable for instances running
+        inside a docker container, as the failure of non-container instances
+        will immediately lead to them being deregistered, since they cannot be
+        restarted.
+      operationId: reportFailure
+      parameters:
+        - name: Id
+          in: path
+          description: The ID of the instance.
+          required: true
+          type: integer
+          format: int64
+        - in: body
+          name: ErrorLog
+          description: An optional string explaining the failure
+          required: false
+          schema:
+            type: string
+            example: Something went wrong..
+      responses:
+        '200':
+          description: Report successfully processed.
+        '400':
+          description: >-
+            Bad request, the instance with the specified ID is not deployed as a
+            docker container.
+        '404':
+          description: ID not found on server
+        '500':
+          description: Internal server error
+  '/instances/{Id}/pause':
+    post:
+      tags:
+        - Docker Operations
+      summary: Pauses the specified instances' docker container
+      description: >-
+        This command pauses the docker container of the instance with the
+        specified ID. Will change the instance state from 'Running' to 'Paused'
+      operationId: pause
+      parameters:
+        - name: Id
+          in: path
+          description: The ID of the instance.
+          required: true
+          type: integer
+          format: int64
+      responses:
+        '202':
+          description: 'Accepted, the operation will be completed in the future.'
+        '400':
+          description: >-
+            Bad request, the instance with the specified ID is either not
+            running or not deployed as a docker container at all.
+        '404':
+          description: ID not found on server
+        '500':
+          description: Internal server error
+  '/instances/{Id}/resume':
+    post:
+      tags:
+        - Docker Operations
+      summary: Resumes the specified instances' docker container
+      description: >-
+        This command resumes the execution of the docker container of the
+        instance with the specified ID. Will change the instance state from
+        'Paused' to 'Running'.
+      operationId: resume
+      parameters:
+        - name: Id
+          in: path
+          description: The ID of the instance.
+          required: true
+          type: integer
+          format: int64
+      responses:
+        '202':
+          description: 'Accepted, the operation will be completed in the future.'
+        '400':
+          description: >-
+            Bad request, the instance with the specified ID is either not paused
+            or not deployed as a docker container at all.
+        '404':
+          description: ID not found on server
+        '500':
+          description: Internal server error
+  '/instances/{Id}/stop':
+    post:
+      tags:
+        - Docker Operations
+      summary: Stops the specified instances' docker container
+      description: >-
+        This command stops the docker container of the instance with the
+        specified ID. The instance will be properly shut down by calling its
+        /stop command first. Will change the instance state to 'Stopped'.
+      operationId: stop
+      parameters:
+        - name: Id
+          in: path
+          description: The ID of the instance.
+          required: true
+          type: integer
+          format: int64
+      responses:
+        '202':
+          description: 'Accepted, the operation will be completed in the future.'
+        '400':
+          description: >-
+            Bad request, the instance with the specified ID is either already
+            stopped or not deployed as a docker container at all.
+        '404':
+          description: ID not found on server
+        '500':
+          description: Internal server error
+  '/instances/{Id}/start':
+    post:
+      tags:
+        - Docker Operations
+      summary: Starts the specified instances' docker container
+      description: >-
+        This command starts the docker container of the instance with the
+        specified ID. Will change the instance state from 'Stopped' to
+        'Running'.
+      operationId: start
+      parameters:
+        - name: Id
+          in: path
+          description: The ID of the instance.
+          required: true
+          type: integer
+          format: int64
+      responses:
+        '202':
+          description: 'Accepted, the operation will be completed in the future.'
+        '400':
+          description: >-
+            Bad request, the instance with the specified ID is either not
+            stopped or not deployed as a docker container at all.
+        '404':
+          description: ID not found on server
+        '500':
+          description: Internal server error
+  '/instances/{Id}/delete':
+    post:
+      tags:
+        - Docker Operations
+      summary: Deletes the specified instances' docker container
+      description: >-
+        This command deletes the docker container of the instance with the
+        specified ID. The container needs to be stopped first. This will remove
+        any data the instance registry holds about the instance.
+      operationId: delete
+      parameters:
+        - name: Id
+          in: path
+          description: The ID of the instance.
+          required: true
+          type: integer
+          format: int64
+      responses:
+        '202':
+          description: 'Accepted, the operation will be completed in the future.'
+        '400':
+          description: >-
+            Bad request, the instance with the specified ID is either not
+            stopped or not deployed as a docker container at all.
+        '404':
+          description: ID not found on server
+        '500':
+          description: Internal server error
+  '/instances/{Id}/assignInstance':
+    post:
+      tags:
+        - Docker Operations
+      summary: Assignes a new dependency to the specified instance
+      description: >-
+        This command assignes a new dependency to the instance with the
+        specified id. Internally, this will stop the instance, assign the new
+        dependency and start the instance again. This is why this is only 
+        applicable to docker instances.
+      operationId: assignInstance
+      parameters:
+        - in: path
+          name: Id
+          description: The ID of the instance whichs dependency should be updated
+          required: true
+          type: integer
+          format: int64
+        - in: body
+          name: AssignedInstanceId
+          description: The ID of the instance that should be assigned as dependency.
+          required: true
+          schema:
+            type: integer
+            format: int64
+            example: 42
+      responses:
+        '202':
+          description: 'Accepted, the operation will be completed in the future.'
+        '400':
+          description: >-
+            Bad request, the instance with the specified ID is not running
+            inside a docker container or the assigned instance is of the wrong
+            component type.
+        '404':
+          description: One of the ids was not found on the server
+        '500':
+          description: Internal server error
+definitions:
+  InstanceLink:
+    type: object
+    required:
+      - idFrom
+      - idTo
+      - linkState
+    properties:
+      idFrom:
+        type: integer
+        format: int64
+        example: 0
+      idTo:
+        type: integer
+        format: int64
+        example: 42
+      linkState:
+        type: string
+        description: Valid states for an InstanceLink
+        example: Assigned
+        enum:
+          - Assigned
+          - Outdated
+          - Failed
+  Event:
+    type: object
+    required:
+      - eventType
+      - payload
+    properties:
+      eventType:
+        type: string
+        description: Valid types for events
+        example: NumbersChangedEvent
+        enum:
+          - NumbersChangedEvent
+          - InstanceAddedEvent
+          - InstanceRemovedEvent
+          - StateChangedEvent
+      payload:
+        type: object
+  Instance:
+    type: object
+    required:
+      - host
+      - portNumber
+      - name
+      - componentType
+    properties:
+      id:
+        type: integer
+        format: int64
+      host:
+        type: string
+        example: 'http://localhost'
+      portNumber:
+        type: integer
+        format: int64
+        example: 8085
+      name:
+        type: string
+        example: CrawlerNo1
+      componentType:
+        type: string
+        description: Component Type
+        example: Crawler
+        enum:
+          - Crawler
+          - WebApi
+          - WebApp
+          - DelphiManagement
+          - ElasticSearch
+      dockerId:
+        type: string
+        example: e90e34656806
+      state:
+        type: string
+        description: State of the instance
+        example: Running
+        enum:
+          - Running
+          - Failed
+          - Stopped
+          - Paused
+          - NotReachable
+      labels:
+        type: array
+        items:
+          type: string
+        example:
+          - private
+          - debug
+      linksTo:
+        type: array
+        items:
+          $ref: '#/definitions/InstanceLink'
+      linksFrom:
+        type: array
+        items:
+          $ref: '#/definitions/InstanceLink'
