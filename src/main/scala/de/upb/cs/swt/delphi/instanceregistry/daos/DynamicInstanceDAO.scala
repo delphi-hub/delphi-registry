@@ -28,30 +28,21 @@ class DynamicInstanceDAO (configuration : Configuration) extends InstanceDAO wit
   private val instanceLinks: mutable.Set[InstanceLink] = new mutable.HashSet[InstanceLink]()
 
   implicit val system : ActorSystem = Registry.system
-  implicit val materializer : ActorMaterializer = ActorMaterializer()
+  implicit val materializer : ActorMaterializer = Registry.materializer
   implicit val ec : ExecutionContext = system.dispatcher
 
 
-  override def addInstance(instance: Instance): Try[Unit] = {
-    //Verify ID is present in instance
-    if(instance.id.isEmpty){
-      val msg = s"Cannot add instance ${instance.name}, id is empty!"
-      log.warning(msg)
-      Failure(new RuntimeException(msg))
-    } else {
-      //Verify id is not already present in instances!
-      if(!hasInstance(instance.id.get)){
-        instances.add(instance)
-        instanceMatchingResults.put(instance.id.get, mutable.MutableList())
-        instanceEvents.put(instance.id.get, mutable.MutableList())
-        dumpToRecoveryFile()
-        Success(log.info(s"Added instance ${instance.name} with id ${instance.id} to database."))
-      } else {
-        val msg = s"Cannot add instance ${instance.name}, id ${instance.id} already present."
-        log.warning(msg)
-        Failure(new RuntimeException(msg))
-      }
-    }
+  override def addInstance(instance: Instance): Try[Long] = {
+    val id = nextId()
+
+    val newInstance = Instance(Some(id), instance.host, instance.portNumber, instance.name, instance.componentType,
+      instance.dockerId, instance.instanceState,instance.labels, instance.linksTo, instance.linksFrom)
+    instances.add(newInstance)
+    instanceMatchingResults.put(newInstance.id.get, mutable.MutableList())
+    instanceEvents.put(newInstance.id.get, mutable.MutableList())
+    dumpToRecoveryFile()
+    log.info(s"Added instance ${newInstance.name} with id ${newInstance.id.get} to database.")
+    Success(id)
   }
 
   override def hasInstance(id: Long): Boolean = {
@@ -83,6 +74,16 @@ class DynamicInstanceDAO (configuration : Configuration) extends InstanceDAO wit
       Some(addLinksToInstance(instance))
     } else {
       None
+    }
+  }
+
+  override def updateInstance(instance: Instance):Try[Unit] = {
+    if(hasInstance(instance.id.get)){
+      instances.remove(getInstance(instance.id.get).get)
+      instances.add(instance)
+      Success()
+    } else {
+      Failure(new RuntimeException(s"Cannot update instance, id ${instance.id.get} not found."))
     }
   }
 
@@ -350,5 +351,13 @@ class DynamicInstanceDAO (configuration : Configuration) extends InstanceDAO wit
         log.error(dx, "An error occurred while deserializing the contents of the recovery file.")
     }
 
+  }
+
+  private def nextId(): Long = {
+    if(instances.isEmpty){
+      0L
+    } else {
+      (instances.map(i => i.id.getOrElse(0L)) max) + 1L
+    }
   }
 }

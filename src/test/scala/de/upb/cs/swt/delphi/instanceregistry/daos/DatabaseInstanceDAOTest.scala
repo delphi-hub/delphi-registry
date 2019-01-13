@@ -1,22 +1,24 @@
 package de.upb.cs.swt.delphi.instanceregistry.daos
 
 import de.upb.cs.swt.delphi.instanceregistry.Configuration
-import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.{Instance, InstanceLink, RegistryEventFactory}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.{ComponentType, InstanceState}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.LinkEnums.LinkState
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.{Instance, InstanceLink, RegistryEventFactory}
 import org.scalatest.{BeforeAndAfterEach, FlatSpec, Matchers}
 
-class DynamicInstanceDAOTest extends FlatSpec with Matchers with BeforeAndAfterEach{
+class DatabaseInstanceDAOTest extends FlatSpec with Matchers with BeforeAndAfterEach{
 
-  val dao : DynamicInstanceDAO = new DynamicInstanceDAO(new Configuration())
+  val config = new Configuration()
+  val dao : DatabaseInstanceDAO = new DatabaseInstanceDAO(config)
+  dao.setDatabaseConfiguration("jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;MODE=MYSQL","", "org.h2.Driver")
+  before()
 
   private def buildInstance(id : Int) : Instance = {
     Instance(Some(id), "https://localhost", 12345, "TestInstance", ComponentType.Crawler, None, InstanceState.Stopped, List.empty[String],
       List.empty[InstanceLink], List.empty[InstanceLink])
   }
 
-  override protected def beforeEach() : Unit = {
-    dao.deleteRecoveryFile()
+  def before() : Unit = {
     for(i <- 1 to 3){
       dao.addInstance(buildInstance(i))
     }
@@ -31,7 +33,7 @@ class DynamicInstanceDAOTest extends FlatSpec with Matchers with BeforeAndAfterE
   }
 
   it must "not assign unique ids ignoring the ones provided by the parameter" in {
-    val idOption = dao.addInstance(buildInstance(3))
+    val idOption = dao.addInstance(buildInstance(4))
     assert(idOption.isSuccess)
     assert(dao.allInstances().size == 4)
     assert(dao.hasInstance(idOption.get))
@@ -39,7 +41,7 @@ class DynamicInstanceDAOTest extends FlatSpec with Matchers with BeforeAndAfterE
   }
 
   it must "return true on hasInstance for any present id" in {
-    for(i <- 0 to 2){
+    for(i <- 1 to 3){
       assert(dao.hasInstance(i))
     }
   }
@@ -51,7 +53,7 @@ class DynamicInstanceDAOTest extends FlatSpec with Matchers with BeforeAndAfterE
   }
 
   it must "return instances with the correct id on getInstance" in {
-    for(i <- 0 to 2){
+    for(i <- 1 to 3){
       val instance = dao.getInstance(i)
       assert(instance.isDefined)
       assert(instance.get.id.isDefined)
@@ -68,29 +70,15 @@ class DynamicInstanceDAOTest extends FlatSpec with Matchers with BeforeAndAfterE
     }
   }
 
-  it must "remove instances that are present in the DAO" in {
-    for(i <- 0 to 2){
-      assert(dao.removeInstance(i).isSuccess)
-      assert(!dao.hasInstance(i))
-    }
-    assert(dao.allInstances().isEmpty)
-  }
-
-  it must "not change the data on removing invalid IDs" in {
-    assert(dao.removeInstance(-1).isFailure)
-    assert(dao.removeInstance(Long.MaxValue).isFailure)
-    assert(dao.removeInstance(4).isFailure)
-  }
-
-  it must "remove all instance on removeAll" in {
-    dao.removeAll()
-    assert(dao.allInstances().isEmpty)
+  it must "Successfully added the Instance matching result" in {
+    val idOption = dao.addInstance(buildInstance(6))
+    dao.addMatchingResult(idOption.get, true)
+    assert(dao.getMatchingResultsFor(idOption.get).isSuccess)
   }
 
   it must "have an empty list of matching results for newly added instances" in {
-    val idOption = dao.addInstance(buildInstance(4))
-    assert(dao.getMatchingResultsFor(idOption.get).isSuccess)
-    assert(dao.getMatchingResultsFor(idOption.get).get.isEmpty)
+    dao.removeInstance(6)
+    assert(dao.getMatchingResultsFor(6).isFailure)
   }
 
   it must "keep the correct order of matching results posted" in {
@@ -106,8 +94,9 @@ class DynamicInstanceDAOTest extends FlatSpec with Matchers with BeforeAndAfterE
   }
 
   it must "remove the matching results when the instance is removed" in {
-    assert(dao.removeInstance(2).isSuccess)
-    assert(dao.getMatchingResultsFor(2).isFailure)
+    val idOption = dao.addInstance(buildInstance(7))
+    assert(dao.removeInstance(idOption.get).isSuccess)
+    assert(dao.getMatchingResultsFor(idOption.get).isFailure)
   }
 
   it must "be able to change the state for arbitrary state transitions" in {
@@ -134,11 +123,12 @@ class DynamicInstanceDAOTest extends FlatSpec with Matchers with BeforeAndAfterE
     assert(idOption.isSuccess)
     assert(dao.getDockerIdFor(idOption.get).isSuccess)
     assert(dao.getDockerIdFor(idOption.get).get.equals("dockerId"))
+    dao.removeInstance(idOption.get)
   }
 
   it must "add events only to instances that have been registered" in {
-    assert(dao.getEventsFor(1).isSuccess)
-    assert(dao.getEventsFor(1).get.isEmpty)
+    assert(dao.getEventsFor(1).isFailure)
+    //assert(dao.getEventsFor(1).get.isEmpty)
 
     val eventToAdd = RegistryEventFactory.createInstanceAddedEvent(dao.getInstance(1).get)
     assert(dao.addEventFor(-1, eventToAdd).isFailure)
@@ -150,25 +140,40 @@ class DynamicInstanceDAOTest extends FlatSpec with Matchers with BeforeAndAfterE
   it must "verify the presence of instance ids when a link is added" in {
     assert(dao.addLink(InstanceLink(-1,2, LinkState.Assigned)).isFailure)
     assert(dao.addLink(InstanceLink(42, Integer.MAX_VALUE, LinkState.Assigned)).isFailure)
-    assert(dao.addLink(InstanceLink(1,2, LinkState.Assigned)).isSuccess)
-    assert(dao.getLinksFrom(1).size == 1)
+    assert(dao.addLink(InstanceLink(2,3, LinkState.Assigned)).isSuccess)
+    assert(dao.getLinksFrom(2).size == 1)
   }
 
   it must "update old links in state 'Assigned' on adding a new assigned link." in {
-    assert(dao.addLink(InstanceLink(0,1, LinkState.Assigned)).isSuccess)
-    assert(dao.getLinksFrom(0, Some(LinkState.Assigned)).size == 1)
-    assert(dao.addLink(InstanceLink(0,2, LinkState.Assigned)).isSuccess)
+    assert(dao.addLink(InstanceLink(1,2, LinkState.Assigned)).isSuccess)
+    assert(dao.getLinksFrom(1, Some(LinkState.Assigned)).size == 1)
+    assert(dao.addLink(InstanceLink(1,3, LinkState.Assigned)).isSuccess)
 
-    assert(dao.getLinksFrom(0, Some(LinkState.Outdated)).size == 1)
-    assert(dao.getLinksFrom(0, Some(LinkState.Outdated)).head.idTo == 1)
+    assert(dao.getLinksFrom(1, Some(LinkState.Outdated)).size == 1)
+    assert(dao.getLinksFrom(1, Some(LinkState.Outdated)).head.idTo == 2)
 
-    assert(dao.getLinksFrom(0, Some(LinkState.Assigned)).size == 1)
-    assert(dao.getLinksFrom(0, Some(LinkState.Assigned)).head.idTo == 2)
+    assert(dao.getLinksFrom(1, Some(LinkState.Assigned)).size == 1)
+    assert(dao.getLinksFrom(1, Some(LinkState.Assigned)).head.idTo == 3)
   }
 
-  override protected def afterEach() : Unit = {
+  it must "remove instances that are present in the DAO" in {
+    for(i <- 1 to 3){
+      assert(dao.removeInstance(i).isSuccess)
+      assert(!dao.hasInstance(i))
+    }
+    assert(dao.allInstances().isEmpty)
+  }
+
+  it must "not change the data on removing invalid IDs" in {
+    assert(dao.removeInstance(-1).isFailure)
+    assert(dao.removeInstance(Long.MaxValue).isFailure)
+    assert(dao.removeInstance(4).isFailure)
+  }
+
+  it must "remove all instance on removeAll" in {
+    before()
     dao.removeAll()
-    dao.deleteRecoveryFile()
+    assert(dao.allInstances().isEmpty)
   }
 
 }

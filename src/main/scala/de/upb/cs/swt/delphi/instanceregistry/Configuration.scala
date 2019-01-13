@@ -1,7 +1,8 @@
 package de.upb.cs.swt.delphi.instanceregistry
 
 import akka.util.Timeout
-import scala.concurrent.duration.DurationInt
+
+import scala.concurrent.duration.{DurationInt, FiniteDuration}
 
 class Configuration( ) {
   //Where to host the http server
@@ -31,6 +32,21 @@ class Configuration( ) {
   val maxLabelLength: Int = 50
 
   val dockerOperationTimeout: Timeout = Timeout(20 seconds)
+
+  val jwtSecretKey: String = sys.env.getOrElse("JWT_SECRET", "changeme")
+
+  //Database configurations
+  val useInMemoryDB = true
+  val databaseHost = "jdbc:mysql://localhost/"
+  val databaseName = ""
+  val databaseDriver = "com.mysql.jdbc.Driver"
+  val databaseUsername = ""
+  val databasePassword = ""
+
+  //Request Limiter
+  val maxTotalNoRequest: Int = 2000
+  val maxIndividualIpReq: Int = 200
+  val ipLogRefreshRate: FiniteDuration = 2.minutes
 
 }
 
