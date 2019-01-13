@@ -34,9 +34,11 @@ inside their root directory. This will build the docker images and register them
 The registry requires an initial instance of ElasticSearch to be running.
 
 ## Authorization
-This application relies on *JSON Web Tokens* (JWTs) using the *HMAC with SHA-256* (HS256) algorithm for authorization purposes. A valid, base64-encoded token must be put into the ```Authorization``` header of every HTTP request that is being issued to the registry. You can find more about JWTs [here](https://jwt.io).
-
-To create valid JWTs for this application, the following fields have to be specified:
+This application relies on *JSON Web Tokens* (JWTs) using the *HMAC with SHA-256* (HS256) algorithm for authorization purposes. A valid, base64-encoded token must be put into the ```Authorization``` header of every HTTP request that is being issued to the registry. The HTTP header must look like this:
+```
+Authorization: Bearer <JWT>
+```
+You can find more about JWTs [here](https://jwt.io). To create valid JWTs for this application, the following fields have to be specified:
 
 |Attribute | Type | Explanation |
 | :---: | :---: | :--- |
@@ -46,9 +48,21 @@ To create valid JWTs for this application, the following fields have to be speci
 |```user_id``` | ```String``` | Id of the user this token was issued to.|
 |```user_type``` | ```String``` | Type of user that this token was issued to. Valid values are ```Admin``` (full access), ```User``` (read access) and ```Component``` (access to report operations).|
 
+Please note that values of type ```Int``` must **not** be surrounded by quotation marks.
+
 The secret key that is used for validating the tokens can either be set in the configuration file (see section below), or by setting the envirnment variable ```JWT_SECRET```. The default value is ```changeme``` and **has to be replaced for productive use!**
 
-You can create tokens for development purposes using the JWT debugger at [jwt.io](https://jwt.io).
+You can create tokens for development purposes using the JWT debugger at [jwt.io](https://jwt.io). The following token is valid for the default key ```changeme``` until end of march, and belongs to a user called ```DebugUser``` of user type ```Admin```. **Only use it for development purposes!**
+
+```
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE1NDcxMDYzOTksIm5iZiI6MTU0NzEwNjM5OSwiZXhwIjoxNTU0MDE0Nzk5LCJ1c2VyX2lkIjoiRGVidWdVc2VyIiwidXNlcl90eXBlIjoiQWRtaW4ifQ.TeDa8JkFANVEufPaxXv3AXSojcaiKdOlBKeU5cLaHpg
+```
+
+Using the above token, a valid call to the registry at ```localhost:8087``` using *curl* looks like this:
+
+```
+curl -X POST -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE1NDcxMDYzOTksIm5iZiI6MTU0NzEwNjM5OSwiZXhwIjoxNTU0MDE0Nzk5LCJ1c2VyX2lkIjoiRGVidWdVc2VyIiwidXNlcl90eXBlIjoiQWRtaW4ifQ.TeDa8JkFANVEufPaxXv3AXSojcaiKdOlBKeU5cLaHpg" localhost:8087/deploy?ComponentType=WebApi
+```
 
 ## Adapt the configuration file
 Before you can start the application, you have to make sure your configuration file contains valid data. The file can be found at *src/main/scala/de/upb/cs/swt/delphi/instanceregistry/Configuration.scala*, and most of its attributes are string or integer values. The following table describes the attributes in more detail.
