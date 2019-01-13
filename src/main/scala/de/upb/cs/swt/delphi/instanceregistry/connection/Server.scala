@@ -43,20 +43,20 @@ class Server (handler: RequestHandler) extends HttpApp
   //Routes that map http endpoints to methods in this object
   def apiRoutes : server.Route =
       /****************BASIC OPERATIONS****************/
-      path("register") {entity(as[String]) { jsonString => register(jsonString) }} ~
+      path("instances") {entity(as[String]) { jsonString => register(jsonString) }} ~
       path("deregister") { deregister() } ~
       path("instances") { fetchInstancesOfType() } ~
       path("instance") { retrieveInstance() } ~
-      path("numberOfInstances") { numberOfInstances() } ~
+      path("instances"/"count") { numberOfInstances() } ~
       path("matchingInstance") { matchingInstance()} ~
       path("matchingResult") { matchInstance()} ~
       path("eventList") { eventList()} ~
       path("linksFrom") { linksFrom()} ~
       path("linksTo") { linksTo()} ~
-      path("network") { network()} ~
+      path("instances"/"network") { network()} ~
       path("addLabel") { addLabel()} ~
       /****************DOCKER OPERATIONS****************/
-      path("deploy") { deployContainer()} ~
+      path("instances"/"deploy") { deployContainer()} ~
       path("reportStart") { reportStart()} ~
       path("reportStop") { reportStop()} ~
       path("reportFailure") { reportFailure()} ~
