@@ -92,37 +92,37 @@ class ServerTest
     //Invalid register
     "not register when entity is invalid" in {
       //No entity
-      Post("/register") ~> addAuthorization("Component") ~> server.routes ~> check {
+      Post("/instances/register") ~> addAuthorization("Component") ~> server.routes ~> check {
         assert(status === StatusCodes.BAD_REQUEST)
         responseAs[String].toLowerCase should include("failed to parse json")
       }
 
       //Wrong JSON syntax
-      Post("/register", HttpEntity(ContentTypes.`application/json`, invalidJsonInstance.stripMargin)) ~> addAuthorization("Component") ~> server.routes ~> check {
+      Post("/instances/register", HttpEntity(ContentTypes.`application/json`, invalidJsonInstance.stripMargin)) ~> addAuthorization("Component") ~> server.routes ~> check {
         assert(status === StatusCodes.BAD_REQUEST)
         responseAs[String].toLowerCase should include("failed to parse json")
       }
 
       //Missing required JSON members
-      Post("/register", HttpEntity(ContentTypes.`application/json`, validJsonInstanceMissingRequiredMember.stripMargin)) ~> addAuthorization("Component") ~> server.routes ~> check {
+      Post("/instances/register", HttpEntity(ContentTypes.`application/json`, validJsonInstanceMissingRequiredMember.stripMargin)) ~> addAuthorization("Component") ~> server.routes ~> check {
         assert(status === StatusCodes.BAD_REQUEST)
         responseAs[String].toLowerCase should include("could not deserialize parameter instance")
       }
 
       //Invalid HTTP method
-      Get("/register?InstanceString=25") ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
+      Get("/instances/register?InstanceString=25") ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.METHOD_NOT_ALLOWED)
         responseAs[String] shouldEqual "HTTP method not allowed, supported methods: POST"
       }
 
       //Wrong user type
-      Post("/register?InstanceString=25") ~> addAuthorization("User") ~> Route.seal(server.routes) ~> check {
+      Post("/instances/register?InstanceString=25") ~> addAuthorization("User") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.UNAUTHORIZED)
         responseAs[String] shouldEqual "The supplied authentication is invalid"
       }
 
       //No authorization
-      Post("/register?InstanceString=25") ~> Route.seal(server.routes) ~> check {
+      Post("/instances/register?InstanceString=25") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.UNAUTHORIZED)
         responseAs[String].toLowerCase should include ("not supplied with the request")
       }
@@ -216,7 +216,7 @@ class ServerTest
 
     //Valid get number of instances
     "successfully retrieve number of instances if parameter is valid" in {
-      Get("/numberOfInstances?ComponentType=ElasticSearch") ~> addAuthorization("User") ~> server.routes ~> check {
+      Get("/instances/count?ComponentType=ElasticSearch") ~> addAuthorization("User") ~> server.routes ~> check {
         assert(status === StatusCodes.OK)
         Try(responseAs[String].toLong) match {
           case Success(numberOfEsInstances) =>
@@ -227,7 +227,7 @@ class ServerTest
       }
 
       //No instances of that type present, still need to be 200 OK
-      Get("/numberOfInstances?ComponentType=WebApp") ~> addAuthorization("User") ~>server.routes ~> check {
+      Get("/instances/count?ComponentType=WebApp") ~> addAuthorization("User") ~>server.routes ~> check {
         assert(status === StatusCodes.OK)
         Try(responseAs[String].toLong) match {
           case Success(numberOfEsInstances) =>
@@ -241,25 +241,25 @@ class ServerTest
     //Invalid get number of instances
     "not retrieve number of instances if method is invalid, ComponentType is missing or invalid" in {
       //Wrong HTTP method
-      Post("/numberOfInstances?ComponentType=Crawler") ~> addAuthorization("User") ~> Route.seal(server.routes) ~> check {
+      Post("/instances/count?ComponentType=Crawler") ~> addAuthorization("User") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.METHOD_NOT_ALLOWED)
         responseAs[String] shouldEqual "HTTP method not allowed, supported methods: GET"
       }
 
       //Wrong parameter value
-      Get("/numberOfInstances?ComponentType=Car") ~> addAuthorization("User") ~> server.routes ~> check {
+      Get("/instances/count?ComponentType=Car") ~> addAuthorization("User") ~> server.routes ~> check {
         assert(status === StatusCodes.BAD_REQUEST)
         responseAs[String].toLowerCase should include("could not deserialize parameter")
       }
 
       //Wrong user type
-      Get("/numberOfInstances?ComponentType=Crawler") ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
+      Get("/instances/count?ComponentType=Crawler") ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.UNAUTHORIZED)
         responseAs[String] shouldEqual "The supplied authentication is invalid"
       }
 
       //No authorization
-      Get("/numberOfInstances?ComponentType=Crawler") ~> Route.seal(server.routes) ~> check {
+      Get("/instances/count?ComponentType=Crawler") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.UNAUTHORIZED)
         responseAs[String].toLowerCase should include ("not supplied with the request")
       }
@@ -470,7 +470,7 @@ class ServerTest
 
     //Valid GET /network
     "get the whole network graph of the current registry" in {
-      Get("/network") ~> addAuthorization("User") ~> server.routes ~> check {
+      Get("/instances/network") ~> addAuthorization("User") ~> server.routes ~> check {
         assert(status === StatusCodes.OK)
         Try(responseAs[String].parseJson.convertTo[List[Instance]](listFormat(instanceFormat))) match {
           case Success(listOfInstances) =>
@@ -636,18 +636,18 @@ class ServerTest
     /**Minimal tests for docker operations**/
 
     "fail to deploy if component type is invalid" in {
-      Post("/deploy?ComponentType=Car") ~> addAuthorization("Admin") ~> server.routes ~> check {
+      Post("/instances/deploy?ComponentType=Car") ~> addAuthorization("Admin") ~> server.routes ~> check {
         status shouldEqual StatusCodes.BAD_REQUEST
         responseAs[String].toLowerCase should include ("could not deserialize")
       }
 
       //Wrong user type
-      Post("/deploy?ComponentType=Crawler") ~> addAuthorization("User") ~> server.routes ~> check {
+      Post("/instances/deploy?ComponentType=Crawler") ~> addAuthorization("User") ~> server.routes ~> check {
         rejection.isInstanceOf[AuthenticationFailedRejection] shouldBe true
       }
 
       //No authorization
-      Post("/deploy?ComponentType=Crawler") ~> server.routes ~> check {
+      Post("/instances/deploy?ComponentType=Crawler") ~> server.routes ~> check {
         rejection.isInstanceOf[AuthenticationFailedRejection] shouldBe true
       }
     }
@@ -765,7 +765,7 @@ class ServerTest
       instanceState = InstanceState.Running, labels = labels, linksTo = List.empty, linksFrom = List.empty)
       .toJson(instanceFormat).toString
 
-    Post("/register", HttpEntity(ContentTypes.`application/json`,
+    Post("/instances/register", HttpEntity(ContentTypes.`application/json`,
       instanceString.stripMargin)) ~> addAuthorization("Component") ~> server.routes ~> check {
       assert(status === StatusCodes.OK)
       responseEntity match {

@@ -43,7 +43,7 @@ class Server (handler: RequestHandler) extends HttpApp
   //Routes that map http endpoints to methods in this object
   def apiRoutes : server.Route =
       /****************BASIC OPERATIONS****************/
-      path("instances") {entity(as[String]) { jsonString => register(jsonString) }} ~
+      path("instances"/"register") {entity(as[String]) { jsonString => register(jsonString) }} ~
       path("deregister") { deregister() } ~
       path("instances") { fetchInstancesOfType() } ~
       path("instance") { retrieveInstance() } ~
@@ -83,7 +83,7 @@ class Server (handler: RequestHandler) extends HttpApp
 
       post
       {
-        log.debug(s"POST /register has been called, parameter is: $InstanceString")
+        log.debug(s"POST /instances has been called, parameter is: $InstanceString")
 
         try {
           val paramInstance : Instance = InstanceString.parseJson.convertTo[Instance](instanceFormat)
@@ -173,7 +173,8 @@ class Server (handler: RequestHandler) extends HttpApp
 
         if(compType != null) {
           complete{handler.getNumberOfInstances(compType).toString()}
-        } else {
+        }
+        else {
           log.error(s"Failed to deserialize parameter string $compTypeString to ComponentType.")
           complete(HttpResponse(StatusCodes.BadRequest, entity = s"Could not deserialize parameter string $compTypeString to ComponentType"))
         }
