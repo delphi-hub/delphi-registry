@@ -83,7 +83,7 @@ class Server (handler: RequestHandler) extends HttpApp
 
       post
       {
-        log.debug(s"POST /instances has been called, parameter is: $InstanceString")
+        log.debug(s"POST /instances/register has been called, parameter is: $InstanceString")
 
         try {
           val paramInstance : Instance = InstanceString.parseJson.convertTo[Instance](instanceFormat)
@@ -164,15 +164,21 @@ class Server (handler: RequestHandler) extends HttpApp
     * argument named 'ComponentType' (so the call is /numberOfInstances?ComponentType=Crawler).
     * @return Server route that either maps to a 200 OK response containing the number of instance, or the resp. error codes.
     */
-  def numberOfInstances() : server.Route = parameters('ComponentType.as[String]) { compTypeString =>
+  def numberOfInstances() : server.Route = parameters('ComponentType.as[String].?) { compTypeString =>
     authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.User)) { token =>
       get {
-        log.debug(s"GET /numberOfInstances?ComponentType=$compTypeString has been called")
+        log.debug(s"GET instances/count?ComponentType=$compTypeString has been called")
 
-        val compType : ComponentType = ComponentType.values.find(v => v.toString == compTypeString).orNull
+        val noValue = "<novalue>"
+
+        val compTypeStr = compTypeString.getOrElse(noValue)
+
+        val compType : ComponentType = ComponentType.values.find(v => v.toString == compTypeStr).orNull
 
         if(compType != null) {
           complete{handler.getNumberOfInstances(compType).toString()}
+        } else if (compTypeStr ==noValue) {
+          complete{handler.getAllInstancesCount().toString()}
         }
         else {
           log.error(s"Failed to deserialize parameter string $compTypeString to ComponentType.")

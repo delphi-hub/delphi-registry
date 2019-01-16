@@ -111,6 +111,10 @@ class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, con
     instanceDao.allInstances().count(i => i.componentType == compType)
   }
 
+  def getAllInstancesCount(): Int= {
+    instanceDao.allInstances().length
+  }
+
   def getEventList(id: Long) : Try[List[RegistryEvent]] = {
     instanceDao.getEventsFor(id)
   }
