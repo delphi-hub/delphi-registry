@@ -30,7 +30,7 @@ To obtain these images, please clone the Delphi registry repository and execute 
 ```
 sudo bash ./Delphi_install.sh
 ```
-inside their root directory. This will create the required repositories, build the docker images including a docker image for registry, and register them directly at the local docker registry.
+inside their root directory. This installation script will create the required repositories, build the docker images, and register them directly at the local docker registry.
 The registry requires an initial instance of ElasticSearch to be running.
 
 ## Authorization
@@ -107,10 +107,11 @@ sudo service docker restart
 
 
 ## Run the application
-There are two ways of running the registry application. You can either run the application directly, or build a docker image defined by the *build.sbt* file, and run a container based on this image. Either way, you have to set the correct configuration values before starting the application (see section **Adapt the configuration file** above for more information). We are currently working on a setup script that will prepare all images that need to be present on your docker host. Until its finished, you have to register the images manually, as described in the **Requirements** section.
+There are two ways of running the registry application. You can either run the application directly, or build a docker image defined by the *build.sbt* file, and run a container based on this image. Either way, you have to set the correct configuration values before starting the application (see section **Adapt the configuration file** above for more information).
 ### Run the registry directly
 If you want to execute the registry directly on your local machine, simply go to the root folder of the repository and execute ```sbt run```. The application will stream all logging output to the terminal. You can terminate any time by pressing *RETURN*.
-
+### Run the registry in Docker
+The installation script mentioned in section **Requirements** will also create docker image for registry named delphi-registry:1.0.0-SNAPSHOT, and registers the image at your local docker registry. 
 
 ## Contributing
 
