@@ -28,7 +28,7 @@ The Delphi registry requires a docker host to deploy containers to. The followin
 To obtain these images, please clone the Delphi registry repository and execute the command 
 
 ```
-sudo bash ./Delphi_Install.sh
+sudo bash ./Delphi_install.sh
 ```
 inside their root directory. This will create the required repositories, build the docker images including a docker image for registry, and register them directly at the local docker registry.
 The registry requires an initial instance of ElasticSearch to be running.
