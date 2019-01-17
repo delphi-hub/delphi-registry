@@ -427,7 +427,7 @@ class ServerTest
     "returns registry events that are associated to the instance if id is valid" in {
       val id = assertValidRegister(ComponentType.Crawler)
       //TestCase
-      Get(s"/eventList?Id=$id") ~> addAuthorization("User") ~> server.routes ~> check {
+      Get(s"/instances/$id/eventList") ~> addAuthorization("User") ~> server.routes ~> check {
         assert(status === StatusCodes.OK)
         Try(responseAs[String].parseJson.convertTo[List[RegistryEvent]](listFormat(eventFormat))) match {
           case Success(listOfEvents) =>
@@ -444,25 +444,25 @@ class ServerTest
     //Invalid GET /eventList
     "does not return events if method is invalid or id is not found" in {
       //Wrong Http method
-      Post("/eventList?Id=0") ~> addAuthorization("User") ~> Route.seal(server.routes) ~> check {
+      Post("/instances/0/eventList") ~> addAuthorization("User") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.METHOD_NOT_ALLOWED)
         responseAs[String] shouldEqual "HTTP method not allowed, supported methods: GET"
       }
       //Wrong ID
-      Get("/eventList?Id=45") ~> addAuthorization("User") ~> server.routes ~> check {
+      Get("/instances/45/eventList") ~> addAuthorization("User") ~> server.routes ~> check {
         assert(status === StatusCodes.NOT_FOUND)
         responseAs[String] shouldEqual "Id 45 not found."
 
       }
 
       //Wrong user type
-      Get("/eventList?Id=0") ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
+      Get("/instances/0/eventList") ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.UNAUTHORIZED)
         responseAs[String] shouldEqual "The supplied authentication is invalid"
       }
 
       //No authorization
-      Get("/eventList?Id=0") ~> Route.seal(server.routes) ~> check {
+      Get("/instances/0/eventList") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.UNAUTHORIZED)
         responseAs[String].toLowerCase should include ("not supplied with the request")
       }

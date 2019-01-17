@@ -52,7 +52,7 @@ class Server (handler: RequestHandler) extends HttpApp
       path("instances"/"count") { numberOfInstances() } ~
       path("instances"/LongNumber/"matchingInstance") { Id => matchingInstance(Id)} ~
       path("matchingResult") { matchInstance()} ~
-      path("eventList") { eventList()} ~
+      path("instances"/LongNumber/"eventList") { Id => eventList(Id)} ~
       path("linksFrom") { linksFrom()} ~
       path("linksTo") { linksTo()} ~
       path("instances"/"network") { network()} ~
@@ -123,7 +123,7 @@ class Server (handler: RequestHandler) extends HttpApp
   def deregister(Id : Long) : server.Route = {
     authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Component)) { token =>
       post {
-        log.debug(s"POST /deregister?Id=$Id has been called")
+        log.debug(s"POST instance/$Id/deregister has been called")
 
         handler.handleDeregister(Id) match {
           case handler.OperationResult.IdUnknown  =>
@@ -221,7 +221,7 @@ class Server (handler: RequestHandler) extends HttpApp
   def matchingInstance(Id :Long) : server.Route = parameters('ComponentType.as[String]){ (compTypeString) =>
     authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Component)) { token =>
       get{
-        log.debug(s"GET /matchingInstance?Id=$Id&ComponentType=$compTypeString has been called")
+        log.debug(s"GET instance/$Id/matchingInstance?ComponentType=$compTypeString has been called")
 
         val compType : ComponentType = ComponentType.values.find(v => v.toString == compTypeString).orNull
         log.info(s"Looking for instance of type $compType ...")
@@ -283,14 +283,14 @@ class Server (handler: RequestHandler) extends HttpApp
     * query argument named 'Id' (so the resulting call is /eventList?Id=42).
     * @return Server route mapping to either 200 OK and the list of event, or the resp. error codes.
     */
-  def eventList() : server.Route = parameters('Id.as[Long]){id =>
+  def eventList(Id : Long) : server.Route = {
     authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.User)){ token =>
       get {
-        log.debug(s"GET /eventList?Id=$id has been called")
+        log.debug(s"GET instances/$Id//eventList has been called")
 
-        handler.getEventList(id) match {
+        handler.getEventList(Id) match {
           case Success(list) => complete{list}
-          case Failure(_) => complete{HttpResponse(StatusCodes.NotFound, entity = s"Id $id not found.")}
+          case Failure(_) => complete{HttpResponse(StatusCodes.NotFound, entity = s"Id $Id not found.")}
         }
       }
     }
