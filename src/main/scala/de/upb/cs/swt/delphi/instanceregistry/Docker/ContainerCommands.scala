@@ -219,28 +219,43 @@ class ContainerCommands(connection: DockerConnection) extends JsonSupport with C
 
   def streamLogs(containerId: String, stdErrSelected: Boolean) (implicit ec: ExecutionContext) : Try[Publisher[Message]] = {
 
-    val queryParams = Query("stdout" -> (!stdErrSelected).toString, "stderr" -> stdErrSelected.toString, "follow" -> "true", "tail" -> "all", "timestamps" -> "true")
+    // Select stdout / stderr in query params
+    val queryParams = Query("stdout" -> (!stdErrSelected).toString, "stderr" -> stdErrSelected.toString, "follow" -> "true", "tail" -> "all", "timestamps" -> "false")
 
+    // Create actor-publisher pair, publisher will be returned
     val (streamActor, streamPublisher) = Source.actorRef[Message](bufferSize = 10, OverflowStrategy.dropNew)
       .toMat(Sink.asPublisher(fanout = true))(Keep.both)
       .run()
 
+    // Delimiter flow splits incoming traffic into lines based on dockers multiplex-protocol
+    // Docker prepends an 8-byte header, where the last 4 byte encode line length in big endian
+    // See https://docs.docker.com/engine/api/v1.30/#operation/ContainerAttach
     val delimiter: Flow[ByteString, ByteString, NotUsed] = Framing.lengthField(4, 4, 100000, ByteOrder.BIG_ENDIAN)
 
+    // Flow that removes header bytes from payload
+    val removeHeaderFlow: Flow[ByteString, ByteString, NotUsed] = Flow.fromFunction(in => in.slice(8, in.size))
+
+    // Build request
     val request = Get(buildUri(containersPath / containerId.substring(0,11) / "logs", queryParams))
 
+    // Execute request
     val res = connection.sendRequest(request).flatMap { res =>
-      val logLines = res.entity.dataBytes.via(delimiter).map(_.utf8String)
+      // Extract payload ByteString from data stream using above flows. Map to string.
+      val logLines = res.entity.dataBytes.via(delimiter).via(removeHeaderFlow).map(_.utf8String)
       logLines.runForeach { line =>
+        // Send each log line to the stream actor, which will publish them
         log.debug(s"Streaming log message $line")
         streamActor ! TextMessage(line)
       }
     }
 
+    // Kill actor on completion
     res.onComplete{ _ =>
       log.info("Log stream finished successfully.")
       streamActor ! PoisonPill
     }
+
+    // Return publish so server can subscribe to it
     Success(streamPublisher)
   }
 
