@@ -53,7 +53,7 @@ class Server (handler: RequestHandler) extends HttpApp
       path("instances"/LongNumber/"matchingInstance") { Id => matchingInstance(Id)} ~
       path("matchingResult") { matchInstance()} ~
       path("instances"/LongNumber/"eventList") { Id => eventList(Id)} ~
-      path("linksFrom") { linksFrom()} ~
+      path("instances"/LongNumber/"linksFrom") { Id => linksFrom(Id)} ~
       path("linksTo") { linksTo()} ~
       path("instances"/"network") { network()} ~
       path("addLabel") { addLabel()} ~
@@ -581,17 +581,17 @@ class Server (handler: RequestHandler) extends HttpApp
     * 'Id' (so the resulting call is /linksFrom?Id=42).
     * @return Server route that either maps to 200 OK (and the list of links as content), or the respective error code.
     */
-  def linksFrom() : server.Route = parameters('Id.as[Long]) { id =>
+  def linksFrom(Id : Long) : server.Route =  {
     authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.User)){ token =>
       get {
-        log.debug(s"GET /linksFrom?Id=$id has been called.")
+        log.debug(s"GET /instances/$Id/linksFrom has been called.")
 
-        handler.handleGetLinksFrom(id) match {
+        handler.handleGetLinksFrom(Id) match {
           case Success(linkList) =>
             complete{linkList}
           case Failure(ex) =>
-            log.warning(s"Failed to get links from $id with message: ${ex.getMessage}")
-            complete{HttpResponse(StatusCodes.NotFound, entity = s"Failed to get links from $id, that id is not known.")}
+            log.warning(s"Failed to get links from $Id with message: ${ex.getMessage}")
+            complete{HttpResponse(StatusCodes.NotFound, entity = s"Failed to get links from $Id, that id is not known.")}
         }
       }
     }

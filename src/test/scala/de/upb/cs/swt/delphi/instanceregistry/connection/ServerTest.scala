@@ -31,6 +31,7 @@ import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model._
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.{ComponentType, InstanceState}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.LinkEnums.LinkState
 import pdi.jwt.{Jwt, JwtAlgorithm, JwtClaim}
+import shapeless.PolyDefns.~>
 import spray.json._
 
 import scala.concurrent.duration.Duration
@@ -500,7 +501,7 @@ class ServerTest
       }
 
       //Get links from crawler, should be one link to default ES instance
-      Get(s"/linksFrom?Id=$id") ~> addAuthorization("User") ~> server.routes ~> check {
+      Get(s"/instances/$id/linksFrom") ~> addAuthorization("User") ~> server.routes ~> check {
         assert(status === StatusCodes.OK)
         Try(responseAs[String].parseJson.convertTo[List[InstanceLink]](listFormat(instanceLinkFormat))) match {
           case Success(listOfLinks) =>
@@ -520,18 +521,18 @@ class ServerTest
 
     //Invalid GET /linksFrom
     "return no links found for invalid id" in {
-      Get("/linksFrom?Id=45") ~> addAuthorization("User") ~> server.routes ~> check {
+      Get("/instances/45/linksFrom") ~> addAuthorization("User") ~> server.routes ~> check {
         assert(status === StatusCodes.NOT_FOUND)
       }
 
       //Wrong user type
-      Get("/linksFrom?Id=0") ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
+      Get("/instances/0/linksFrom") ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.UNAUTHORIZED)
         responseAs[String] shouldEqual "The supplied authentication is invalid"
       }
 
       //No authorization
-      Get("/linksFrom?Id=0") ~> Route.seal(server.routes) ~> check {
+      Get("/instances/0/linksFrom") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.UNAUTHORIZED)
         responseAs[String].toLowerCase should include ("not supplied with the request")
       }
