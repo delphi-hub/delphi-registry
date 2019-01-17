@@ -7,18 +7,12 @@ LOGFILE=$HOME/`date "+%F_%T"`\_$SUDO_USER.log
 sudo touch $LOGFILE
 sudo chown $SUDO_USER $LOGFILE
 
-printf "Starting installation of DELPHI.\n"
-printf "Logs can be found at: $LOGFILE"
+echo " Starting installation of Delphi Application"
+echo " Logs can be found at: $LOGFILE"
 
 
-######Git Repository######
-##########################
-# Testing purposes: sudo apt remove git
-
-# printf "Cloning Delphi..."
-# bash -c "apt-get install git -y &>> $LOGFILE"
 sudo -u $SUDO_USER bash -c "git clone --progress https://github.com/delphi-hub/delphi.git --recurse-submodules>> $LOGFILE"
-printf " Done building Delphi.\n"
+echo " **Cloning of Delphi Repositories completed**"
 
 
 #######Docker Setup######
@@ -29,35 +23,30 @@ printf " Done building Delphi.\n"
 # sudo rm -rf /etc/docker
 # sudo groupdel docker
 
-# Docker Compose
-# Testing purposes:
-# sudo apt-get purge docker-compose
 
 ## Installing Images and Creating Volumes
     
-printf "Installing Docker images and creating volumes. This step might take several minutes. Installation details can be found in the logs...\n"
-
-printf " Building Delphi Images\n" 
+echo " Building Delphi Images. This step might take several minutes"
+sudo -u $SUDO_USER bash -c "sbt docker:publishLocal &>> $LOGFILE"
+echo " Delphi-Registry Image built" 
 sudo -u $SUDO_USER bash -c "(cd ./delphi/delphi-webapi;sbt docker:publishLocal) &>> $LOGFILE"
-printf " Built Delphi-WebApi Image\n" 
+echo " Delphi-WebApi Image built" 
 sudo -u $SUDO_USER bash -c "(cd ./delphi/delphi-webapp;sbt docker:publishLocal) &>> $LOGFILE"
-printf " Built Delphi-WebApp Image\n" 
+echo " Delphi-WebApp Image built" 
 sudo -u $SUDO_USER bash -c "(cd ./delphi/delphi-crawler;sbt docker:publishLocal) &>> $LOGFILE"
-printf " Built Delphi-Crawler Image\n" 
-#sudo -u $SUDO_USER bash -c "(cd ./delphi-registry;sbt docker:publishLocal) &>> $LOGFILE"
-#printf " Built Delphi-Registry Image\n" 
+echo " Delphi-Crawler Image built" 
 sudo -u $SUDO_USER bash -c "(cd ./delphi/delphi-management;sbt docker:publishLocal) &>> $LOGFILE"
-printf " Built Delphi-Management Image\n"
+echo " Delphi-Management Image built"
 bash -c "docker images >> $LOGFILE"
 
-# bash -c "docker-compose up -d --no-recreate &>> $LOGFILE"
-# bash -c "docker volume create --name IVY_REPO -d local >/dev/null &>> $LOGFILE"
-# bash -c "docker volume create --name M2_REPO -d local &>> $LOGFILE"
-printf " Done."
+
+echo " **Docker Images for all the components built successfully**"
 
 
 #########Finished########
 #########################
-printf "DELPHI Networks installed. To complete your setup, follow the remaining instructions at: https://github.com/delphi-hub\n"
+
+echo " For more information regarding the application, please have a look at the Readme file found at: https://github.com/delphi-hub/delphi-registry/blob/master/README.md"
+
 
 
