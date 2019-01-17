@@ -50,7 +50,7 @@ class Server (handler: RequestHandler) extends HttpApp
       path("instances") { fetchInstancesOfType() } ~
       path("instance") { retrieveInstance() } ~
       path("instances"/"count") { numberOfInstances() } ~
-      path("matchingInstance") { matchingInstance()} ~
+      path("instances"/LongNumber/"matchingInstance") { Id => matchingInstance(Id)} ~
       path("matchingResult") { matchInstance()} ~
       path("eventList") { eventList()} ~
       path("linksFrom") { linksFrom()} ~
@@ -218,22 +218,22 @@ class Server (handler: RequestHandler) extends HttpApp
     * be passed as an query argument named 'ComponentType' (so the call is /matchingInstance?ComponentType=Crawler).
     * @return Server route that either maps to 200 OK response containing the instance, or the resp. error codes.
     */
-  def matchingInstance() : server.Route = parameters('Id.as[Long], 'ComponentType.as[String]){ (id, compTypeString) =>
+  def matchingInstance(Id :Long) : server.Route = parameters('ComponentType.as[String]){ (compTypeString) =>
     authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Component)) { token =>
       get{
-        log.debug(s"GET /matchingInstance?Id=$id&ComponentType=$compTypeString has been called")
+        log.debug(s"GET /matchingInstance?Id=$Id&ComponentType=$compTypeString has been called")
 
         val compType : ComponentType = ComponentType.values.find(v => v.toString == compTypeString).orNull
         log.info(s"Looking for instance of type $compType ...")
 
         if(compType != null){
-          handler.getMatchingInstanceOfType(id, compType) match {
+          handler.getMatchingInstanceOfType(Id, compType) match {
             case (_, Success(matchedInstance)) =>
-              log.info(s"Matched request from $id to $matchedInstance.")
-              handler.handleInstanceLinkCreated(id, matchedInstance.id.get) match {
+              log.info(s"Matched request from $Id to $matchedInstance.")
+              handler.handleInstanceLinkCreated(Id, matchedInstance.id.get) match {
                 case handler.OperationResult.IdUnknown =>
-                  log.warning(s"Could not handle the creation of instance link, id $id was not found.")
-                  complete(HttpResponse(StatusCodes.NotFound, entity = s"Could not find instance with id $id."))
+                  log.warning(s"Could not handle the creation of instance link, id $Id was not found.")
+                  complete(HttpResponse(StatusCodes.NotFound, entity = s"Could not find instance with id $Id."))
                 case handler.OperationResult.InvalidTypeForOperation =>
                   log.warning(s"Could not handle the creation of instance link, incompatible types found.")
                   complete{HttpResponse(StatusCodes.BadRequest, entity = s"Invalid dependency type $compType")}
@@ -243,11 +243,11 @@ class Server (handler: RequestHandler) extends HttpApp
                   complete{HttpResponse(StatusCodes.InternalServerError, entity = s"An internal error occurred")}
               }
             case (handler.OperationResult.IdUnknown, _) =>
-              log.warning(s"Cannot match to instance of type $compType, id $id was not found.")
-              complete(HttpResponse(StatusCodes.NotFound, entity = s"Cannot match to instance of type $compType, id $id was not found."))
+              log.warning(s"Cannot match to instance of type $compType, id $Id was not found.")
+              complete(HttpResponse(StatusCodes.NotFound, entity = s"Cannot match to instance of type $compType, id $Id was not found."))
             case (_, Failure(x)) =>
               log.warning(s"Could not find matching instance for type $compType, message was ${x.getMessage}.")
-              complete(HttpResponse(StatusCodes.NotFound, entity = s"Could not find matching instance of type $compType for instance with id $id."))
+              complete(HttpResponse(StatusCodes.NotFound, entity = s"Could not find matching instance of type $compType for instance with id $Id."))
           }
         } else {
           log.error(s"Failed to deserialize parameter string $compTypeString to ComponentType.")

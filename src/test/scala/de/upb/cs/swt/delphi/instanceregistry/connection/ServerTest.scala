@@ -306,7 +306,7 @@ class ServerTest
       val id = assertValidRegister(ComponentType.Crawler, dockerId = None)
 
       //Actual test
-      Get(s"/matchingInstance?Id=$id&ComponentType=ElasticSearch") ~> addAuthorization("Component") ~> server.routes ~> check {
+      Get(s"/instances/$id/matchingInstance?ComponentType=ElasticSearch") ~> addAuthorization("Component") ~> server.routes ~> check {
         assert(status === StatusCodes.OK)
         Try(responseAs[String].parseJson.convertTo[Instance](instanceFormat)) match {
           case Success(esInstance) =>
@@ -329,43 +329,43 @@ class ServerTest
       val webAppId = assertValidRegister(ComponentType.WebApp)
 
       //Invalid ComponentType
-      Get(s"/matchingInstance?Id=$webApiId&ComponentType=Search") ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
+      Get(s"/instances/$webApiId/matchingInstance?ComponentType=Search") ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.BAD_REQUEST)
       }
 
       //Unknown callee id, expect 404
-      Get("/matchingInstance?Id=45&ComponentType=Crawler") ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
+      Get("/instances/45/matchingInstance?ComponentType=Crawler") ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.NOT_FOUND)
         responseAs[String].toLowerCase should include ("id 45 was not found")
       }
 
       //Method Not allowed
-      Post(s"/matchingInstance?Id=$webApiId&ComponentType=ElasticSearch") ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
+      Post(s"/instances/$webApiId/matchingInstance?ComponentType=ElasticSearch") ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.METHOD_NOT_ALLOWED)
         responseAs[String] shouldEqual "HTTP method not allowed, supported methods: GET"
       }
 
       //Incompatible types, api asks for crawler - expect 400
-      Get(s"/matchingInstance?Id=$webApiId&ComponentType=Crawler") ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
+      Get(s"/instances/$webApiId/matchingInstance?ComponentType=Crawler") ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.BAD_REQUEST)
         responseAs[String].toLowerCase should include ("invalid dependency type")
       }
 
       //No instance of desired type present - expect 404
       assertValidDeregister(webApiId)
-      Get(s"/matchingInstance?Id=$webAppId&ComponentType=WebApi") ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
+      Get(s"/instances/$webAppId/matchingInstance?ComponentType=WebApi") ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.NOT_FOUND)
         responseAs[String].toLowerCase should include ("could not find matching instance")
       }
 
       //Wrong user type
-      Get(s"/matchingInstance?Id=$webAppId&ComponentType=WebApi") ~> addAuthorization("User") ~> Route.seal(server.routes) ~> check {
+      Get(s"/instances/$webApiId/matchingInstance?ComponentType=WebApi") ~> addAuthorization("User") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.UNAUTHORIZED)
         responseAs[String] shouldEqual "The supplied authentication is invalid"
       }
 
       //No authorization
-      Get(s"/matchingInstance?Id=$webAppId&ComponentType=WebApi") ~> Route.seal(server.routes) ~> check {
+      Get(s"/instances/$webApiId/matchingInstance?ComponentType=WebApi") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.UNAUTHORIZED)
         responseAs[String].toLowerCase should include ("not supplied with the request")
       }
@@ -488,7 +488,7 @@ class ServerTest
       val id = assertValidRegister(ComponentType.Crawler)
 
       //Fake connection from crawler to default ES instance
-      Get(s"/matchingInstance?Id=$id&ComponentType=ElasticSearch") ~> addAuthorization("Component") ~> server.routes ~> check {
+      Get(s"/instances/$id/matchingInstance?ComponentType=ElasticSearch") ~> addAuthorization("Component") ~> server.routes ~> check {
         assert(status === StatusCodes.OK)
         Try(responseAs[String].parseJson.convertTo[Instance](instanceFormat)) match {
           case Success(esInstance) =>
@@ -542,7 +542,7 @@ class ServerTest
       val id = assertValidRegister(ComponentType.Crawler)
 
       //Fake connection from crawler to default ES instance
-      Get(s"/matchingInstance?Id=$id&ComponentType=ElasticSearch") ~> addAuthorization("Component") ~> server.routes ~> check {
+      Get(s"/instances/$id/matchingInstance?ComponentType=ElasticSearch") ~> addAuthorization("Component") ~> server.routes ~> check {
         assert(status === StatusCodes.OK)
         Try(responseAs[String].parseJson.convertTo[Instance](instanceFormat)) match {
           case Success(esInstance) =>
