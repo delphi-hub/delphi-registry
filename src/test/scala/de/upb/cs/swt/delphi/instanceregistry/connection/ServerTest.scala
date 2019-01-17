@@ -23,19 +23,18 @@ import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import de.upb.cs.swt.delphi.instanceregistry.Docker.DockerConnection
-import de.upb.cs.swt.delphi.instanceregistry.{Configuration, Registry, RequestHandler}
-import org.scalatest.{Matchers, WordSpec}
 import de.upb.cs.swt.delphi.instanceregistry.daos.{DynamicInstanceDAO, InstanceDAO}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.EventEnums.EventType
-import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model._
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.{ComponentType, InstanceState}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.LinkEnums.LinkState
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model._
+import de.upb.cs.swt.delphi.instanceregistry.{Configuration, Registry, RequestHandler}
+import org.scalatest.{Matchers, WordSpec}
 import pdi.jwt.{Jwt, JwtAlgorithm, JwtClaim}
-import shapeless.PolyDefns.~>
 import spray.json._
 
-import scala.concurrent.duration.Duration
 import scala.concurrent.Await
+import scala.concurrent.duration.Duration
 import scala.util.{Failure, Success, Try}
 
 
@@ -555,7 +554,7 @@ class ServerTest
       }
 
       //Get links to default ES instance, should be one link from crawler
-      Get(s"/linksTo?Id=0") ~> addAuthorization("User") ~> server.routes ~> check {
+      Get(s"/instances/0/linksTo") ~> addAuthorization("User") ~> server.routes ~> check {
         assert(status === StatusCodes.OK)
         Try(responseAs[String].parseJson.convertTo[List[InstanceLink]](listFormat(instanceLinkFormat))) match {
           case Success(listOfLinks) =>
@@ -575,18 +574,18 @@ class ServerTest
 
     //Invalid GET /linksTo
     "return no links found to specified id" in {
-      Get("/linksTo?Id=45") ~> addAuthorization("User") ~> server.routes ~> check {
+      Get("/instances/45/linksTo") ~> addAuthorization("User") ~> server.routes ~> check {
         assert(status === StatusCodes.NOT_FOUND)
       }
 
       //Wrong user type
-      Get("/linksTo?Id=0") ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
+      Get("/instances/0/linksTo") ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.UNAUTHORIZED)
         responseAs[String] shouldEqual "The supplied authentication is invalid"
       }
 
       //No authorization
-      Get("/linksTo?Id=0") ~> Route.seal(server.routes) ~> check {
+      Get("/instances/0/linksTo") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.UNAUTHORIZED)
         responseAs[String].toLowerCase should include ("not supplied with the request")
       }
