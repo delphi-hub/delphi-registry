@@ -24,7 +24,7 @@ schemes:
   - https
   - http
 paths:
-  /instances:
+  /instances/register:
     post:
       tags:
         - Basic Operations
