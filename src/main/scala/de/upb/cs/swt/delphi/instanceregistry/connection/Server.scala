@@ -10,14 +10,16 @@ import akka.stream.scaladsl.{Flow, Sink, Source}
 import de.upb.cs.swt.delphi.instanceregistry.authorization.AccessTokenEnums.UserType
 import de.upb.cs.swt.delphi.instanceregistry.authorization.{AccessToken, AuthProvider}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.ComponentType
-import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.{EventJsonSupport, InstanceJsonSupport, InstanceLinkJsonSupport, Instance}
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.{EventJsonSupport, Instance, InstanceJsonSupport, InstanceLinkJsonSupport}
 import de.upb.cs.swt.delphi.instanceregistry.{AppLogging, Registry, RequestHandler}
 import spray.json.JsonParser.ParsingException
 import spray.json._
 
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
 import de.upb.cs.swt.delphi.instanceregistry.requestLimiter.{IpLogActor, RequestLimitScheduler}
+
+import scala.collection.immutable.Range
 
 /**
   * Web server configuration for Instance Registry API.
@@ -44,7 +46,7 @@ class Server (handler: RequestHandler) extends HttpApp
   def apiRoutes : server.Route =
       /****************BASIC OPERATIONS****************/
       path("instances"/"register") {entity(as[String]) { jsonString => register(jsonString) }} ~
-      path("deregister") { deregister() } ~
+      path("instances"/LongNumber/"deregister") { Id => deregister(Id) } ~
       path("instances") { fetchInstancesOfType() } ~
       path("instance") { retrieveInstance() } ~
       path("instances"/"count") { numberOfInstances() } ~
@@ -69,6 +71,8 @@ class Server (handler: RequestHandler) extends HttpApp
       path("command") { runCommandInContainer()} ~
       /****************EVENT OPERATIONS****************/
       path("events") { streamEvents()}
+
+
 
 
   /**
@@ -116,7 +120,7 @@ class Server (handler: RequestHandler) extends HttpApp
     * a docker container, as the respective instance will be permanently deleted from the registry.
     * @return Server route that either maps to a 200 OK response if successful, or to the respective error codes.
     */
-  def deregister() : server.Route = parameters('Id.as[Long]){ Id =>
+  def deregister(Id : Long) : server.Route = {
     authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Component)) { token =>
       post {
         log.debug(s"POST /deregister?Id=$Id has been called")

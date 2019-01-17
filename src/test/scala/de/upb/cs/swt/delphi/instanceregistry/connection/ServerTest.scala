@@ -132,37 +132,37 @@ class ServerTest
     //Invalid deregister
     "not deregister if method is invalid, id is missing or invalid" in {
       //Id missing
-      Post("/deregister") ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
+  /*    Post("/instances//deregister") ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.NOT_FOUND)
         responseAs[String].toLowerCase should include("missing required query parameter")
       }
-
+*/
       //Id wrong type
-      Post("/deregister?Id=kilo") ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
+      /*Post("/instances/kilo/deregister") ~> addAuthorization("Component") ~> server.routes ~> check {
         assert(status === StatusCodes.BAD_REQUEST)
         responseAs[String].toLowerCase should include("not a valid 64-bit signed integer value")
-      }
+      } */
 
       //Id not present
-      Post(s"/deregister?Id=${Long.MaxValue}") ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
+      Post(s"/instances/${Long.MaxValue}/deregister") ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.NOT_FOUND)
         responseAs[String].toLowerCase should include("not known to the server")
       }
 
       //Wrong HTTP method
-      Get("/deregister?Id=0") ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
+      Get("/instances/0/deregister") ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.METHOD_NOT_ALLOWED)
         responseAs[String] shouldEqual "HTTP method not allowed, supported methods: POST"
       }
 
       //Wrong user type
-      Post("/deregister?Id=0") ~> addAuthorization("User") ~> Route.seal(server.routes) ~> check {
+      Post("/instances/0/deregister") ~> addAuthorization("User") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.UNAUTHORIZED)
         responseAs[String] shouldEqual "The supplied authentication is invalid"
       }
 
       //No authorization
-      Post("/deregister?Id=0") ~> Route.seal(server.routes) ~> check {
+      Post("/instances/0/deregister") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.UNAUTHORIZED)
         responseAs[String].toLowerCase should include ("not supplied with the request")
       }
@@ -780,7 +780,7 @@ class ServerTest
   }
 
   private def assertValidDeregister(id: Long): Unit = {
-    Post(s"/deregister?Id=$id") ~> addAuthorization("Component") ~> server.routes ~> check {
+    Post(s"/instances/$id/deregister") ~> addAuthorization("Component") ~> server.routes ~> check {
       assert(status === StatusCodes.OK)
       entityAs[String].toLowerCase should include("successfully removed instance")
     }
