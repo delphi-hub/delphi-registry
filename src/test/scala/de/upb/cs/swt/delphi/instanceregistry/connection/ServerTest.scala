@@ -653,7 +653,7 @@ class ServerTest
     }
 
     "fail to execute docker operations if id is invalid" in {
-      Post("/reportStart?Id=42") ~> addAuthorization("Component") ~> server.routes ~> check {
+      Post("/instances/42/reportStart") ~> addAuthorization("Component") ~> server.routes ~> check {
         status shouldEqual StatusCodes.NOT_FOUND
         responseAs[String].toLowerCase should include ("not found")
       }
@@ -693,7 +693,7 @@ class ServerTest
 
     "fail to execute docker operations if instance is no docker container" in {
       val id = assertValidRegister(ComponentType.Crawler, dockerId = None)
-      Post(s"/reportStart?Id=$id") ~> addAuthorization("Component") ~> server.routes ~> check {
+      Post(s"/instances/$id/reportStart") ~> addAuthorization("Component") ~> server.routes ~> check {
         status shouldEqual StatusCodes.BAD_REQUEST
       }
       Post(s"/reportStop?Id=$id") ~> addAuthorization("Component") ~> server.routes ~> check {
@@ -719,7 +719,7 @@ class ServerTest
 
     "fail to execute docker operations with wrong authorization supplied" in {
       val id = assertValidRegister(ComponentType.Crawler, dockerId = None)
-      Post(s"/reportStart?Id=$id") ~> server.routes ~> check {
+      Post(s"/instances/$id/reportStart") ~> server.routes ~> check {
         rejection.isInstanceOf[AuthenticationFailedRejection] shouldBe true
       }
       Post(s"/reportStop?Id=$id") ~> server.routes ~> check {

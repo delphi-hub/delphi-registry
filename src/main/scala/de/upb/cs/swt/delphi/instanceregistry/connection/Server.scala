@@ -59,7 +59,7 @@ class Server (handler: RequestHandler) extends HttpApp
       path("addLabel") { addLabel()} ~
       /****************DOCKER OPERATIONS****************/
       path("instances"/"deploy") { deployContainer()} ~
-      path("reportStart") { reportStart()} ~
+      path("instances"/LongNumber/"reportStart") { Id => reportStart(Id)} ~
       path("reportStop") { reportStop()} ~
       path("reportFailure") { reportFailure()} ~
       path("pause") { pause()} ~
@@ -334,16 +334,16 @@ class Server (handler: RequestHandler) extends HttpApp
     * parameter named 'Id' (so the resulting call is /reportStart?Id=42)
     * @return Server route that either maps to 200 OK or the respective error codes
     */
-  def reportStart() : server.Route = parameters('Id.as[Long]) {id =>
+  def reportStart(Id : Long) : server.Route = {
     authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Component)) { token =>
       post {
-        handler.handleReportStart(id) match {
+        handler.handleReportStart(Id) match {
           case handler.OperationResult.IdUnknown =>
-            log.warning(s"Cannot report start for id $id, that id was not found.")
-            complete{HttpResponse(StatusCodes.NotFound, entity = s"Id $id not found.")}
+            log.warning(s"Cannot report start for id $Id, that id was not found.")
+            complete{HttpResponse(StatusCodes.NotFound, entity = s"Id $Id not found.")}
           case handler.OperationResult.NoDockerContainer =>
-            log.warning(s"Cannot report start for id $id, that instance is not running in a docker container.")
-            complete{HttpResponse(StatusCodes.BadRequest, entity = s"Id $id is not running in a docker container.")}
+            log.warning(s"Cannot report start for id $Id, that instance is not running in a docker container.")
+            complete{HttpResponse(StatusCodes.BadRequest, entity = s"Id $Id is not running in a docker container.")}
           case handler.OperationResult.Ok =>
             complete{"Report successfully processed."}
           case r =>
