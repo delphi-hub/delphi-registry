@@ -61,7 +61,8 @@ class Server (handler: RequestHandler) extends HttpApp
         path("reportStop") { reportStop(Id)} ~
         path("reportFailure") { reportFailure(Id)} ~
         path("pause") { pause(Id)} ~
-        path("resume") { resume(Id)}
+        path("resume") { resume(Id)} ~
+        path("stop") { stop(Id)}
     }
   }~
       path("instances") { fetchInstancesOfType() } ~
@@ -69,7 +70,6 @@ class Server (handler: RequestHandler) extends HttpApp
       path("matchingResult") { matchInstance()} ~
       path("addLabel") { addLabel()} ~
       /****************DOCKER OPERATIONS****************/
-      path("stop") { stop()} ~
       path("start") { start()} ~
       path("delete") { deleteContainer()} ~
       path("assignInstance") { assignInstance()} ~
@@ -473,16 +473,16 @@ class Server (handler: RequestHandler) extends HttpApp
     * as a query argument named 'Id' (so the resulting call is /stop?Id=42).
     * @return Server route that either maps to 202 ACCEPTED or the expected error codes.
     */
-  def stop() : server.Route = parameters('Id.as[Long]) { id =>
+  def stop(Id : Long) : server.Route =  {
     authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Admin)){ token =>
       post {
-        log.debug(s"POST /stop?Id=$id has been called")
-        handler.handleStop(id) match {
+        log.debug(s"POST /instances/$Id/stop has been called")
+        handler.handleStop(Id) match {
           case handler.OperationResult.IdUnknown =>
-            log.warning(s"Cannot stop id $id, that id was not found.")
-            complete{HttpResponse(StatusCodes.NotFound, entity = s"Id $id not found.")}
+            log.warning(s"Cannot stop id $Id, that id was not found.")
+            complete{HttpResponse(StatusCodes.NotFound, entity = s"Id $Id not found.")}
           case handler.OperationResult.InvalidTypeForOperation =>
-            log.warning(s"Cannot stop id $id, this component type cannot be stopped.")
+            log.warning(s"Cannot stop id $Id, this component type cannot be stopped.")
             complete{HttpResponse(StatusCodes.BadRequest, entity = s"Cannot stop instance of this type.")}
           case handler.OperationResult.Ok =>
             complete{HttpResponse(StatusCodes.Accepted, entity = "Operation accepted.")}
