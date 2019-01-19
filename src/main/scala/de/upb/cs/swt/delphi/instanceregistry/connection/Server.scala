@@ -69,7 +69,6 @@ class Server (handler: RequestHandler) extends HttpApp
       path("matchingResult") { matchInstance()} ~
       path("addLabel") { addLabel()} ~
       /****************DOCKER OPERATIONS****************/
-
       path("stop") { stop()} ~
       path("start") { start()} ~
       path("delete") { deleteContainer()} ~
