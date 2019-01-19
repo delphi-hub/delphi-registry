@@ -51,6 +51,7 @@ class Server (handler: RequestHandler) extends HttpApp
     path("network") { network()} ~
     path("deploy") { deployContainer()} ~
     path("count") {numberOfInstances()} ~
+    path(LongNumber) { Id =>retrieveInstance(Id) } ~
     pathPrefix(LongNumber) { Id =>
       path("deregister") { deregister(Id) } ~
         path("matchingInstance") { matchingInstance(Id) } ~
@@ -66,7 +67,6 @@ class Server (handler: RequestHandler) extends HttpApp
     }
   }~
       path("instances") { fetchInstancesOfType() } ~
-      path("instance") { retrieveInstance() } ~
       path("matchingResult") { matchInstance()} ~
       path("addLabel") { addLabel()} ~
       /****************DOCKER OPERATIONS****************/
@@ -202,17 +202,17 @@ class Server (handler: RequestHandler) extends HttpApp
     * /instance?Id=42)
     * @return Server route that either maps to 200 OK and the respective instance as entity, or 404.
     */
-  def retrieveInstance() : server.Route = parameters('Id.as[Long]) { id =>
+  def retrieveInstance(Id : Long) : server.Route =  {
     authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.User)){ token =>
       get {
-        log.debug(s"GET /instance?Id=$id has been called")
+        log.debug(s"GET /instances/$Id has been called")
 
-        val instanceOption = handler.getInstance(id)
+        val instanceOption = handler.getInstance(Id)
 
         if(instanceOption.isDefined){
           complete(instanceOption.get.toJson(instanceFormat))
         } else {
-          complete{HttpResponse(StatusCodes.NotFound, entity = s"Id $id was not found on the server.")}
+          complete{HttpResponse(StatusCodes.NotFound, entity = s"Id $Id was not found on the server.")}
         }
       }
     }

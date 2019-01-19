@@ -267,7 +267,7 @@ class ServerTest
 
     //Valid GET /instance
     "return an instance if id is valid and instance is present" in {
-      Get("/instance?Id=0") ~> addAuthorization("User") ~> server.routes ~> check {
+      Get("/instances/0") ~> addAuthorization("User") ~> server.routes ~> check {
         assert(status === StatusCodes.OK)
         Try(responseAs[String].parseJson.convertTo[Instance](instanceFormat)) match {
           case Success(instance) =>
@@ -281,19 +281,19 @@ class ServerTest
 
     //Invalid GET /instance
     "return 404 if instance id is not known" in {
-      Get("/instance?Id=45") ~> addAuthorization("User") ~> server.routes ~> check {
+      Get("/instances/45") ~> addAuthorization("User") ~> server.routes ~> check {
         assert(status === StatusCodes.NOT_FOUND)
         responseAs[String] shouldEqual "Id 45 was not found on the server."
       }
 
       //Wrong user type
-      Get("/instance?Id=0") ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
+      Get("/instances/0") ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.UNAUTHORIZED)
         responseAs[String] shouldEqual "The supplied authentication is invalid"
       }
 
       //No authorization
-      Get("/instance?Id=0") ~> Route.seal(server.routes) ~> check {
+      Get("/instances/0") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.UNAUTHORIZED)
         responseAs[String].toLowerCase should include ("not supplied with the request")
       }
