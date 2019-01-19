@@ -236,6 +236,17 @@ class ServerTest
             fail(ex)
         }
       }
+
+      //Return all the instances if ComponentType not provided
+      Get("/instances/count") ~> addAuthorization("User") ~> server.routes ~> check {
+        assert(status === StatusCodes.OK)
+        Try(responseAs[String].toLong) match {
+          case Success(numberOfEsInstances) =>
+            numberOfEsInstances shouldEqual 1
+          case Failure(ex) =>
+            fail(ex)
+        }
+      }
     }
 
     //Invalid get number of instances
@@ -685,10 +696,11 @@ class ServerTest
         status shouldEqual StatusCodes.NOT_FOUND
         responseAs[String].toLowerCase should include ("not found")
       }
-      Post("/assignInstance?Id=42&AssignedInstanceId=43") ~> addAuthorization("Admin") ~> server.routes ~> check {
+     /* Post("/assignInstance?Id=42&AssignedInstanceId=43") ~> addAuthorization("Admin") ~> server.routes ~> check {
         status shouldEqual StatusCodes.NOT_FOUND
         responseAs[String].toLowerCase should include ("not found")
-      }
+      }*/
+
     }
 
     "fail to execute docker operations if instance is no docker container" in {
