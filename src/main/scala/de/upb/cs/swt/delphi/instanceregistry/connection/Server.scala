@@ -59,7 +59,8 @@ class Server (handler: RequestHandler) extends HttpApp
         path("linksTo") { linksTo(Id)} ~
         path("reportStart") { reportStart(Id)} ~
         path("reportStop") { reportStop(Id)} ~
-        path("reportFailure") { reportFailure(Id)}
+        path("reportFailure") { reportFailure(Id)} ~
+        path("pause") { pause(Id)}
     }
   }~
       path("instances") { fetchInstancesOfType() } ~
@@ -67,7 +68,6 @@ class Server (handler: RequestHandler) extends HttpApp
       path("matchingResult") { matchInstance()} ~
       path("addLabel") { addLabel()} ~
       /****************DOCKER OPERATIONS****************/
-      path("pause") { pause()} ~
       path("resume") { resume()} ~
       path("stop") { stop()} ~
       path("start") { start()} ~
@@ -417,20 +417,20 @@ class Server (handler: RequestHandler) extends HttpApp
     * as a query argument named 'Id' (so the resulting call is /pause?Id=42).
     * @return Server route that either maps to 202 ACCEPTED or the expected error codes.
     */
-  def pause() : server.Route = parameters('Id.as[Long]) { id =>
+  def pause(Id : Long) : server.Route =  {
     authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) {token =>
       post{
-        log.debug(s"POST /pause?Id=$id has been called")
-        handler.handlePause(id) match {
+        log.debug(s"POST /pause?Id=$Id has been called")
+        handler.handlePause(Id) match {
           case handler.OperationResult.IdUnknown =>
-            log.warning(s"Cannot pause id $id, that id was not found.")
-            complete{HttpResponse(StatusCodes.NotFound, entity = s"Id $id not found.")}
+            log.warning(s"Cannot pause id $Id, that id was not found.")
+            complete{HttpResponse(StatusCodes.NotFound, entity = s"Id $Id not found.")}
           case handler.OperationResult.NoDockerContainer =>
-            log.warning(s"Cannot pause id $id, that instance is not running in a docker container.")
-            complete{HttpResponse(StatusCodes.BadRequest, entity = s"Id $id is not running in a docker container.")}
+            log.warning(s"Cannot pause id $Id, that instance is not running in a docker container.")
+            complete{HttpResponse(StatusCodes.BadRequest, entity = s"Id $Id is not running in a docker container.")}
           case handler.OperationResult.InvalidStateForOperation =>
-            log.warning(s"Cannot pause id $id, that instance is not running.")
-            complete{HttpResponse(StatusCodes.BadRequest, entity = s"Id $id is not running .")}
+            log.warning(s"Cannot pause id $Id, that instance is not running.")
+            complete{HttpResponse(StatusCodes.BadRequest, entity = s"Id $Id is not running .")}
           case handler.OperationResult.Ok =>
             complete{HttpResponse(StatusCodes.Accepted, entity = "Operation accepted.")}
           case r =>
