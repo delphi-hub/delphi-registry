@@ -661,7 +661,7 @@ class ServerTest
         status shouldEqual StatusCodes.NOT_FOUND
         responseAs[String].toLowerCase should include ("not found")
       }
-      Post("/reportFailure?Id=42") ~> addAuthorization("Component") ~> server.routes ~> check {
+      Post("/instances/42/reportFailure") ~> addAuthorization("Component") ~> server.routes ~> check {
         status shouldEqual StatusCodes.NOT_FOUND
         responseAs[String].toLowerCase should include ("not found")
       }
@@ -699,7 +699,7 @@ class ServerTest
       Post(s"/instances/$id/reportStop") ~> addAuthorization("Component") ~> server.routes ~> check {
         status shouldEqual StatusCodes.BAD_REQUEST
       }
-      Post(s"/reportFailure?Id=$id") ~> addAuthorization("Component") ~> server.routes ~> check {
+      Post(s"/instances/$id/reportFailure") ~> addAuthorization("Component") ~> server.routes ~> check {
         status shouldEqual StatusCodes.BAD_REQUEST
       }
       Post(s"/pause?Id=$id") ~> addAuthorization("Admin") ~> server.routes ~> check {
@@ -725,7 +725,7 @@ class ServerTest
       Post(s"/instances/$id/reportStop") ~> server.routes ~> check {
         rejection.isInstanceOf[AuthenticationFailedRejection] shouldBe true
       }
-      Post(s"/reportFailure?Id=$id") ~> server.routes ~> check {
+      Post(s"/instances/$id/reportFailure") ~> server.routes ~> check {
         rejection.isInstanceOf[AuthenticationFailedRejection] shouldBe true
       }
       Post(s"/pause?Id=$id") ~> addAuthorization("User") ~> server.routes ~> check {
@@ -746,10 +746,10 @@ class ServerTest
     "Requests" should {
       "throttle when limit reached" in {
         for(i <- 1 to configuration.maxIndividualIpReq){
-          Get(s"/linksTo?Id=0")~> server.routes ~> check {}
+          Get(s"/instances/0/linksTo")~> server.routes ~> check {}
         }
 
-        Get(s"/linksTo?Id=0") ~> server.routes ~> check {
+        Get(s"/instances/0/linksTo") ~> server.routes ~> check {
           status shouldEqual StatusCodes.BAD_REQUEST
           responseAs[String].toLowerCase should include ("request limit exceeded")
         }

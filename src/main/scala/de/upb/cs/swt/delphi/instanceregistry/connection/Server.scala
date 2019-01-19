@@ -58,8 +58,8 @@ class Server (handler: RequestHandler) extends HttpApp
         path("linksFrom") { linksFrom(Id) } ~
         path("linksTo") { linksTo(Id)} ~
         path("reportStart") { reportStart(Id)} ~
-        path("reportStop") { reportStop(Id)}
-
+        path("reportStop") { reportStop(Id)} ~
+        path("reportFailure") { reportFailure(Id)}
     }
   }~
       path("instances") { fetchInstancesOfType() } ~
@@ -67,7 +67,6 @@ class Server (handler: RequestHandler) extends HttpApp
       path("matchingResult") { matchInstance()} ~
       path("addLabel") { addLabel()} ~
       /****************DOCKER OPERATIONS****************/
-      path("reportFailure") { reportFailure()} ~
       path("pause") { pause()} ~
       path("resume") { resume()} ~
       path("stop") { stop()} ~
@@ -388,22 +387,22 @@ class Server (handler: RequestHandler) extends HttpApp
     * parameter named 'Id' (so the resulting call is /reportFailure?Id=42)
     * @return Server route that either maps to 200 OK or the respective error codes
     */
-  def reportFailure() : server.Route = parameters('Id.as[Long], 'ErrorLog.as[String].?) {(id, errorLog) =>
+  def reportFailure(Id : Long) : server.Route = parameters('ErrorLog.as[String].?) {(errorLog) =>
     authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Component)) { token =>
       post{
         if(errorLog.isEmpty){
-          log.debug(s"POST /reportFailure?Id=$id has been called")
+          log.debug(s"POST /instances/$Id/reportFailure has been called")
         } else {
-          log.debug(s"POST /reportFailure?Id=$id&ErrorLog=${errorLog.get} has been called")
+          log.debug(s"POST /instances/$Id/reportFailure&ErrorLog=${errorLog.get} has been called")
         }
 
-        handler.handleReportFailure(id, errorLog) match {
+        handler.handleReportFailure(Id, errorLog) match {
           case handler.OperationResult.IdUnknown =>
-            log.warning(s"Cannot report failure for id $id, that id was not found.")
-            complete{HttpResponse(StatusCodes.NotFound, entity = s"Id $id not found.")}
+            log.warning(s"Cannot report failure for id $Id, that id was not found.")
+            complete{HttpResponse(StatusCodes.NotFound, entity = s"Id $Id not found.")}
           case handler.OperationResult.NoDockerContainer =>
-            log.warning(s"Cannot report failure for id $id, that instance is not running in a docker container.")
-            complete{HttpResponse(StatusCodes.BadRequest, entity = s"Id $id is not running in a docker container.")}
+            log.warning(s"Cannot report failure for id $Id, that instance is not running in a docker container.")
+            complete{HttpResponse(StatusCodes.BadRequest, entity = s"Id $Id is not running in a docker container.")}
           case handler.OperationResult.Ok =>
             complete{"Report successfully processed."}
           case r =>
