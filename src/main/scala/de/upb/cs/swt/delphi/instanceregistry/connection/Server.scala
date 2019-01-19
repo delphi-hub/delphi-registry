@@ -60,7 +60,8 @@ class Server (handler: RequestHandler) extends HttpApp
         path("reportStart") { reportStart(Id)} ~
         path("reportStop") { reportStop(Id)} ~
         path("reportFailure") { reportFailure(Id)} ~
-        path("pause") { pause(Id)}
+        path("pause") { pause(Id)} ~
+        path("resume") { resume(Id)}
     }
   }~
       path("instances") { fetchInstancesOfType() } ~
@@ -68,7 +69,7 @@ class Server (handler: RequestHandler) extends HttpApp
       path("matchingResult") { matchInstance()} ~
       path("addLabel") { addLabel()} ~
       /****************DOCKER OPERATIONS****************/
-      path("resume") { resume()} ~
+
       path("stop") { stop()} ~
       path("start") { start()} ~
       path("delete") { deleteContainer()} ~
@@ -420,7 +421,7 @@ class Server (handler: RequestHandler) extends HttpApp
   def pause(Id : Long) : server.Route =  {
     authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) {token =>
       post{
-        log.debug(s"POST /pause?Id=$Id has been called")
+        log.debug(s"POST /instances/$Id/pause has been called")
         handler.handlePause(Id) match {
           case handler.OperationResult.IdUnknown =>
             log.warning(s"Cannot pause id $Id, that id was not found.")
@@ -445,20 +446,20 @@ class Server (handler: RequestHandler) extends HttpApp
     * as a query argument named 'Id' (so the resulting call is /resume?Id=42).
     * @return Server route that either maps to 202 ACCEPTED or the expected error codes.
     */
-  def resume() : server.Route = parameters('Id.as[Long]) { id =>
+  def resume(Id : Long) : server.Route =  {
     authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Admin)){ token =>
       post {
-        log.debug(s"POST /resume?Id=$id has been called")
-        handler.handleResume(id) match {
+        log.debug(s"POST /instances/$Id/resume has been called")
+        handler.handleResume(Id) match {
           case handler.OperationResult.IdUnknown =>
-            log.warning(s"Cannot resume id $id, that id was not found.")
-            complete{HttpResponse(StatusCodes.NotFound, entity = s"Id $id not found.")}
+            log.warning(s"Cannot resume id $Id, that id was not found.")
+            complete{HttpResponse(StatusCodes.NotFound, entity = s"Id $Id not found.")}
           case handler.OperationResult.NoDockerContainer =>
-            log.warning(s"Cannot resume id $id, that instance is not running in a docker container.")
-            complete{HttpResponse(StatusCodes.BadRequest, entity = s"Id $id is not running in a docker container.")}
+            log.warning(s"Cannot resume id $Id, that instance is not running in a docker container.")
+            complete{HttpResponse(StatusCodes.BadRequest, entity = s"Id $Id is not running in a docker container.")}
           case handler.OperationResult.InvalidStateForOperation =>
-            log.warning(s"Cannot resume id $id, that instance is not paused.")
-            complete {HttpResponse(StatusCodes.BadRequest, entity = s"Id $id is not paused.")}
+            log.warning(s"Cannot resume id $Id, that instance is not paused.")
+            complete {HttpResponse(StatusCodes.BadRequest, entity = s"Id $Id is not paused.")}
           case handler.OperationResult.Ok =>
             complete{HttpResponse(StatusCodes.Accepted, entity = "Operation accepted.")}
           case r =>
