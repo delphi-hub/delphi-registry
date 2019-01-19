@@ -681,7 +681,7 @@ class ServerTest
         status shouldEqual StatusCodes.NOT_FOUND
         responseAs[String].toLowerCase should include ("not found")
       }
-      Post("/delete?Id=42") ~> addAuthorization("Admin") ~> server.routes ~> check {
+      Post("/instances/42/delete") ~> addAuthorization("Admin") ~> server.routes ~> check {
         status shouldEqual StatusCodes.NOT_FOUND
         responseAs[String].toLowerCase should include ("not found")
       }
@@ -711,7 +711,7 @@ class ServerTest
       Post(s"/instances/$id/start") ~> addAuthorization("Admin") ~> server.routes ~> check {
         status shouldEqual StatusCodes.BAD_REQUEST
       }
-      Post(s"/delete?Id=$id") ~> addAuthorization("Admin") ~> server.routes ~> check {
+      Post(s"/instances/$id/delete") ~> addAuthorization("Admin") ~> server.routes ~> check {
         status shouldEqual StatusCodes.BAD_REQUEST
       }
       assertValidDeregister(id)
@@ -740,7 +740,7 @@ class ServerTest
       Post(s"/instances/$id/start") ~> addAuthorization("User") ~> server.routes ~> check {
         rejection.isInstanceOf[AuthenticationFailedRejection] shouldBe true
       }
-      Post(s"/delete?Id=$id") ~> server.routes ~> check {
+      Post(s"/instances/$id/delete") ~> server.routes ~> check {
         rejection.isInstanceOf[AuthenticationFailedRejection] shouldBe true
       }
       assertValidDeregister(id)

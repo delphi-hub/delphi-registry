@@ -64,14 +64,14 @@ class Server (handler: RequestHandler) extends HttpApp
         path("pause") { pause(Id)} ~
         path("resume") { resume(Id)} ~
         path("stop") { stop(Id)} ~
-        path("start") { start(Id)}
+        path("start") { start(Id)} ~
+        path("delete") { deleteContainer(Id)}
     }
   }~
       path("instances") { fetchInstancesOfType() } ~
       path("matchingResult") { matchInstance()} ~
       path("addLabel") { addLabel()} ~
       /****************DOCKER OPERATIONS****************/
-      path("delete") { deleteContainer()} ~
       path("assignInstance") { assignInstance()} ~
       path("command") { runCommandInContainer()} ~
       /****************EVENT OPERATIONS****************/
@@ -526,20 +526,20 @@ class Server (handler: RequestHandler) extends HttpApp
     * as a query argument named 'Id' (so the resulting call is /delete?Id=42).
     * @return Server route that either maps to 202 ACCEPTED or the respective error codes.
     */
-  def deleteContainer() : server.Route = parameters('Id.as[Long]) { id =>
+  def deleteContainer(Id : Long) : server.Route = {
     authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Admin)){ token =>
       post{
-        log.debug(s"POST /delete?Id=$id has been called")
-        handler.handleDeleteContainer(id) match {
+        log.debug(s"POST /delete?Id=$Id has been called")
+        handler.handleDeleteContainer(Id) match {
           case handler.OperationResult.IdUnknown =>
-            log.warning(s"Cannot delete id $id, that id was not found.")
-            complete{HttpResponse(StatusCodes.NotFound, entity = s"Id $id not found.")}
+            log.warning(s"Cannot delete id $Id, that id was not found.")
+            complete{HttpResponse(StatusCodes.NotFound, entity = s"Id $Id not found.")}
           case handler.OperationResult.NoDockerContainer =>
-            log.warning(s"Cannot delete id $id, that instance is not running in a docker container.")
-            complete{HttpResponse(StatusCodes.BadRequest, entity = s"Id $id is not running in a docker container.")}
+            log.warning(s"Cannot delete id $Id, that instance is not running in a docker container.")
+            complete{HttpResponse(StatusCodes.BadRequest, entity = s"Id $Id is not running in a docker container.")}
           case handler.OperationResult.InvalidStateForOperation =>
-            log.warning(s"Cannot delete id $id, that instance is still running.")
-            complete {HttpResponse(StatusCodes.BadRequest, entity = s"Id $id is not stopped.")}
+            log.warning(s"Cannot delete id $Id, that instance is still running.")
+            complete {HttpResponse(StatusCodes.BadRequest, entity = s"Id $Id is not stopped.")}
           case handler.OperationResult.Ok =>
             complete{HttpResponse(StatusCodes.Accepted, entity = "Operation accepted.")}
           case handler.OperationResult.InternalError =>
