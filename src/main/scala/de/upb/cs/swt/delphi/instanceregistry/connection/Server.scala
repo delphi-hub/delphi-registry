@@ -45,22 +45,28 @@ class Server (handler: RequestHandler) extends HttpApp
   //Routes that map http endpoints to methods in this object
   def apiRoutes : server.Route =
       /****************BASIC OPERATIONS****************/
-      path("instances"/"register") {entity(as[String]) { jsonString => register(jsonString) }} ~
-      path("instances"/LongNumber/"deregister") { Id => deregister(Id) } ~
+
+  pathPrefix("instances") {
+    path("register") {entity(as[String]) { jsonString => register(jsonString) }} ~
+    path("network") { network()} ~
+    path("deploy") { deployContainer()} ~
+    path("count") {numberOfInstances()} ~
+    pathPrefix(LongNumber) { Id =>
+      path("deregister") { deregister(Id) } ~
+        path("matchingInstance") { matchingInstance(Id) } ~
+        path("eventList") { eventList(Id) } ~
+        path("linksFrom") { linksFrom(Id) } ~
+        path("linksTo") { linksTo(Id)} ~
+        path("reportStart") { reportStart(Id)} ~
+        path("reportStop") { reportStop(Id)}
+
+    }
+  }~
       path("instances") { fetchInstancesOfType() } ~
       path("instance") { retrieveInstance() } ~
-      path("instances"/"count") { numberOfInstances() } ~
-      path("instances"/LongNumber/"matchingInstance") { Id => matchingInstance(Id)} ~
       path("matchingResult") { matchInstance()} ~
-      path("instances"/LongNumber/"eventList") { Id => eventList(Id)} ~
-      path("instances"/LongNumber/"linksFrom") { Id => linksFrom(Id)} ~
-      path("instances"/LongNumber/"linksTo") { Id => linksTo(Id)} ~
-      path("instances"/"network") { network()} ~
       path("addLabel") { addLabel()} ~
       /****************DOCKER OPERATIONS****************/
-      path("instances"/"deploy") { deployContainer()} ~
-      path("instances"/LongNumber/"reportStart") { Id => reportStart(Id)} ~
-      path("instances"/LongNumber/"reportStop") { Id => reportStop(Id)} ~
       path("reportFailure") { reportFailure()} ~
       path("pause") { pause()} ~
       path("resume") { resume()} ~
