@@ -677,7 +677,7 @@ class ServerTest
         status shouldEqual StatusCodes.NOT_FOUND
         responseAs[String].toLowerCase should include ("not found")
       }
-      Post("/start?Id=42") ~> addAuthorization("Admin") ~> server.routes ~> check {
+      Post("/instances/42/start") ~> addAuthorization("Admin") ~> server.routes ~> check {
         status shouldEqual StatusCodes.NOT_FOUND
         responseAs[String].toLowerCase should include ("not found")
       }
@@ -708,7 +708,7 @@ class ServerTest
       Post(s"/instances/$id/resume") ~> addAuthorization("Admin") ~> server.routes ~> check {
         status shouldEqual StatusCodes.BAD_REQUEST
       }
-      Post(s"/start?Id=$id") ~> addAuthorization("Admin") ~> server.routes ~> check {
+      Post(s"/instances/$id/start") ~> addAuthorization("Admin") ~> server.routes ~> check {
         status shouldEqual StatusCodes.BAD_REQUEST
       }
       Post(s"/delete?Id=$id") ~> addAuthorization("Admin") ~> server.routes ~> check {
@@ -737,7 +737,7 @@ class ServerTest
       Post(s"/instances/$id/stop") ~> addAuthorization("User") ~> server.routes ~> check {
         rejection.isInstanceOf[AuthenticationFailedRejection] shouldBe true
       }
-      Post(s"/start?Id=$id") ~> addAuthorization("User") ~> server.routes ~> check {
+      Post(s"/instances/$id/start") ~> addAuthorization("User") ~> server.routes ~> check {
         rejection.isInstanceOf[AuthenticationFailedRejection] shouldBe true
       }
       Post(s"/delete?Id=$id") ~> server.routes ~> check {
