@@ -602,47 +602,45 @@ class ServerTest
       }
     }
 
-    //Valid POST /addLabel
-   /* "add a generic label to an instance is label and id are valid" in {
-      Post("/addLabel?Id=0&Label=ElasticSearchDefaultLabel") ~> addAuthorization("Admin") ~> server.routes ~> check {
+    //Valid POST /instances/{id}/label
+    "add a generic label to an instance is label and id are valid" in {
+      Post("/instances/0/label", HttpEntity(ContentTypes.`application/json`, """{ "Label": "Private"}""")) ~> addAuthorization("Admin") ~> server.routes ~> check {
         assert(status === StatusCodes.OK)
         responseAs[String] shouldEqual "Successfully added label"
       }
     }
-
-    //Invalid POST /addLabel
-    "fail to add label if id is invalid or label too long" in{
+    //Invalid POST /instances/{id}/label
+    "fail to add label if id is invalid or label too long" in {
       //Unknown id - expect 404
-      Post("/addLabel?Id=45&Label=Private") ~> addAuthorization("Admin") ~> server.routes ~> check {
+      Post("/instances/45/label",HttpEntity(ContentTypes.`application/json`, """{ "Label": "Private"}""")) ~> addAuthorization("Admin") ~> server.routes ~> check {
         assert(status === StatusCodes.NOT_FOUND)
         responseAs[String] shouldEqual "Cannot add label, id 45 not found."
       }
-
-      val tooLongLabel = "VeryVeryExtraLongLabelThatDoesNotWorkWhileAddingLabel"
       //Label out of bounds - expect 400
-      Post(s"/addLabel?Id=0&Label=$tooLongLabel") ~> addAuthorization("Admin") ~> server.routes ~> check {
+      val tooLongLabel = "VeryVeryExtraLongLabelThatDoesNotWorkWhileAddingLabel"
+      val jsonStr = tooLongLabel.toJson
+      Post("/instances/0/label",HttpEntity(ContentTypes.`application/json`, s"""{ "Label": $jsonStr}""")) ~> addAuthorization("Admin") ~> server.routes ~> check {
         assert(status === StatusCodes.BAD_REQUEST)
         responseAs[String].toLowerCase should include ("exceeds character limit")
       }
-
       //Wrong user type
-      Post("/addLabel?Id=0&Label=Private") ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
+      Post("/instances/0/label",HttpEntity(ContentTypes.`application/json`, """{ "Label": "Private"}"""))  ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.UNAUTHORIZED)
         responseAs[String] shouldEqual "The supplied authentication is invalid"
       }
 
       //Wrong user type
-      Post("/addLabel?Id=0&Label=Private") ~> addAuthorization("User") ~> Route.seal(server.routes) ~> check {
+      Post("/instances/0/label",HttpEntity(ContentTypes.`application/json`, """{ "Label": "Private"}""")) ~> addAuthorization("User") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.UNAUTHORIZED)
         responseAs[String] shouldEqual "The supplied authentication is invalid"
       }
-
       //No authorization
-      Post("/addLabel?Id=0&Label=Private") ~> Route.seal(server.routes) ~> check {
+      Post("/instances/0/label",HttpEntity(ContentTypes.`application/json`, """{ "Label": "Private"}"""))~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.UNAUTHORIZED)
         responseAs[String].toLowerCase should include ("not supplied with the request")
       }
-    } */
+
+    }
 
     /**Minimal tests for docker operations**/
 

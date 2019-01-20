@@ -109,7 +109,7 @@ class Server(handler: RequestHandler) extends HttpApp
               entity(as[String]) { jsonString => assignInstance(Id, jsonString) }
             } ~
             path("label") {
-              entity(as[String]) { jsonString => addLabel(Id, jsonString) }
+              entity(as[JsValue]) { json => addLabel(Id, json.asJsObject.fields("Label").toString()) }
             }
         }
     } ~
@@ -854,11 +854,10 @@ class Server(handler: RequestHandler) extends HttpApp
     *
     * @return Server route that either maps to 200 OK or the respective error codes.
     */
-  def addLabel(id: Long, addLabelStr: String): server.Route = {
+  def addLabel(id: Long, label: String): server.Route = {
     authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
 
-      try {
-        val label: String = addLabelStr.parseJson.convertTo[String]
+
         post {
           log.debug(s"POST /instances/$id/label with parameter label=$label has been called.")
           handler.handleAddLabel(id, label) match {
@@ -878,18 +877,6 @@ class Server(handler: RequestHandler) extends HttpApp
               complete("Successfully added label")
           }
         }
-      }
-      catch {
-        case dx: DeserializationException =>
-          log.error(dx, "Deserialization exception")
-          complete(HttpResponse(StatusCodes.BadRequest, entity = s"Could not deserialize parameter instance with message ${dx.getMessage}."))
-        case px: ParsingException =>
-          log.error(px, "Failed to parse JSON while adding label")
-          complete(HttpResponse(StatusCodes.BadRequest, entity = s"Failed to parse JSON entity with message ${px.getMessage}"))
-        case x: Exception =>
-          log.error(x, "Uncaught exception while deserializing.")
-          complete(HttpResponse(StatusCodes.InternalServerError, entity = "An internal server error occurred."))
-      }
     }
   }
 
