@@ -93,7 +93,7 @@ Before you can start the application, you have to make sure your configuration f
 |```maxIndividualIpReq``` | ```Int``` | ```200``` | Maximum number of requests that are allowed to be executed during the current refresh period for one specific origin ip.|
 |```ipLogRefreshRate``` | ```FiniteDuration``` | ```2.minutes``` | Duration of the log refresh period.|
 
-By default, Docker is expected to be reachable at *http://localhost:9095*, but you can override this setting by specifying the docker host URI in the environment variable *DOCKER_HOST*.
+By default, Docker is expected to be reachable at *http://localhost:9095*, but you can override this setting by specifying the docker host URI in the environment variable *DELPHI_DOCKER_HOST*.
 To change the port of your http docker API to 9095, execute
 ```
 edit /lib/systemd/system/docker.service
