@@ -18,6 +18,7 @@ import spray.json._
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
 import de.upb.cs.swt.delphi.instanceregistry.requestLimiter.{IpLogActor, RequestLimitScheduler}
+import sun.font.Decoration.Label
 
 import scala.collection.immutable.Range
 
@@ -106,14 +107,14 @@ class Server(handler: RequestHandler) extends HttpApp
               } ~
               path("assignInstance") {
                 entity(as[String]) { jsonString => assignInstance(Id, jsonString) }
+              } ~
+              path("label") {
+                entity(as[String]) { jsonString => addLabel(Id, jsonString) }
               }
           }
       } ~
       path("matchingResult") {
         matchInstance()
-      } ~
-      path("addLabel") {
-        addLabel()
       } ~
       /** **************DOCKER OPERATIONS ****************/
       path("command") {
@@ -855,26 +856,41 @@ class Server(handler: RequestHandler) extends HttpApp
     *
     * @return Server route that either maps to 200 OK or the respective error codes.
     */
-  def addLabel(): server.Route = parameters('Id.as[Long], 'Label.as[String]) { (id, label) =>
+  def addLabel(id : Long, addlabel: String): server.Route =  {
     authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
-      post {
-        log.debug(s"POST /addLabel?Id=$id&Label=$label has been called.")
-        handler.handleAddLabel(id, label) match {
-          case handler.OperationResult.IdUnknown =>
-            log.warning(s"Cannot add label $label to $id, id not found.")
-            complete {
-              HttpResponse(StatusCodes.NotFound, entity = s"Cannot add label, id $id not found.")
-            }
-          case handler.OperationResult.InternalError =>
-            log.warning(s"Error while adding label $label to $id: Label exceeds character limit.")
-            complete {
-              HttpResponse(StatusCodes.BadRequest,
-                entity = s"Cannot add label to $id, label exceeds character limit of ${Registry.configuration.maxLabelLength}")
-            }
-          case handler.OperationResult.Ok =>
-            log.info(s"Successfully added label $label to instance with id $id.")
-            complete("Successfully added label")
+
+      try {
+        val label : String = addlabel.parseJson.convertTo[String]
+        post {
+          log.debug(s"POST /instances/$id/label with parameter label=$label has been called.")
+          handler.handleAddLabel(id, label) match {
+            case handler.OperationResult.IdUnknown =>
+              log.warning(s"Cannot add label $label to $id, id not found.")
+              complete {
+                HttpResponse(StatusCodes.NotFound, entity = s"Cannot add label, id $id not found.")
+              }
+            case handler.OperationResult.InternalError =>
+              log.warning(s"Error while adding label $label to $id: Label exceeds character limit.")
+              complete {
+                HttpResponse(StatusCodes.BadRequest,
+                  entity = s"Cannot add label to $id, label exceeds character limit of ${Registry.configuration.maxLabelLength}")
+              }
+            case handler.OperationResult.Ok =>
+              log.info(s"Successfully added label $label to instance with id $id.")
+              complete("Successfully added label")
+          }
         }
+      }
+      catch {
+        case dx: DeserializationException =>
+          log.error(dx, "Deserialization exception")
+          complete(HttpResponse(StatusCodes.BadRequest, entity = s"Could not deserialize parameter instance with message ${dx.getMessage}."))
+        case px: ParsingException =>
+          log.error(px, "Failed to parse JSON while adding label")
+          complete(HttpResponse(StatusCodes.BadRequest, entity = s"Failed to parse JSON entity with message ${px.getMessage}"))
+        case x: Exception =>
+          log.error(x, "Uncaught exception while deserializing.")
+          complete(HttpResponse(StatusCodes.InternalServerError, entity = "An internal server error occurred."))
       }
     }
   }

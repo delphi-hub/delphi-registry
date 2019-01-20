@@ -603,7 +603,7 @@ class ServerTest
     }
 
     //Valid POST /addLabel
-    "add a generic label to an instance is label and id are valid" in {
+   /* "add a generic label to an instance is label and id are valid" in {
       Post("/addLabel?Id=0&Label=ElasticSearchDefaultLabel") ~> addAuthorization("Admin") ~> server.routes ~> check {
         assert(status === StatusCodes.OK)
         responseAs[String] shouldEqual "Successfully added label"
@@ -642,7 +642,7 @@ class ServerTest
         assert(status === StatusCodes.UNAUTHORIZED)
         responseAs[String].toLowerCase should include ("not supplied with the request")
       }
-    }
+    } */
 
     /**Minimal tests for docker operations**/
 
