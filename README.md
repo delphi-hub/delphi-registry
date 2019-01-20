@@ -25,13 +25,14 @@ The Delphi registry requires a docker host to deploy containers. The following i
 * The Delphi WebApi ( ```delphi-webapi:1.0.0-SNAPSHOT``` )
 * The Delphi WebApp ( ```delphi-webapp:1.0.0-SNAPSHOT``` )
 
-For Windows Users, to obtain these images, checkout the respective repositories ([here](https://github.com/delphi-hub/delphi-crawler), [here](https://github.com/delphi-hub/delphi-webapi) and [here](https://github.com/delphi-hub/delphi-webapp)) and execute the command 
+For Windows users, to obtain these images, checkout the respective repositories ([here](https://github.com/delphi-hub/delphi-crawler), [here](https://github.com/delphi-hub/delphi-webapi) and [here](https://github.com/delphi-hub/delphi-webapp)) and execute the command 
 
 ```
 sbt docker:publishLocal
 ```
-inside their root directory. This will build the docker images and register them directly at the local docker registry. 
-For Linux Users, checkout Delphi Registry repository ([here](https://github.com/delphi-hub/delphi-registry)) and execute the command
+inside their root directory. This will build the docker images and register them directly at the local docker registry. <br /> 
+
+For Linux users, checkout Delphi Registry repository and execute the command
 
 ```
 sudo bash ./Delphi_install.sh
@@ -117,8 +118,8 @@ There are two ways of running the registry application. You can either run the a
 ### Run the registry directly
 If you want to execute the registry directly on your local machine, simply go to the root folder of the repository and execute ```sbt run```. The application will stream all logging output to the terminal. You can terminate any time by pressing *RETURN*.
 ### Run the registry in Docker
-For Windows Users, to build a docker image containing the registry, go to the root folder of the repository and execute ```sbt docker:publishLocal```. This will build the application, create a docker image named ```delphi-registry:1.0.0-SNAPSHOT```, and register the image at your local docker registry.
-For Linux Users, the installation script mentioned in **Requirements** section will create docker image for registry named ```delphi-registry:1.0.0-SNAPSHOT```, and registers the image at your local docker registry.
+For Windows users, to build a docker image containing the registry, go to the root folder of the repository and execute ```sbt docker:publishLocal```. This will build the application, create a docker image named ```delphi-registry:1.0.0-SNAPSHOT```, and register the image at your local docker registry.<br />
+For Linux users, the installation script mentioned in **Requirements** section will create docker image for registry named ```delphi-registry:1.0.0-SNAPSHOT```, and registers the image at your local docker registry.
 
 ## Contributing
 
