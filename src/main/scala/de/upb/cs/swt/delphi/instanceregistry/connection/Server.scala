@@ -48,71 +48,71 @@ class Server(handler: RequestHandler) extends HttpApp
   def apiRoutes: server.Route =
 
   /** **************BASIC OPERATIONS ****************/
-    path("instances") {
-      fetchInstancesOfType()
-    } ~
-      pathPrefix("instances") {
+    pathPrefix("instances") {
+      pathEnd {
+        fetchInstancesOfType()
+      } ~
         path("register") {
           entity(as[String]) { jsonString => register(jsonString) }
         } ~
-          path("network") {
-            network()
+        path("network") {
+          network()
+        } ~
+        path("deploy") {
+          deployContainer()
+        } ~
+        path("count") {
+          numberOfInstances()
+        } ~
+        path(LongNumber) { Id => retrieveInstance(Id) } ~
+        pathPrefix(LongNumber) { Id =>
+          path("deregister") {
+            deregister(Id)
           } ~
-          path("deploy") {
-            deployContainer()
-          } ~
-          path("count") {
-            numberOfInstances()
-          } ~
-          path(LongNumber) { Id => retrieveInstance(Id) } ~
-          pathPrefix(LongNumber) { Id =>
-            path("deregister") {
-              deregister(Id)
+            path("matchingInstance") {
+              matchingInstance(Id)
             } ~
-              path("matchingInstance") {
-                matchingInstance(Id)
-              } ~
-              path("eventList") {
-                eventList(Id)
-              } ~
-              path("linksFrom") {
-                linksFrom(Id)
-              } ~
-              path("linksTo") {
-                linksTo(Id)
-              } ~
-              path("reportStart") {
-                reportStart(Id)
-              } ~
-              path("reportStop") {
-                reportStop(Id)
-              } ~
-              path("reportFailure") {
-                reportFailure(Id)
-              } ~
-              path("pause") {
-                pause(Id)
-              } ~
-              path("resume") {
-                resume(Id)
-              } ~
-              path("stop") {
-                stop(Id)
-              } ~
-              path("start") {
-                start(Id)
-              } ~
-              path("delete") {
-                deleteContainer(Id)
-              } ~
-              path("assignInstance") {
-                entity(as[String]) { jsonString => assignInstance(Id, jsonString) }
-              } ~
-              path("label") {
-                entity(as[String]) { jsonString => addLabel(Id, jsonString) }
-              }
-          }
-      } ~
+            path("eventList") {
+              eventList(Id)
+            } ~
+            path("linksFrom") {
+              linksFrom(Id)
+            } ~
+            path("linksTo") {
+              linksTo(Id)
+            } ~
+            path("reportStart") {
+              reportStart(Id)
+            } ~
+            path("reportStop") {
+              reportStop(Id)
+            } ~
+            path("reportFailure") {
+              reportFailure(Id)
+            } ~
+            path("pause") {
+              pause(Id)
+            } ~
+            path("resume") {
+              resume(Id)
+            } ~
+            path("stop") {
+              stop(Id)
+            } ~
+            path("start") {
+              start(Id)
+            } ~
+            path("delete") {
+              deleteContainer(Id)
+            } ~
+            path("assignInstance") {
+              entity(as[String]) { jsonString => assignInstance(Id, jsonString) }
+            } ~
+            path("label") {
+              entity(as[String]) { jsonString => addLabel(Id, jsonString) }
+            }
+        }
+    } ~
       path("matchingResult") {
         matchInstance()
       } ~
@@ -856,11 +856,11 @@ class Server(handler: RequestHandler) extends HttpApp
     *
     * @return Server route that either maps to 200 OK or the respective error codes.
     */
-  def addLabel(id : Long, addlabel: String): server.Route =  {
+  def addLabel(id: Long, addlabel: String): server.Route = {
     authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
 
       try {
-        val label : String = addlabel.parseJson.convertTo[String]
+        val label: String = addlabel.parseJson.convertTo[String]
         post {
           log.debug(s"POST /instances/$id/label with parameter label=$label has been called.")
           handler.handleAddLabel(id, label) match {
