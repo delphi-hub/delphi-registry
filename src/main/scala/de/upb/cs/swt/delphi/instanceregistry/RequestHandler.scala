@@ -504,7 +504,7 @@ class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, con
         handleDeregister(id)
         OperationResult.Ok
       }
-    } else {
+    } else if(instanceDao.getInstance(id).get.instanceState != InstanceState.Paused){
       log.info(s"Handling /stop for instance with id $id...")
 
       val instance = instanceDao.getInstance(id).get
@@ -531,6 +531,9 @@ class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, con
       }
 
       OperationResult.Ok
+    } else {
+      log.warning(s"Cannot stop paused docker container for instance with id $id")
+      OperationResult.InvalidStateForOperation
     }
   }
 
