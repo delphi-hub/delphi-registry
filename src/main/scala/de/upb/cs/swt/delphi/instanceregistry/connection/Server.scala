@@ -470,6 +470,9 @@ class Server (handler: RequestHandler) extends HttpApp
           case handler.OperationResult.InvalidTypeForOperation =>
             log.warning(s"Cannot stop id $id, this component type cannot be stopped.")
             complete{HttpResponse(StatusCodes.BadRequest, entity = s"Cannot stop instance of this type.")}
+          case handler.OperationResult.InvalidStateForOperation =>
+            log.warning(s"Cannot stop id $id, the associated container is paused.")
+            complete{HttpResponse(StatusCodes.BadRequest, entity = s"Cannot stop instance while it is paused.")}
           case handler.OperationResult.Ok =>
             complete{HttpResponse(StatusCodes.Accepted, entity = "Operation accepted.")}
           case r =>
