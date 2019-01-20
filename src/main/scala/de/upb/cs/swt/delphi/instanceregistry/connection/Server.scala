@@ -116,11 +116,9 @@ class Server(handler: RequestHandler) extends HttpApp
       path("matchingResult") {
         matchInstance()
       } ~
-      /** **************DOCKER OPERATIONS ****************/
       path("command") {
         runCommandInContainer()
       } ~
-      /** **************EVENT OPERATIONS ****************/
       path("events") {
         streamEvents()
       }
@@ -174,27 +172,27 @@ class Server(handler: RequestHandler) extends HttpApp
     *
     * @return Server route that either maps to a 200 OK response if successful, or to the respective error codes.
     */
-  def deregister(Id: Long): server.Route = {
+  def deregister(id: Long): server.Route = {
     authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Component)) { token =>
       post {
-        log.debug(s"POST instance/$Id/deregister has been called")
+        log.debug(s"POST instance/$id/deregister has been called")
 
-        handler.handleDeregister(Id) match {
+        handler.handleDeregister(id) match {
           case handler.OperationResult.IdUnknown =>
-            log.warning(s"Cannot remove instance with id $Id, that id is not known to the server.")
+            log.warning(s"Cannot remove instance with id $id, that id is not known to the server.")
             complete {
-              HttpResponse(StatusCodes.NotFound, entity = s"Id $Id not known to the server")
+              HttpResponse(StatusCodes.NotFound, entity = s"Id $id not known to the server")
             }
           case handler.OperationResult.IsDockerContainer =>
-            log.warning(s"Cannot remove instance with id $Id, this instance is running inside a docker container")
+            log.warning(s"Cannot remove instance with id $id, this instance is running inside a docker container")
             complete {
-              HttpResponse(StatusCodes.BadRequest, entity = s"Cannot remove instance with id $Id, this instance is " +
+              HttpResponse(StatusCodes.BadRequest, entity = s"Cannot remove instance with id $id, this instance is " +
                 s"running inside a docker container. Call /delete to remove it from the server and delete the container.")
             }
           case handler.OperationResult.Ok =>
-            log.info(s"Successfully removed instance with id $Id")
+            log.info(s"Successfully removed instance with id $id")
             complete {
-              s"Successfully removed instance with id $Id"
+              s"Successfully removed instance with id $id"
             }
         }
       }
@@ -266,18 +264,18 @@ class Server(handler: RequestHandler) extends HttpApp
     *
     * @return Server route that either maps to 200 OK and the respective instance as entity, or 404.
     */
-  def retrieveInstance(Id: Long): server.Route = {
+  def retrieveInstance(id: Long): server.Route = {
     authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.User)) { token =>
       get {
-        log.debug(s"GET /instances/$Id has been called")
+        log.debug(s"GET /instances/$id has been called")
 
-        val instanceOption = handler.getInstance(Id)
+        val instanceOption = handler.getInstance(id)
 
         if (instanceOption.isDefined) {
           complete(instanceOption.get.toJson(instanceFormat))
         } else {
           complete {
-            HttpResponse(StatusCodes.NotFound, entity = s"Id $Id was not found on the server.")
+            HttpResponse(StatusCodes.NotFound, entity = s"Id $id was not found on the server.")
           }
         }
       }
@@ -290,22 +288,22 @@ class Server(handler: RequestHandler) extends HttpApp
     *
     * @return Server route that either maps to 200 OK response containing the instance, or the resp. error codes.
     */
-  def matchingInstance(Id: Long): server.Route = parameters('ComponentType.as[String]) { (compTypeString) =>
+  def matchingInstance(id: Long): server.Route = parameters('ComponentType.as[String]) { (compTypeString) =>
     authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Component)) { token =>
       get {
-        log.debug(s"GET instance/$Id/matchingInstance?ComponentType=$compTypeString has been called")
+        log.debug(s"GET instance/$id/matchingInstance?ComponentType=$compTypeString has been called")
 
         val compType: ComponentType = ComponentType.values.find(v => v.toString == compTypeString).orNull
         log.info(s"Looking for instance of type $compType ...")
 
         if (compType != null) {
-          handler.getMatchingInstanceOfType(Id, compType) match {
+          handler.getMatchingInstanceOfType(id, compType) match {
             case (_, Success(matchedInstance)) =>
-              log.info(s"Matched request from $Id to $matchedInstance.")
-              handler.handleInstanceLinkCreated(Id, matchedInstance.id.get) match {
+              log.info(s"Matched request from $id to $matchedInstance.")
+              handler.handleInstanceLinkCreated(id, matchedInstance.id.get) match {
                 case handler.OperationResult.IdUnknown =>
-                  log.warning(s"Could not handle the creation of instance link, id $Id was not found.")
-                  complete(HttpResponse(StatusCodes.NotFound, entity = s"Could not find instance with id $Id."))
+                  log.warning(s"Could not handle the creation of instance link, id $id was not found.")
+                  complete(HttpResponse(StatusCodes.NotFound, entity = s"Could not find instance with id $id."))
                 case handler.OperationResult.InvalidTypeForOperation =>
                   log.warning(s"Could not handle the creation of instance link, incompatible types found.")
                   complete {
@@ -319,11 +317,11 @@ class Server(handler: RequestHandler) extends HttpApp
                   }
               }
             case (handler.OperationResult.IdUnknown, _) =>
-              log.warning(s"Cannot match to instance of type $compType, id $Id was not found.")
-              complete(HttpResponse(StatusCodes.NotFound, entity = s"Cannot match to instance of type $compType, id $Id was not found."))
+              log.warning(s"Cannot match to instance of type $compType, id $id was not found.")
+              complete(HttpResponse(StatusCodes.NotFound, entity = s"Cannot match to instance of type $compType, id $id was not found."))
             case (_, Failure(x)) =>
               log.warning(s"Could not find matching instance for type $compType, message was ${x.getMessage}.")
-              complete(HttpResponse(StatusCodes.NotFound, entity = s"Could not find matching instance of type $compType for instance with id $Id."))
+              complete(HttpResponse(StatusCodes.NotFound, entity = s"Could not find matching instance of type $compType for instance with id $id."))
           }
         } else {
           log.error(s"Failed to deserialize parameter string $compTypeString to ComponentType.")
@@ -365,17 +363,17 @@ class Server(handler: RequestHandler) extends HttpApp
     *
     * @return Server route mapping to either 200 OK and the list of event, or the resp. error codes.
     */
-  def eventList(Id: Long): server.Route = {
+  def eventList(id: Long): server.Route = {
     authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.User)) { token =>
       get {
-        log.debug(s"GET instances/$Id//eventList has been called")
+        log.debug(s"GET instances/$id//eventList has been called")
 
-        handler.getEventList(Id) match {
+        handler.getEventList(id) match {
           case Success(list) => complete {
             list
           }
           case Failure(_) => complete {
-            HttpResponse(StatusCodes.NotFound, entity = s"Id $Id not found.")
+            HttpResponse(StatusCodes.NotFound, entity = s"Id $id not found.")
           }
         }
       }
@@ -430,19 +428,19 @@ class Server(handler: RequestHandler) extends HttpApp
     *
     * @return Server route that either maps to 200 OK or the respective error codes
     */
-  def reportStart(Id: Long): server.Route = {
+  def reportStart(id: Long): server.Route = {
     authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Component)) { token =>
       post {
-        handler.handleReportStart(Id) match {
+        handler.handleReportStart(id) match {
           case handler.OperationResult.IdUnknown =>
-            log.warning(s"Cannot report start for id $Id, that id was not found.")
+            log.warning(s"Cannot report start for id $id, that id was not found.")
             complete {
-              HttpResponse(StatusCodes.NotFound, entity = s"Id $Id not found.")
+              HttpResponse(StatusCodes.NotFound, entity = s"Id $id not found.")
             }
           case handler.OperationResult.NoDockerContainer =>
-            log.warning(s"Cannot report start for id $Id, that instance is not running in a docker container.")
+            log.warning(s"Cannot report start for id $id, that instance is not running in a docker container.")
             complete {
-              HttpResponse(StatusCodes.BadRequest, entity = s"Id $Id is not running in a docker container.")
+              HttpResponse(StatusCodes.BadRequest, entity = s"Id $id is not running in a docker container.")
             }
           case handler.OperationResult.Ok =>
             complete {
@@ -463,19 +461,19 @@ class Server(handler: RequestHandler) extends HttpApp
     *
     * @return Server route that either maps to 200 OK or the respective error codes
     */
-  def reportStop(Id: Long): server.Route = {
+  def reportStop(id: Long): server.Route = {
     authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Component)) { token =>
       post {
-        handler.handleReportStop(Id) match {
+        handler.handleReportStop(id) match {
           case handler.OperationResult.IdUnknown =>
-            log.warning(s"Cannot report start for id $Id, that id was not found.")
+            log.warning(s"Cannot report start for id $id, that id was not found.")
             complete {
-              HttpResponse(StatusCodes.NotFound, entity = s"Id $Id not found.")
+              HttpResponse(StatusCodes.NotFound, entity = s"Id $id not found.")
             }
           case handler.OperationResult.NoDockerContainer =>
-            log.warning(s"Cannot report start for id $Id, that instance is not running in a docker container.")
+            log.warning(s"Cannot report start for id $id, that instance is not running in a docker container.")
             complete {
-              HttpResponse(StatusCodes.BadRequest, entity = s"Id $Id is not running in a docker container.")
+              HttpResponse(StatusCodes.BadRequest, entity = s"Id $id is not running in a docker container.")
             }
           case handler.OperationResult.Ok =>
             complete {
@@ -496,25 +494,25 @@ class Server(handler: RequestHandler) extends HttpApp
     *
     * @return Server route that either maps to 200 OK or the respective error codes
     */
-  def reportFailure(Id: Long): server.Route = parameters('ErrorLog.as[String].?) { (errorLog) =>
+  def reportFailure(id: Long): server.Route = parameters('ErrorLog.as[String].?) { (errorLog) =>
     authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Component)) { token =>
       post {
         if (errorLog.isEmpty) {
-          log.debug(s"POST /instances/$Id/reportFailure has been called")
+          log.debug(s"POST /instances/$id/reportFailure has been called")
         } else {
-          log.debug(s"POST /instances/$Id/reportFailure&ErrorLog=${errorLog.get} has been called")
+          log.debug(s"POST /instances/$id/reportFailure&ErrorLog=${errorLog.get} has been called")
         }
 
-        handler.handleReportFailure(Id, errorLog) match {
+        handler.handleReportFailure(id, errorLog) match {
           case handler.OperationResult.IdUnknown =>
-            log.warning(s"Cannot report failure for id $Id, that id was not found.")
+            log.warning(s"Cannot report failure for id $id, that id was not found.")
             complete {
-              HttpResponse(StatusCodes.NotFound, entity = s"Id $Id not found.")
+              HttpResponse(StatusCodes.NotFound, entity = s"Id $id not found.")
             }
           case handler.OperationResult.NoDockerContainer =>
-            log.warning(s"Cannot report failure for id $Id, that instance is not running in a docker container.")
+            log.warning(s"Cannot report failure for id $id, that instance is not running in a docker container.")
             complete {
-              HttpResponse(StatusCodes.BadRequest, entity = s"Id $Id is not running in a docker container.")
+              HttpResponse(StatusCodes.BadRequest, entity = s"Id $id is not running in a docker container.")
             }
           case handler.OperationResult.Ok =>
             complete {
@@ -535,25 +533,25 @@ class Server(handler: RequestHandler) extends HttpApp
     *
     * @return Server route that either maps to 202 ACCEPTED or the expected error codes.
     */
-  def pause(Id: Long): server.Route = {
+  def pause(id: Long): server.Route = {
     authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
       post {
-        log.debug(s"POST /instances/$Id/pause has been called")
-        handler.handlePause(Id) match {
+        log.debug(s"POST /instances/$id/pause has been called")
+        handler.handlePause(id) match {
           case handler.OperationResult.IdUnknown =>
-            log.warning(s"Cannot pause id $Id, that id was not found.")
+            log.warning(s"Cannot pause id $id, that id was not found.")
             complete {
-              HttpResponse(StatusCodes.NotFound, entity = s"Id $Id not found.")
+              HttpResponse(StatusCodes.NotFound, entity = s"Id $id not found.")
             }
           case handler.OperationResult.NoDockerContainer =>
-            log.warning(s"Cannot pause id $Id, that instance is not running in a docker container.")
+            log.warning(s"Cannot pause id $id, that instance is not running in a docker container.")
             complete {
-              HttpResponse(StatusCodes.BadRequest, entity = s"Id $Id is not running in a docker container.")
+              HttpResponse(StatusCodes.BadRequest, entity = s"Id $id is not running in a docker container.")
             }
           case handler.OperationResult.InvalidStateForOperation =>
-            log.warning(s"Cannot pause id $Id, that instance is not running.")
+            log.warning(s"Cannot pause id $id, that instance is not running.")
             complete {
-              HttpResponse(StatusCodes.BadRequest, entity = s"Id $Id is not running .")
+              HttpResponse(StatusCodes.BadRequest, entity = s"Id $id is not running .")
             }
           case handler.OperationResult.Ok =>
             complete {
@@ -574,25 +572,25 @@ class Server(handler: RequestHandler) extends HttpApp
     *
     * @return Server route that either maps to 202 ACCEPTED or the expected error codes.
     */
-  def resume(Id: Long): server.Route = {
+  def resume(id: Long): server.Route = {
     authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
       post {
-        log.debug(s"POST /instances/$Id/resume has been called")
-        handler.handleResume(Id) match {
+        log.debug(s"POST /instances/$id/resume has been called")
+        handler.handleResume(id) match {
           case handler.OperationResult.IdUnknown =>
-            log.warning(s"Cannot resume id $Id, that id was not found.")
+            log.warning(s"Cannot resume id $id, that id was not found.")
             complete {
-              HttpResponse(StatusCodes.NotFound, entity = s"Id $Id not found.")
+              HttpResponse(StatusCodes.NotFound, entity = s"Id $id not found.")
             }
           case handler.OperationResult.NoDockerContainer =>
-            log.warning(s"Cannot resume id $Id, that instance is not running in a docker container.")
+            log.warning(s"Cannot resume id $id, that instance is not running in a docker container.")
             complete {
-              HttpResponse(StatusCodes.BadRequest, entity = s"Id $Id is not running in a docker container.")
+              HttpResponse(StatusCodes.BadRequest, entity = s"Id $id is not running in a docker container.")
             }
           case handler.OperationResult.InvalidStateForOperation =>
-            log.warning(s"Cannot resume id $Id, that instance is not paused.")
+            log.warning(s"Cannot resume id $id, that instance is not paused.")
             complete {
-              HttpResponse(StatusCodes.BadRequest, entity = s"Id $Id is not paused.")
+              HttpResponse(StatusCodes.BadRequest, entity = s"Id $id is not paused.")
             }
           case handler.OperationResult.Ok =>
             complete {
@@ -613,18 +611,18 @@ class Server(handler: RequestHandler) extends HttpApp
     *
     * @return Server route that either maps to 202 ACCEPTED or the expected error codes.
     */
-  def stop(Id: Long): server.Route = {
+  def stop(id: Long): server.Route = {
     authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
       post {
-        log.debug(s"POST /instances/$Id/stop has been called")
-        handler.handleStop(Id) match {
+        log.debug(s"POST /instances/$id/stop has been called")
+        handler.handleStop(id) match {
           case handler.OperationResult.IdUnknown =>
-            log.warning(s"Cannot stop id $Id, that id was not found.")
+            log.warning(s"Cannot stop id $id, that id was not found.")
             complete {
-              HttpResponse(StatusCodes.NotFound, entity = s"Id $Id not found.")
+              HttpResponse(StatusCodes.NotFound, entity = s"Id $id not found.")
             }
           case handler.OperationResult.InvalidTypeForOperation =>
-            log.warning(s"Cannot stop id $Id, this component type cannot be stopped.")
+            log.warning(s"Cannot stop id $id, this component type cannot be stopped.")
             complete {
               HttpResponse(StatusCodes.BadRequest, entity = s"Cannot stop instance of this type.")
             }
@@ -647,25 +645,25 @@ class Server(handler: RequestHandler) extends HttpApp
     *
     * @return Server route that either maps to 202 ACCEPTED or the expected error codes.
     */
-  def start(Id: Long): server.Route = {
+  def start(id: Long): server.Route = {
     authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
       post {
-        log.debug(s"POST /instances/$Id/start has been called")
-        handler.handleStart(Id) match {
+        log.debug(s"POST /instances/$id/start has been called")
+        handler.handleStart(id) match {
           case handler.OperationResult.IdUnknown =>
-            log.warning(s"Cannot start id $Id, that id was not found.")
+            log.warning(s"Cannot start id $id, that id was not found.")
             complete {
-              HttpResponse(StatusCodes.NotFound, entity = s"Id $Id not found.")
+              HttpResponse(StatusCodes.NotFound, entity = s"Id $id not found.")
             }
           case handler.OperationResult.NoDockerContainer =>
-            log.warning(s"Cannot start id $Id, that instance is not running in a docker container.")
+            log.warning(s"Cannot start id $id, that instance is not running in a docker container.")
             complete {
-              HttpResponse(StatusCodes.BadRequest, entity = s"Id $Id is not running in a docker container.")
+              HttpResponse(StatusCodes.BadRequest, entity = s"Id $id is not running in a docker container.")
             }
           case handler.OperationResult.InvalidStateForOperation =>
-            log.warning(s"Cannot start id $Id, that instance is not stopped.")
+            log.warning(s"Cannot start id $id, that instance is not stopped.")
             complete {
-              HttpResponse(StatusCodes.BadRequest, entity = s"Id $Id is not stopped.")
+              HttpResponse(StatusCodes.BadRequest, entity = s"Id $id is not stopped.")
             }
           case handler.OperationResult.Ok =>
             complete {
@@ -686,25 +684,25 @@ class Server(handler: RequestHandler) extends HttpApp
     *
     * @return Server route that either maps to 202 ACCEPTED or the respective error codes.
     */
-  def deleteContainer(Id: Long): server.Route = {
+  def deleteContainer(id: Long): server.Route = {
     authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
       post {
-        log.debug(s"POST /delete?Id=$Id has been called")
-        handler.handleDeleteContainer(Id) match {
+        log.debug(s"POST /delete?Id=$id has been called")
+        handler.handleDeleteContainer(id) match {
           case handler.OperationResult.IdUnknown =>
-            log.warning(s"Cannot delete id $Id, that id was not found.")
+            log.warning(s"Cannot delete id $id, that id was not found.")
             complete {
-              HttpResponse(StatusCodes.NotFound, entity = s"Id $Id not found.")
+              HttpResponse(StatusCodes.NotFound, entity = s"Id $id not found.")
             }
           case handler.OperationResult.NoDockerContainer =>
-            log.warning(s"Cannot delete id $Id, that instance is not running in a docker container.")
+            log.warning(s"Cannot delete id $id, that instance is not running in a docker container.")
             complete {
-              HttpResponse(StatusCodes.BadRequest, entity = s"Id $Id is not running in a docker container.")
+              HttpResponse(StatusCodes.BadRequest, entity = s"Id $id is not running in a docker container.")
             }
           case handler.OperationResult.InvalidStateForOperation =>
-            log.warning(s"Cannot delete id $Id, that instance is still running.")
+            log.warning(s"Cannot delete id $id, that instance is still running.")
             complete {
-              HttpResponse(StatusCodes.BadRequest, entity = s"Id $Id is not stopped.")
+              HttpResponse(StatusCodes.BadRequest, entity = s"Id $id is not stopped.")
             }
           case handler.OperationResult.Ok =>
             complete {
@@ -730,30 +728,30 @@ class Server(handler: RequestHandler) extends HttpApp
     *
     * @return Server route that either maps to 202 ACCEPTED or the respective error codes
     */
-  def assignInstance(Id: Long, AssignedInstanceId: String): server.Route = {
+  def assignInstance(id: Long, assignedInstanceId: String): server.Route = {
     authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
 
       try {
-        val assignedInstanceId: Long = AssignedInstanceId.parseJson.convertTo[Long]
+        val assignedInstanceIdLng: Long = assignedInstanceId.parseJson.convertTo[Long]
 
         post {
-          log.debug(s"POST /instances/$Id/assignInstance has been called with parameter : $assignedInstanceId ")
+          log.debug(s"POST /instances/$id/assignInstance has been called with parameter : $assignedInstanceId ")
 
-          handler.handleInstanceAssignment(Id, assignedInstanceId) match {
+          handler.handleInstanceAssignment(id, assignedInstanceIdLng) match {
             case handler.OperationResult.IdUnknown =>
-              log.warning(s"Cannot assign $assignedInstanceId to $Id, one or more ids not found.")
+              log.warning(s"Cannot assign $assignedInstanceId to $id, one or more ids not found.")
               complete {
-                HttpResponse(StatusCodes.NotFound, entity = s"Cannot assign instance, at least one of the ids $Id / $assignedInstanceId was not found.")
+                HttpResponse(StatusCodes.NotFound, entity = s"Cannot assign instance, at least one of the ids $id / $assignedInstanceId was not found.")
               }
             case handler.OperationResult.NoDockerContainer =>
-              log.warning(s"Cannot assign $assignedInstanceId to $Id, $Id is no docker container.")
+              log.warning(s"Cannot assign $assignedInstanceId to $id, $id is no docker container.")
               complete {
-                HttpResponse(StatusCodes.BadRequest, entity = s"Cannot assign instance, $Id is no docker container.")
+                HttpResponse(StatusCodes.BadRequest, entity = s"Cannot assign instance, $id is no docker container.")
               }
             case handler.OperationResult.InvalidTypeForOperation =>
-              log.warning(s"Cannot assign $assignedInstanceId to $Id, incompatible types.")
+              log.warning(s"Cannot assign $assignedInstanceId to $id, incompatible types.")
               complete {
-                HttpResponse(StatusCodes.BadRequest, entity = s"Cannot assign $assignedInstanceId to $Id, incompatible types.")
+                HttpResponse(StatusCodes.BadRequest, entity = s"Cannot assign $assignedInstanceId to $id, incompatible types.")
               }
             case handler.OperationResult.Ok =>
               complete {
@@ -786,20 +784,20 @@ class Server(handler: RequestHandler) extends HttpApp
     *
     * @return Server route that either maps to 200 OK (and the list of links as content), or the respective error code.
     */
-  def linksFrom(Id: Long): server.Route = {
+  def linksFrom(id: Long): server.Route = {
     authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.User)) { token =>
       get {
-        log.debug(s"GET /instances/$Id/linksFrom has been called.")
+        log.debug(s"GET /instances/$id/linksFrom has been called.")
 
-        handler.handleGetLinksFrom(Id) match {
+        handler.handleGetLinksFrom(id) match {
           case Success(linkList) =>
             complete {
               linkList
             }
           case Failure(ex) =>
-            log.warning(s"Failed to get links from $Id with message: ${ex.getMessage}")
+            log.warning(s"Failed to get links from $id with message: ${ex.getMessage}")
             complete {
-              HttpResponse(StatusCodes.NotFound, entity = s"Failed to get links from $Id, that id is not known.")
+              HttpResponse(StatusCodes.NotFound, entity = s"Failed to get links from $id, that id is not known.")
             }
         }
       }
@@ -812,20 +810,20 @@ class Server(handler: RequestHandler) extends HttpApp
     *
     * @return Server route that either maps to 200 OK (and the list of links as content), or the respective error code.
     */
-  def linksTo(Id: Long): server.Route = {
+  def linksTo(id: Long): server.Route = {
     authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.User)) { token =>
       get {
-        log.debug(s"GET instances/$Id/linksTo has been called.")
+        log.debug(s"GET instances/$id/linksTo has been called.")
 
-        handler.handleGetLinksTo(Id) match {
+        handler.handleGetLinksTo(id) match {
           case Success(linkList) =>
             complete {
               linkList
             }
           case Failure(ex) =>
-            log.warning(s"Failed to get links to $Id with message: ${ex.getMessage}")
+            log.warning(s"Failed to get links to $id with message: ${ex.getMessage}")
             complete {
-              HttpResponse(StatusCodes.NotFound, entity = s"Failed to get links to $Id, that id is not known.")
+              HttpResponse(StatusCodes.NotFound, entity = s"Failed to get links to $id, that id is not known.")
             }
         }
       }
@@ -856,11 +854,11 @@ class Server(handler: RequestHandler) extends HttpApp
     *
     * @return Server route that either maps to 200 OK or the respective error codes.
     */
-  def addLabel(id: Long, addlabel: String): server.Route = {
+  def addLabel(id: Long, addLabelStr: String): server.Route = {
     authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
 
       try {
-        val label: String = addlabel.parseJson.convertTo[String]
+        val label: String = addLabelStr.parseJson.convertTo[String]
         post {
           log.debug(s"POST /instances/$id/label with parameter label=$label has been called.")
           handler.handleAddLabel(id, label) match {
