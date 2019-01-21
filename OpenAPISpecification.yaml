@@ -54,6 +54,7 @@ paths:
             example: 42
         '405':
           description: Invalid input
+  /instances:
     get:
       tags:
         - Basic Operations
@@ -178,8 +179,8 @@ paths:
       summary: Gets the number of instances running for the specified type
       description: >-
         This command retrieves the number of registered instances of the
-        specified type that are currently running. If no type is specified, 
-        the number of all instances is being returned
+        specified type that are currently running. If no type is specified,  the
+        number of all instances is being returned
       operationId: numberOfInstances
       parameters:
         - name: ComponentType
@@ -229,7 +230,9 @@ paths:
               - SenderId
             properties:
               MatchingSuccessful:
-                description: Boolean value indicating whether the matching was successful or not
+                description: >-
+                  Boolean value indicating whether the matching was successful
+                  or not
                 type: boolean
               SenderId:
                 description: Id of the instance that is submitting the result
@@ -329,7 +332,8 @@ paths:
         - Basic Operations
       summary: Retrieves the current instance network
       description: >-
-        Retrieves the instance network, meaning a list of all instances currently registered at the registry.
+        Retrieves the instance network, meaning a list of all instances
+        currently registered at the registry.
       operationId: network
       responses:
         '200':
@@ -342,7 +346,7 @@ paths:
     post:
       tags:
         - Basic Operations
-      consumes: 
+      consumes:
         - text/plain
       summary: Add a label to the instance with the specified id
       description: >-
@@ -403,7 +407,7 @@ paths:
               InstanceName:
                 description: Name for the new instance
                 type: string
-                example: "MyCrawler"
+                example: MyCrawler
       responses:
         '202':
           description: Operation accepted
