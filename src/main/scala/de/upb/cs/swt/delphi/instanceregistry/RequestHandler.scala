@@ -488,27 +488,27 @@ class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, con
     } else if (!isInstanceDockerContainer(id)) {
       val instance = instanceDao.getInstance(id).get
 
-      if(instance.componentType == ComponentType.ElasticSearch || instance.componentType == ComponentType.DelphiManagement){
+      if (instance.componentType == ComponentType.ElasticSearch || instance.componentType == ComponentType.DelphiManagement) {
         log.warning(s"Cannot stop instance of type ${instance.componentType}.")
         OperationResult.InvalidTypeForOperation
       } else {
         log.info(s"Calling /stop on non-docker instance $instance..")
-        RestClient.executePost(RestClient.getUri(instance) + "/stop").map{
+        RestClient.executePost(RestClient.getUri(instance) + "/stop").map {
           response =>
             log.info(s"Request to /stop returned $response")
-            if (response.status == StatusCodes.OK){
+            if (response.status == StatusCodes.OK) {
               log.info(s"Instance with id $id has been shut down successfully.")
             } else {
               log.warning(s"Failed to shut down instance with id $id. Status code was: ${response.status}")
             }
-        }.recover{
+        }.recover {
           case ex: Exception =>
             log.warning(s"Failed to shut down instance with id $id. Message is: ${ex.getMessage}")
         }
         handleDeregister(id)
         OperationResult.Ok
       }
-    } else {
+    } else if (instanceDao.getInstance(id).get.instanceState != InstanceState.Paused) {
       log.info(s"Handling /stop for instance with id $id...")
 
       val instance = instanceDao.getInstance(id).get
@@ -516,8 +516,9 @@ class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, con
       log.info("Stopping container...")
       implicit val timeout: Timeout = configuration.dockerOperationTimeout
 
-      (dockerActor ? stop(instance.dockerId.get)).map{
-        _ => log.info(s"Instance $id stopped.")
+      (dockerActor ? stop(instance.dockerId.get)).map {
+        _ =>
+          log.info(s"Instance $id stopped.")
           instanceDao.setStateFor(instance.id.get, InstanceState.Stopped)
           fireStateChangedEvent(instanceDao.getInstance(instance.id.get).get)
       }.recover {
@@ -535,6 +536,9 @@ class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, con
       }
 
       OperationResult.Ok
+    } else {
+      log.warning(s"Cannot stop paused docker container for instance with id $id")
+      OperationResult.InvalidStateForOperation
     }
   }
 
