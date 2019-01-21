@@ -11,16 +11,13 @@ import de.upb.cs.swt.delphi.instanceregistry.authorization.AccessTokenEnums.User
 import de.upb.cs.swt.delphi.instanceregistry.authorization.{AccessToken, AuthProvider}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.ComponentType
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.{EventJsonSupport, Instance, InstanceJsonSupport, InstanceLinkJsonSupport}
+import de.upb.cs.swt.delphi.instanceregistry.requestLimiter.{IpLogActor, RequestLimitScheduler}
 import de.upb.cs.swt.delphi.instanceregistry.{AppLogging, Registry, RequestHandler}
 import spray.json.JsonParser.ParsingException
 import spray.json._
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Success}
-import de.upb.cs.swt.delphi.instanceregistry.requestLimiter.{IpLogActor, RequestLimitScheduler}
-import sun.font.Decoration.Label
-
-import scala.collection.immutable.Range
 
 /**
   * Web server configuration for Instance Registry API.
@@ -75,7 +72,9 @@ class Server(handler: RequestHandler) extends HttpApp
               matchingInstance(Id)
             } ~
             path("matchingResult") {
-              entity(as[JsValue]) { json => matchInstance(Id, json.asJsObject.fields("MatchingSuccessful").asInstanceOf[Boolean], json.asJsObject.fields("SenderId").asInstanceOf[Long]) }
+              entity(as[JsValue]) {
+                json => matchInstance(Id, json.asJsObject.fields("MatchingSuccessful").toString(), json.asJsObject.fields("SenderId").toString())
+              }
             } ~
             path("eventList") {
               eventList(Id)
@@ -341,10 +340,13 @@ class Server(handler: RequestHandler) extends HttpApp
     *
     * @return Server route that either maps to 200 OK or to the respective error codes
     */
-  def matchInstance(callerId: Long, matchingResult: Boolean, matchedInstanceId: Long): server.Route = {
+  def matchInstance(callerId: Long, matchingResultStr: String, matchedInstanceIdStr: String): server.Route = {
     authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Component)) { token =>
+
+      val matchingResult: Boolean = matchingResultStr.toBoolean
+      val matchedInstanceId: Long = matchedInstanceIdStr.toLong
       post {
-        log.debug(s"POST /matchingResult?callerId=$callerId&matchedInstanceId=$matchedInstanceId&MatchingSuccessful=$matchingResult has been called")
+        log.debug(s"POST /instances/$callerId/matchingResult has been called with parameters : matchedInstanceId=$matchedInstanceId&MatchingSuccessful=$matchingResult")
 
         handler.handleMatchingResult(callerId, matchedInstanceId, matchingResult) match {
           case handler.OperationResult.IdUnknown =>
@@ -395,9 +397,9 @@ class Server(handler: RequestHandler) extends HttpApp
     authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
       post {
         if (name.isEmpty) {
-          log.debug(s"POST /deploy?ComponentType=$compTypeString has been called")
+          log.debug(s"POST /instances/deploy?ComponentType=$compTypeString has been called")
         } else {
-          log.debug(s"POST /deploy?ComponentType=$compTypeString&name=${name.get} has been called")
+          log.debug(s"POST /instances/deploy?ComponentType=$compTypeString&name=${name.get} has been called")
         }
         val compType: ComponentType = ComponentType.values.find(v => v.toString == compTypeString).orNull
 
@@ -832,7 +834,7 @@ class Server(handler: RequestHandler) extends HttpApp
   def network(): server.Route = {
     authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.User)) { token =>
       get {
-        log.debug(s"GET /network has been called.")
+        log.debug(s"GET /instances/network has been called.")
         complete {
           handler.handleGetNetwork().toJson
         }

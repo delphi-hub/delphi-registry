@@ -392,52 +392,49 @@ class ServerTest
       val id2 = assertValidRegister(ComponentType.WebApi)
 
 
-      /*      Post(s"/instances/$id1/matchingResult", HttpEntity(ContentTypes.`application/json`, s"""{ "MatchingSuccessful": "true", "SenderId" : $id2}""")) ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
-              assert(status === StatusCodes.OK)
-              responseAs[String] shouldEqual "Matching result true processed."
-            }
-
-            Post(s"/matchingResult?CallerId=$id1&MatchedInstanceId=$id2&MatchingSuccessful=1") ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
-            assert(status === StatusCodes.OK)
-            responseAs[String] shouldEqual "Matching result true processed."
-            }
-      */
+      Post(s"/instances/$id1/matchingResult", HttpEntity(ContentTypes.`application/json`, s"""{ "MatchingSuccessful": true, "SenderId" : $id2}""")) ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
+        assert(status === StatusCodes.OK)
+        responseAs[String] shouldEqual "Matching result true processed."
+      }
       //Remove Instances
       assertValidDeregister(id1)
       assertValidDeregister(id2)
     }
 
-    /*
+
     //Invalid POST /matchingResult
     "not process matching result if method or parameters are invalid" in {
       //Wrong method
-      Get("/matchingResult?CallerId=0&MatchedInstanceId=0&MatchingSuccessful=1") ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
+
+      Get(s"/instances/0/matchingResult", HttpEntity(ContentTypes.`application/json`, s"""{ "MatchingSuccessful": true, "SenderId" : 0}""")) ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.METHOD_NOT_ALLOWED)
         responseAs[String] shouldEqual "HTTP method not allowed, supported methods: POST"
       }
 
+
       //Invalid IDs - expect 404
-      Post("/matchingResult?CallerId=1&MatchedInstanceId=2&MatchingSuccessful=0") ~> addAuthorization("Component") ~> server.routes ~> check {
+      Post(s"/instances/1/matchingResult", HttpEntity(ContentTypes.`application/json`, s"""{ "MatchingSuccessful": false, "SenderId" : 2}""")) ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.NOT_FOUND)
       }
 
-      //Wrong parameters, caller is same as callee - expect bad request
-      Post("/matchingResult?CallerId=0&MatchedInstanceId=0&MatchingSuccessful=O") ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
-        assert(status === StatusCodes.BAD_REQUEST)
-      }
+      /*  //Wrong parameters, caller is same as callee - expect bad request
+       // Post("/matchingResult?CallerId=0&MatchedInstanceId=0&MatchingSuccessful=O") ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
+         Post(s"/instances/1/matchingResult", HttpEntity(ContentTypes.`application/json`, s"""{ "MatchingSuccessful": false, "SenderId" : 1}"""))~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
+          assert(status === StatusCodes.BAD_REQUEST)
+        }*/
 
       //Wrong user type
-      Post("/matchingResult?CallerId=1&MatchedInstanceId=2&MatchingSuccessful=0") ~> addAuthorization("User") ~> Route.seal(server.routes) ~> check {
+      Post(s"/instances/1/matchingResult", HttpEntity(ContentTypes.`application/json`, s"""{ "MatchingSuccessful": false, "SenderId" : 2}""")) ~> addAuthorization("User") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.UNAUTHORIZED)
         responseAs[String] shouldEqual "The supplied authentication is invalid"
       }
 
       //No authorization
-      Post("/matchingResult?CallerId=1&MatchedInstanceId=2&MatchingSuccessful=0") ~> Route.seal(server.routes) ~> check {
+      Post(s"/instances/1/matchingResult", HttpEntity(ContentTypes.`application/json`, s"""{ "MatchingSuccessful": false, "SenderId" : 2}""")) ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.UNAUTHORIZED)
-        responseAs[String].toLowerCase should include ("not supplied with the request")
+        responseAs[String].toLowerCase should include("not supplied with the request")
       }
-    }*/
+    }
 
     //Valid GET /eventList
     "returns registry events that are associated to the instance if id is valid" in {
