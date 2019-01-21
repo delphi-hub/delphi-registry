@@ -129,17 +129,6 @@ class ServerTest
 
     //Invalid deregister
     "not deregister if method is invalid, id is missing or invalid" in {
-      //Id missing
-      /*    Post("/instances//deregister") ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
-            assert(status === StatusCodes.NOT_FOUND)
-            responseAs[String].toLowerCase should include("missing required query parameter")
-          }
-    */
-      //Id wrong type
-      /*Post("/instances/kilo/deregister") ~> addAuthorization("Component") ~> server.routes ~> check {
-        assert(status === StatusCodes.BAD_REQUEST)
-        responseAs[String].toLowerCase should include("not a valid 64-bit signed integer value")
-      } */
 
       //Id not present
       Post(s"/instances/${Long.MaxValue}/deregister") ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
@@ -411,17 +400,10 @@ class ServerTest
         responseAs[String] shouldEqual "HTTP method not allowed, supported methods: POST"
       }
 
-
       //Invalid IDs - expect 404
       Post(s"/instances/1/matchingResult", HttpEntity(ContentTypes.`application/json`, s"""{ "MatchingSuccessful": false, "SenderId" : 2}""")) ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.NOT_FOUND)
       }
-
-      /*  //Wrong parameters, caller is same as callee - expect bad request
-       // Post("/matchingResult?CallerId=0&MatchedInstanceId=0&MatchingSuccessful=O") ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
-         Post(s"/instances/1/matchingResult", HttpEntity(ContentTypes.`application/json`, s"""{ "MatchingSuccessful": false, "SenderId" : 1}"""))~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
-          assert(status === StatusCodes.BAD_REQUEST)
-        }*/
 
       //Wrong user type
       Post(s"/instances/1/matchingResult", HttpEntity(ContentTypes.`application/json`, s"""{ "MatchingSuccessful": false, "SenderId" : 2}""")) ~> addAuthorization("User") ~> Route.seal(server.routes) ~> check {
