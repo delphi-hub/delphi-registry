@@ -20,17 +20,24 @@ The Delphi registry is a server that provides access to all information and oper
 ## Requirements
 In order to compile or execute the instance registry, you must have the latest version of the *Scala Build Tool* (SBT) installed. You can get it [here](https://www.scala-sbt.org/).
 
-The Delphi registry requires a docker host to deploy containers to. The following images must be registered at the docker registry:
+The Delphi registry requires a docker host to deploy containers. The following images must be registered at the docker registry:
 * The Delphi Crawler ( ```delphi-crawler:1.0.0-SNAPSHOT``` )
 * The Delphi WebApi ( ```delphi-webapi:1.0.0-SNAPSHOT``` )
 * The Delphi WebApp ( ```delphi-webapp:1.0.0-SNAPSHOT``` )
 
-To obtain these images, checkout the respective repositories ([here](https://github.com/delphi-hub/delphi-crawler), [here](https://github.com/delphi-hub/delphi-webapi) and [here](https://github.com/delphi-hub/delphi-webapp)) and execute the command 
+For Windows users, to obtain these images, checkout the respective repositories ([here](https://github.com/delphi-hub/delphi-crawler), [here](https://github.com/delphi-hub/delphi-webapi) and [here](https://github.com/delphi-hub/delphi-webapp)) and execute the command 
 
 ```
 sbt docker:publishLocal
 ```
-inside their root directory. This will build the docker images and register them directly at the local docker registry.
+inside their root directory. This will build the docker images and register them directly at the local docker registry. <br /> 
+
+For Linux users, checkout Delphi Registry repository and execute the command
+
+```
+sudo bash ./Delphi_install.sh
+``` 
+inside the registry's root directory. This installation script will create the required repositories, build the docker images, and register them directly at the local docker registry. 
 The registry requires an initial instance of ElasticSearch to be running.
 
 ## Authorization
@@ -93,7 +100,7 @@ Before you can start the application, you have to make sure your configuration f
 |```maxIndividualIpReq``` | ```Int``` | ```200``` | Maximum number of requests that are allowed to be executed during the current refresh period for one specific origin ip.|
 |```ipLogRefreshRate``` | ```FiniteDuration``` | ```2.minutes``` | Duration of the log refresh period.|
 
-By default, Docker is expected to be reachable at *http://localhost:9095*, but you can override this setting by specifying the docker host URI in the environment variable *DOCKER_HOST*.
+By default, Docker is expected to be reachable at *http://localhost:9095*, but you can override this setting by specifying the docker host URI in the environment variable *DELPHI_DOCKER_HOST*.
 To change the port of your http docker API to 9095, execute
 ```
 edit /lib/systemd/system/docker.service
@@ -111,8 +118,8 @@ There are two ways of running the registry application. You can either run the a
 ### Run the registry directly
 If you want to execute the registry directly on your local machine, simply go to the root folder of the repository and execute ```sbt run```. The application will stream all logging output to the terminal. You can terminate any time by pressing *RETURN*.
 ### Run the registry in Docker
-For building a docker image containing the registry, go to the root folder of the repository and execute ```sbt docker:publishLocal```. This will build the application, create a docker image named ```delphi-registry:1.0.0-SNAPSHOT```, and register the image at your local docker registry.
-
+For Windows users, to build a docker image containing the registry, go to the root folder of the repository and execute ```sbt docker:publishLocal```. This will build the application, create a docker image named ```delphi-registry:1.0.0-SNAPSHOT```, and register the image at your local docker registry.<br />
+For Linux users, the installation script mentioned in **Requirements** section will create docker image for registry named ```delphi-registry:1.0.0-SNAPSHOT```, and registers the image at your local docker registry.
 
 ## Contributing
 
@@ -134,3 +141,4 @@ chat for a more interactive experience.
 The Delphi registry is open source and available under Apache 2 License.
 
 [![GitHub license](https://img.shields.io/github/license/delphi-hub/delphi-registry.svg)](https://github.com/delphi-hub/delphi-registry/blob/master/LICENSE)
+

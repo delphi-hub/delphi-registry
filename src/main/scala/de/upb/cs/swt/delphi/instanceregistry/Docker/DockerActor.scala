@@ -1,10 +1,12 @@
 package de.upb.cs.swt.delphi.instanceregistry.Docker
 
 import akka.actor.{Actor, ActorLogging, ActorSystem, Props, Status}
+import akka.http.scaladsl.model.ws.Message
 import akka.stream.ActorMaterializer
 import de.upb.cs.swt.delphi.instanceregistry.Docker.DockerActor._
 import de.upb.cs.swt.delphi.instanceregistry.Registry
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.ComponentType
+import org.reactivestreams.Publisher
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
@@ -120,9 +122,23 @@ class DockerActor(connection: DockerConnection) extends Actor with ActorLogging 
           }
       }
 
-    case logs(containerId: String) =>
-      log.info(s"Fetching Container logs")
-      sender ! container.logs(containerId)
+    case logs(containerId: String, stdErrSelected: Boolean, stream: Boolean) =>
+
+      log.info(s"Fetching Container logs: stdErrSelected -> $stdErrSelected, stream -> $stream")
+
+      if(!stream){
+        val logResult = Try(Await.result(container.retrieveLogs(containerId, stdErrSelected), Duration.Inf))
+        logResult match {
+          case Failure(ex) =>
+            log.warning(s"Failed to get container logs with ${ex.getMessage}")
+            sender ! Failure(ex)
+          case Success(logContent) =>
+            sender ! Success(logContent)
+        }
+      } else {
+        sender ! container.streamLogs(containerId, stdErrSelected)
+      }
+
 
     case x => log.warning("Received unknown message: [{}] ", x)
   }
@@ -146,7 +162,7 @@ object DockerActor {
 
   case class restart(containerId: String)
 
-  case class logs(containerId: String)
+  case class logs(containerId: String, stdErrSelected: Boolean, stream: Boolean)
 
   case class runCommand(
                          containerId: String,
