@@ -40,10 +40,10 @@ import scala.util.{Failure, Success, Try}
 
 class ServerTest
   extends WordSpec
-  with Matchers
-  with ScalatestRouteTest
-  with InstanceJsonSupport
-  with EventJsonSupport {
+    with Matchers
+    with ScalatestRouteTest
+    with InstanceJsonSupport
+    with EventJsonSupport {
 
   private val configuration: Configuration = new Configuration()
   private val dao: InstanceDAO = new DynamicInstanceDAO(configuration)
@@ -59,8 +59,6 @@ class ServerTest
   private val validJsonInstanceMissingRequiredMember = validJsonInstance.replace(""""name":"ValidInstance",""", "")
   //Invalid Json syntax: missing quotation mark
   private val invalidJsonInstance = validJsonInstance.replace(""""name":"ValidInstance",""", """"name":Invalid", """)
-
-
 
 
   /**
@@ -124,7 +122,7 @@ class ServerTest
       //No authorization
       Post("/instances/register?InstanceString=25") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.UNAUTHORIZED)
-        responseAs[String].toLowerCase should include ("not supplied with the request")
+        responseAs[String].toLowerCase should include("not supplied with the request")
       }
 
     }
@@ -132,11 +130,11 @@ class ServerTest
     //Invalid deregister
     "not deregister if method is invalid, id is missing or invalid" in {
       //Id missing
-  /*    Post("/instances//deregister") ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
-        assert(status === StatusCodes.NOT_FOUND)
-        responseAs[String].toLowerCase should include("missing required query parameter")
-      }
-*/
+      /*    Post("/instances//deregister") ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
+            assert(status === StatusCodes.NOT_FOUND)
+            responseAs[String].toLowerCase should include("missing required query parameter")
+          }
+    */
       //Id wrong type
       /*Post("/instances/kilo/deregister") ~> addAuthorization("Component") ~> server.routes ~> check {
         assert(status === StatusCodes.BAD_REQUEST)
@@ -164,7 +162,7 @@ class ServerTest
       //No authorization
       Post("/instances/0/deregister") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.UNAUTHORIZED)
-        responseAs[String].toLowerCase should include ("not supplied with the request")
+        responseAs[String].toLowerCase should include("not supplied with the request")
       }
     }
 
@@ -210,7 +208,7 @@ class ServerTest
       //No authorization
       Get("/instances?ComponentType=Crawler") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.UNAUTHORIZED)
-        responseAs[String].toLowerCase should include ("not supplied with the request")
+        responseAs[String].toLowerCase should include("not supplied with the request")
       }
     }
 
@@ -227,7 +225,7 @@ class ServerTest
       }
 
       //No instances of that type present, still need to be 200 OK
-      Get("/instances/count?ComponentType=WebApp") ~> addAuthorization("User") ~>server.routes ~> check {
+      Get("/instances/count?ComponentType=WebApp") ~> addAuthorization("User") ~> server.routes ~> check {
         assert(status === StatusCodes.OK)
         Try(responseAs[String].toLong) match {
           case Success(numberOfEsInstances) =>
@@ -272,7 +270,7 @@ class ServerTest
       //No authorization
       Get("/instances/count?ComponentType=Crawler") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.UNAUTHORIZED)
-        responseAs[String].toLowerCase should include ("not supplied with the request")
+        responseAs[String].toLowerCase should include("not supplied with the request")
       }
     }
 
@@ -283,7 +281,7 @@ class ServerTest
         Try(responseAs[String].parseJson.convertTo[Instance](instanceFormat)) match {
           case Success(instance) =>
             instance.id.get shouldEqual 0
-            instance.name should include ("Default ElasticSearch")
+            instance.name should include("Default ElasticSearch")
           case Failure(ex) =>
             fail(ex)
         }
@@ -306,7 +304,7 @@ class ServerTest
       //No authorization
       Get("/instances/0") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.UNAUTHORIZED)
-        responseAs[String].toLowerCase should include ("not supplied with the request")
+        responseAs[String].toLowerCase should include("not supplied with the request")
       }
     }
 
@@ -347,7 +345,7 @@ class ServerTest
       //Unknown callee id, expect 404
       Get("/instances/45/matchingInstance?ComponentType=Crawler") ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.NOT_FOUND)
-        responseAs[String].toLowerCase should include ("id 45 was not found")
+        responseAs[String].toLowerCase should include("id 45 was not found")
       }
 
       //Method Not allowed
@@ -359,14 +357,14 @@ class ServerTest
       //Incompatible types, api asks for crawler - expect 400
       Get(s"/instances/$webApiId/matchingInstance?ComponentType=Crawler") ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.BAD_REQUEST)
-        responseAs[String].toLowerCase should include ("invalid dependency type")
+        responseAs[String].toLowerCase should include("invalid dependency type")
       }
 
       //No instance of desired type present - expect 404
       assertValidDeregister(webApiId)
       Get(s"/instances/$webAppId/matchingInstance?ComponentType=WebApi") ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.NOT_FOUND)
-        responseAs[String].toLowerCase should include ("could not find matching instance")
+        responseAs[String].toLowerCase should include("could not find matching instance")
       }
 
       //Wrong user type
@@ -378,7 +376,7 @@ class ServerTest
       //No authorization
       Get(s"/instances/$webApiId/matchingInstance?ComponentType=WebApi") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.UNAUTHORIZED)
-        responseAs[String].toLowerCase should include ("not supplied with the request")
+        responseAs[String].toLowerCase should include("not supplied with the request")
       }
 
       assertValidDeregister(webAppId)
@@ -393,16 +391,23 @@ class ServerTest
       //Add a WebApi instance for testing
       val id2 = assertValidRegister(ComponentType.WebApi)
 
-      Post(s"/matchingResult?CallerId=$id1&MatchedInstanceId=$id2&MatchingSuccessful=1") ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
-        assert(status === StatusCodes.OK)
-        responseAs[String] shouldEqual "Matching result true processed."
-      }
 
+      /*      Post(s"/instances/$id1/matchingResult", HttpEntity(ContentTypes.`application/json`, s"""{ "MatchingSuccessful": "true", "SenderId" : $id2}""")) ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
+              assert(status === StatusCodes.OK)
+              responseAs[String] shouldEqual "Matching result true processed."
+            }
+
+            Post(s"/matchingResult?CallerId=$id1&MatchedInstanceId=$id2&MatchingSuccessful=1") ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
+            assert(status === StatusCodes.OK)
+            responseAs[String] shouldEqual "Matching result true processed."
+            }
+      */
       //Remove Instances
       assertValidDeregister(id1)
       assertValidDeregister(id2)
     }
 
+    /*
     //Invalid POST /matchingResult
     "not process matching result if method or parameters are invalid" in {
       //Wrong method
@@ -432,7 +437,7 @@ class ServerTest
         assert(status === StatusCodes.UNAUTHORIZED)
         responseAs[String].toLowerCase should include ("not supplied with the request")
       }
-    }
+    }*/
 
     //Valid GET /eventList
     "returns registry events that are associated to the instance if id is valid" in {
@@ -475,7 +480,7 @@ class ServerTest
       //No authorization
       Get("/instances/0/eventList") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.UNAUTHORIZED)
-        responseAs[String].toLowerCase should include ("not supplied with the request")
+        responseAs[String].toLowerCase should include("not supplied with the request")
       }
     }
 
@@ -544,7 +549,7 @@ class ServerTest
       //No authorization
       Get("/instances/0/linksFrom") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.UNAUTHORIZED)
-        responseAs[String].toLowerCase should include ("not supplied with the request")
+        responseAs[String].toLowerCase should include("not supplied with the request")
       }
     }
 
@@ -598,7 +603,7 @@ class ServerTest
       //No authorization
       Get("/instances/0/linksTo") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.UNAUTHORIZED)
-        responseAs[String].toLowerCase should include ("not supplied with the request")
+        responseAs[String].toLowerCase should include("not supplied with the request")
       }
     }
 
@@ -612,42 +617,42 @@ class ServerTest
     //Invalid POST /instances/{id}/label
     "fail to add label if id is invalid or label too long" in {
       //Unknown id - expect 404
-      Post("/instances/45/label",HttpEntity(ContentTypes.`application/json`, """{ "Label": "Private"}""")) ~> addAuthorization("Admin") ~> server.routes ~> check {
+      Post("/instances/45/label", HttpEntity(ContentTypes.`application/json`, """{ "Label": "Private"}""")) ~> addAuthorization("Admin") ~> server.routes ~> check {
         assert(status === StatusCodes.NOT_FOUND)
         responseAs[String] shouldEqual "Cannot add label, id 45 not found."
       }
       //Label out of bounds - expect 400
       val tooLongLabel = "VeryVeryExtraLongLabelThatDoesNotWorkWhileAddingLabel"
       val jsonStr = tooLongLabel.toJson
-      Post("/instances/0/label",HttpEntity(ContentTypes.`application/json`, s"""{ "Label": $jsonStr}""")) ~> addAuthorization("Admin") ~> server.routes ~> check {
+      Post("/instances/0/label", HttpEntity(ContentTypes.`application/json`, s"""{ "Label": $jsonStr}""")) ~> addAuthorization("Admin") ~> server.routes ~> check {
         assert(status === StatusCodes.BAD_REQUEST)
-        responseAs[String].toLowerCase should include ("exceeds character limit")
+        responseAs[String].toLowerCase should include("exceeds character limit")
       }
       //Wrong user type
-      Post("/instances/0/label",HttpEntity(ContentTypes.`application/json`, """{ "Label": "Private"}"""))  ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
+      Post("/instances/0/label", HttpEntity(ContentTypes.`application/json`, """{ "Label": "Private"}""")) ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.UNAUTHORIZED)
         responseAs[String] shouldEqual "The supplied authentication is invalid"
       }
 
       //Wrong user type
-      Post("/instances/0/label",HttpEntity(ContentTypes.`application/json`, """{ "Label": "Private"}""")) ~> addAuthorization("User") ~> Route.seal(server.routes) ~> check {
+      Post("/instances/0/label", HttpEntity(ContentTypes.`application/json`, """{ "Label": "Private"}""")) ~> addAuthorization("User") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.UNAUTHORIZED)
         responseAs[String] shouldEqual "The supplied authentication is invalid"
       }
       //No authorization
-      Post("/instances/0/label",HttpEntity(ContentTypes.`application/json`, """{ "Label": "Private"}"""))~> Route.seal(server.routes) ~> check {
+      Post("/instances/0/label", HttpEntity(ContentTypes.`application/json`, """{ "Label": "Private"}""")) ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.UNAUTHORIZED)
-        responseAs[String].toLowerCase should include ("not supplied with the request")
+        responseAs[String].toLowerCase should include("not supplied with the request")
       }
 
     }
 
-    /**Minimal tests for docker operations**/
+    /** Minimal tests for docker operations **/
 
     "fail to deploy if component type is invalid" in {
       Post("/instances/deploy?ComponentType=Car") ~> addAuthorization("Admin") ~> server.routes ~> check {
         status shouldEqual StatusCodes.BAD_REQUEST
-        responseAs[String].toLowerCase should include ("could not deserialize")
+        responseAs[String].toLowerCase should include("could not deserialize")
       }
 
       //Wrong user type
@@ -664,41 +669,41 @@ class ServerTest
     "fail to execute docker operations if id is invalid" in {
       Post("/instances/42/reportStart") ~> addAuthorization("Component") ~> server.routes ~> check {
         status shouldEqual StatusCodes.NOT_FOUND
-        responseAs[String].toLowerCase should include ("not found")
+        responseAs[String].toLowerCase should include("not found")
       }
       Post("/instances/42/reportStop") ~> addAuthorization("Component") ~> server.routes ~> check {
         status shouldEqual StatusCodes.NOT_FOUND
-        responseAs[String].toLowerCase should include ("not found")
+        responseAs[String].toLowerCase should include("not found")
       }
       Post("/instances/42/reportFailure") ~> addAuthorization("Component") ~> server.routes ~> check {
         status shouldEqual StatusCodes.NOT_FOUND
-        responseAs[String].toLowerCase should include ("not found")
+        responseAs[String].toLowerCase should include("not found")
       }
       Post("/instances/42/pause") ~> addAuthorization("Admin") ~> server.routes ~> check {
         status shouldEqual StatusCodes.NOT_FOUND
-        responseAs[String].toLowerCase should include ("not found")
+        responseAs[String].toLowerCase should include("not found")
       }
       Post("/instances/42/resume") ~> addAuthorization("Admin") ~> server.routes ~> check {
         status shouldEqual StatusCodes.NOT_FOUND
-        responseAs[String].toLowerCase should include ("not found")
+        responseAs[String].toLowerCase should include("not found")
       }
       Post("/instances/42/stop") ~> addAuthorization("Admin") ~> server.routes ~> check {
         status shouldEqual StatusCodes.NOT_FOUND
-        responseAs[String].toLowerCase should include ("not found")
+        responseAs[String].toLowerCase should include("not found")
       }
       Post("/instances/42/start") ~> addAuthorization("Admin") ~> server.routes ~> check {
         status shouldEqual StatusCodes.NOT_FOUND
-        responseAs[String].toLowerCase should include ("not found")
+        responseAs[String].toLowerCase should include("not found")
       }
       Post("/instances/42/delete") ~> addAuthorization("Admin") ~> server.routes ~> check {
         status shouldEqual StatusCodes.NOT_FOUND
-        responseAs[String].toLowerCase should include ("not found")
+        responseAs[String].toLowerCase should include("not found")
       }
-     /* Post("/assignInstance?Id=42&AssignedInstanceId=43") ~> addAuthorization("Admin") ~> server.routes ~> check {
-        status shouldEqual StatusCodes.NOT_FOUND
-        responseAs[String].toLowerCase should include ("not found")
-      }*/
 
+      Post("/instances/42/assignInstance", HttpEntity(ContentTypes.`application/json`, """{ "AssignedInstanceId": 43}""")) ~> addAuthorization("Admin") ~> server.routes ~> check {
+        status shouldEqual StatusCodes.NOT_FOUND
+        responseAs[String].toLowerCase should include("not found")
+      }
     }
 
     "fail to execute docker operations if instance is no docker container" in {
@@ -758,20 +763,21 @@ class ServerTest
 
     "Requests" should {
       "throttle when limit reached" in {
-        for(i <- 1 to configuration.maxIndividualIpReq){
-          Get(s"/instances/0/linksTo")~> server.routes ~> check {}
+        for (i <- 1 to configuration.maxIndividualIpReq) {
+          Get(s"/instances/0/linksTo") ~> server.routes ~> check {}
         }
 
         Get(s"/instances/0/linksTo") ~> server.routes ~> check {
           status shouldEqual StatusCodes.BAD_REQUEST
-          responseAs[String].toLowerCase should include ("request limit exceeded")
+          responseAs[String].toLowerCase should include("request limit exceeded")
         }
       }
     }
   }
+
   private def assertValidRegister(compType: ComponentType,
                                   dockerId: Option[String] = Some("randomId"),
-                                  labels: List[String] = List("some_label")) : Long = {
+                                  labels: List[String] = List("some_label")): Long = {
 
     val instanceString = Instance(id = None, host = "http://localhost", portNumber = 4242,
       name = "ValidInstance", componentType = compType, dockerId = dockerId,
@@ -799,7 +805,7 @@ class ServerTest
     }
   }
 
-  private def generateValidTestToken(userType: String) : String = {
+  private def generateValidTestToken(userType: String): String = {
     val claim = JwtClaim()
       .issuedNow
       .expiresIn(5)
@@ -810,6 +816,6 @@ class ServerTest
     Jwt.encode(claim, configuration.jwtSecretKey, JwtAlgorithm.HS256)
   }
 
-  private def addAuthorization(userType: String) : HttpRequest => HttpRequest = addHeader(Authorization.oauth2(generateValidTestToken(userType)))
+  private def addAuthorization(userType: String): HttpRequest => HttpRequest = addHeader(Authorization.oauth2(generateValidTestToken(userType)))
 
 }

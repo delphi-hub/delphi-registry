@@ -53,7 +53,9 @@ class Server(handler: RequestHandler) extends HttpApp
         fetchInstancesOfType()
       } ~
         path("register") {
-          entity(as[String]) { jsonString => register(jsonString) }
+          entity(as[String]) {
+            jsonString => register(jsonString)
+          }
         } ~
         path("network") {
           network()
@@ -71,6 +73,9 @@ class Server(handler: RequestHandler) extends HttpApp
           } ~
             path("matchingInstance") {
               matchingInstance(Id)
+            } ~
+            path("matchingResult") {
+              entity(as[JsValue]) { json => matchInstance(Id, json.asJsObject.fields("MatchingSuccessful").asInstanceOf[Boolean], json.asJsObject.fields("SenderId").asInstanceOf[Long]) }
             } ~
             path("eventList") {
               eventList(Id)
@@ -106,16 +111,15 @@ class Server(handler: RequestHandler) extends HttpApp
               deleteContainer(Id)
             } ~
             path("assignInstance") {
-              entity(as[String]) { jsonString => assignInstance(Id, jsonString) }
+              entity(as[JsValue]) {
+                json => assignInstance(Id, json.asJsObject.fields("AssignedInstanceId").toString())
+              }
             } ~
             path("label") {
               entity(as[JsValue]) { json => addLabel(Id, json.asJsObject.fields("Label").toString()) }
             }
         }
     } ~
-      path("matchingResult") {
-        matchInstance()
-      } ~
       path("command") {
         runCommandInContainer()
       } ~
@@ -337,7 +341,7 @@ class Server(handler: RequestHandler) extends HttpApp
     *
     * @return Server route that either maps to 200 OK or to the respective error codes
     */
-  def matchInstance(): server.Route = parameters('CallerId.as[Long], 'MatchedInstanceId.as[Long], 'MatchingSuccessful.as[Boolean]) { (callerId, matchedInstanceId, matchingResult) =>
+  def matchInstance(callerId: Long, matchingResult: Boolean, matchedInstanceId: Long): server.Route = {
     authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Component)) { token =>
       post {
         log.debug(s"POST /matchingResult?callerId=$callerId&matchedInstanceId=$matchedInstanceId&MatchingSuccessful=$matchingResult has been called")
@@ -728,52 +732,40 @@ class Server(handler: RequestHandler) extends HttpApp
     *
     * @return Server route that either maps to 202 ACCEPTED or the respective error codes
     */
-  def assignInstance(id: Long, assignedInstanceId: String): server.Route = {
+  def assignInstance(id: Long, assignedInstanceIdStr: String): server.Route = {
     authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
 
-      try {
-        val assignedInstanceIdLng: Long = assignedInstanceId.parseJson.convertTo[Long]
 
-        post {
-          log.debug(s"POST /instances/$id/assignInstance has been called with parameter : $assignedInstanceId ")
+      val assignedInstanceId: Long = assignedInstanceIdStr.toLong
 
-          handler.handleInstanceAssignment(id, assignedInstanceIdLng) match {
-            case handler.OperationResult.IdUnknown =>
-              log.warning(s"Cannot assign $assignedInstanceId to $id, one or more ids not found.")
-              complete {
-                HttpResponse(StatusCodes.NotFound, entity = s"Cannot assign instance, at least one of the ids $id / $assignedInstanceId was not found.")
-              }
-            case handler.OperationResult.NoDockerContainer =>
-              log.warning(s"Cannot assign $assignedInstanceId to $id, $id is no docker container.")
-              complete {
-                HttpResponse(StatusCodes.BadRequest, entity = s"Cannot assign instance, $id is no docker container.")
-              }
-            case handler.OperationResult.InvalidTypeForOperation =>
-              log.warning(s"Cannot assign $assignedInstanceId to $id, incompatible types.")
-              complete {
-                HttpResponse(StatusCodes.BadRequest, entity = s"Cannot assign $assignedInstanceId to $id, incompatible types.")
-              }
-            case handler.OperationResult.Ok =>
-              complete {
-                HttpResponse(StatusCodes.Accepted, entity = "Operation accepted.")
-              }
-            case x =>
-              complete {
-                HttpResponse(StatusCodes.InternalServerError, entity = s"Unexpected operation result $x")
-              }
-          }
+      post {
+        log.debug(s"POST /instances/$id/assignInstance has been called with parameter : $assignedInstanceId ")
+
+        handler.handleInstanceAssignment(id, assignedInstanceId) match {
+          case handler.OperationResult.IdUnknown =>
+            log.warning(s"Cannot assign $assignedInstanceId to $id, one or more ids not found.")
+            complete {
+              HttpResponse(StatusCodes.NotFound, entity = s"Cannot assign instance, at least one of the ids $id / $assignedInstanceId was not found.")
+            }
+          case handler.OperationResult.NoDockerContainer =>
+            log.warning(s"Cannot assign $assignedInstanceId to $id, $id is no docker container.")
+            complete {
+              HttpResponse(StatusCodes.BadRequest, entity = s"Cannot assign instance, $id is no docker container.")
+            }
+          case handler.OperationResult.InvalidTypeForOperation =>
+            log.warning(s"Cannot assign $assignedInstanceId to $id, incompatible types.")
+            complete {
+              HttpResponse(StatusCodes.BadRequest, entity = s"Cannot assign $assignedInstanceId to $id, incompatible types.")
+            }
+          case handler.OperationResult.Ok =>
+            complete {
+              HttpResponse(StatusCodes.Accepted, entity = "Operation accepted.")
+            }
+          case x =>
+            complete {
+              HttpResponse(StatusCodes.InternalServerError, entity = s"Unexpected operation result $x")
+            }
         }
-      }
-      catch {
-        case dx: DeserializationException =>
-          log.error(dx, "Deserialization exception")
-          complete(HttpResponse(StatusCodes.BadRequest, entity = s"Could not deserialize parameter instance with message ${dx.getMessage}."))
-        case px: ParsingException =>
-          log.error(px, "Failed to parse JSON while assigning instance")
-          complete(HttpResponse(StatusCodes.BadRequest, entity = s"Failed to parse JSON entity with message ${px.getMessage}"))
-        case x: Exception =>
-          log.error(x, "Uncaught exception while deserializing.")
-          complete(HttpResponse(StatusCodes.InternalServerError, entity = "An internal server error occurred."))
       }
     }
   }
@@ -857,26 +849,25 @@ class Server(handler: RequestHandler) extends HttpApp
   def addLabel(id: Long, label: String): server.Route = {
     authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
 
-
-        post {
-          log.debug(s"POST /instances/$id/label with parameter label=$label has been called.")
-          handler.handleAddLabel(id, label) match {
-            case handler.OperationResult.IdUnknown =>
-              log.warning(s"Cannot add label $label to $id, id not found.")
-              complete {
-                HttpResponse(StatusCodes.NotFound, entity = s"Cannot add label, id $id not found.")
-              }
-            case handler.OperationResult.InternalError =>
-              log.warning(s"Error while adding label $label to $id: Label exceeds character limit.")
-              complete {
-                HttpResponse(StatusCodes.BadRequest,
-                  entity = s"Cannot add label to $id, label exceeds character limit of ${Registry.configuration.maxLabelLength}")
-              }
-            case handler.OperationResult.Ok =>
-              log.info(s"Successfully added label $label to instance with id $id.")
-              complete("Successfully added label")
-          }
+      post {
+        log.debug(s"POST /instances/$id/label with parameter label=$label has been called.")
+        handler.handleAddLabel(id, label) match {
+          case handler.OperationResult.IdUnknown =>
+            log.warning(s"Cannot add label $label to $id, id not found.")
+            complete {
+              HttpResponse(StatusCodes.NotFound, entity = s"Cannot add label, id $id not found.")
+            }
+          case handler.OperationResult.InternalError =>
+            log.warning(s"Error while adding label $label to $id: Label exceeds character limit.")
+            complete {
+              HttpResponse(StatusCodes.BadRequest,
+                entity = s"Cannot add label to $id, label exceeds character limit of ${Registry.configuration.maxLabelLength}")
+            }
+          case handler.OperationResult.Ok =>
+            log.info(s"Successfully added label $label to instance with id $id.")
+            complete("Successfully added label")
         }
+      }
     }
   }
 
