@@ -168,6 +168,20 @@ class ServerTest
         }
 
       }
+
+      //Valid get instances with no parameter
+      Get("/instances") ~> addAuthorization("User") ~> server.routes ~> check {
+        assert(status === StatusCodes.OK)
+        Try(responseAs[String].parseJson.convertTo[List[Instance]](listFormat(instanceFormat))) match {
+          case Success(listOfESInstances) =>
+            listOfESInstances.size shouldEqual 1
+            listOfESInstances.exists(instance => instance.name.equals("Default ElasticSearch Instance")) shouldBe true
+          case Failure(ex) =>
+            fail(ex)
+        }
+
+      }
+
       //No instances of that type present, still need to be 200 OK
       Get("/instances?ComponentType=WebApp") ~> addAuthorization("User") ~> server.routes ~> check {
         assert(status === StatusCodes.OK)

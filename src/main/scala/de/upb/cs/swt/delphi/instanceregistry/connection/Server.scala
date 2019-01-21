@@ -208,18 +208,27 @@ class Server(handler: RequestHandler) extends HttpApp
     *
     * @return Server route that either maps to a 200 OK response containing the list of instances, or the resp. error codes.
     */
-  def fetchInstancesOfType(): server.Route = parameters('ComponentType.as[String]) { compTypeString =>
+  def fetchInstancesOfType(): server.Route = parameters('ComponentType.as[String].?) { compTypeString =>
     authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.User)) { token =>
       get {
         log.debug(s"GET /instances?ComponentType=$compTypeString has been called")
 
-        val compType: ComponentType = ComponentType.values.find(v => v.toString == compTypeString).orNull
+        val noValue = "<novalue>"
+
+        val compTypeStr = compTypeString.getOrElse(noValue)
+
+        val compType: ComponentType = ComponentType.values.find(v => v.toString == compTypeStr).orNull
 
         if (compType != null) {
           complete {
             handler.getAllInstancesOfType(compType)
           }
-        } else {
+        } else if (compTypeStr == noValue) {
+          complete {
+            handler.getAllInstancesType().toList
+          }
+        }
+        else {
           log.error(s"Failed to deserialize parameter string $compTypeString to ComponentType.")
           complete(HttpResponse(StatusCodes.BadRequest, entity = s"Could not deserialize parameter string $compTypeString to ComponentType"))
         }
@@ -916,7 +925,7 @@ class Server(handler: RequestHandler) extends HttpApp
   }
 
   def retrieveLogs(): server.Route = parameters('Id.as[Long], 'StdErr.as[Boolean].?) { (id, stdErrOption) =>
-    authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Admin)){ token =>
+    authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
       get {
         log.debug(s"GET /logs?Id=$id has been called")
 
@@ -925,16 +934,26 @@ class Server(handler: RequestHandler) extends HttpApp
         handler.handleGetLogs(id, stdErrSelected) match {
           case (handler.OperationResult.IdUnknown, _) =>
             log.warning(s"Cannot get logs, id $id not found.")
-            complete{HttpResponse(StatusCodes.NotFound, entity = s"Cannot get logs, id $id not found.")}
+            complete {
+              HttpResponse(StatusCodes.NotFound, entity = s"Cannot get logs, id $id not found.")
+            }
           case (handler.OperationResult.NoDockerContainer, _) =>
             log.warning(s"Cannot get logs, id $id is no docker container.")
-            complete{HttpResponse(StatusCodes.BadRequest,entity = s"Cannot get logs, id $id is no docker container.")}
+            complete {
+              HttpResponse(StatusCodes.BadRequest, entity = s"Cannot get logs, id $id is no docker container.")
+            }
           case (handler.OperationResult.Ok, Some(logString)) =>
-            complete{logString}
+            complete {
+              logString
+            }
           case (handler.OperationResult.InternalError, _) =>
-            complete{HttpResponse(StatusCodes.InternalServerError, entity = s"Internal server error")}
+            complete {
+              HttpResponse(StatusCodes.InternalServerError, entity = s"Internal server error")
+            }
           case _ =>
-            complete{HttpResponse(StatusCodes.InternalServerError, entity = s"Internal server error")}
+            complete {
+              HttpResponse(StatusCodes.InternalServerError, entity = s"Internal server error")
+            }
         }
       }
     }
@@ -947,16 +966,20 @@ class Server(handler: RequestHandler) extends HttpApp
 
     handler.handleStreamLogs(id, stdErrSelected) match {
       case (handler.OperationResult.IdUnknown, _) =>
-        complete{HttpResponse(StatusCodes.NotFound, entity = s"Cannot stream logs, id $id not found.")}
+        complete {
+          HttpResponse(StatusCodes.NotFound, entity = s"Cannot stream logs, id $id not found.")
+        }
       case (handler.OperationResult.NoDockerContainer, _) =>
-        complete{HttpResponse(StatusCodes.BadRequest, entity = s"Cannot stream logs, id $id is no docker container.")}
+        complete {
+          HttpResponse(StatusCodes.BadRequest, entity = s"Cannot stream logs, id $id is no docker container.")
+        }
       case (handler.OperationResult.Ok, Some(publisher)) =>
         handleWebSocketMessages {
           Flow[Message]
             .via(
               Flow.fromSinkAndSource(Sink.ignore, Source.fromPublisher(publisher))
             )
-            .watchTermination() {(_, done) =>
+            .watchTermination() { (_, done) =>
               done.onComplete {
                 case Success(_) =>
                   log.info("Log stream route completed successfully")
@@ -966,9 +989,13 @@ class Server(handler: RequestHandler) extends HttpApp
             }
         }
       case (handler.OperationResult.InternalError, _) =>
-        complete{HttpResponse(StatusCodes.InternalServerError, entity = s"Internal server error")}
+        complete {
+          HttpResponse(StatusCodes.InternalServerError, entity = s"Internal server error")
+        }
       case _ =>
-        complete{HttpResponse(StatusCodes.InternalServerError, entity = s"Internal server error")}
+        complete {
+          HttpResponse(StatusCodes.InternalServerError, entity = s"Internal server error")
+        }
     }
 
   }
