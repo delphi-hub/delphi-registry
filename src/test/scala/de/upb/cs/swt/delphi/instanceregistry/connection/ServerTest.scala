@@ -166,7 +166,6 @@ class ServerTest
           case Failure(ex) =>
             fail(ex)
         }
-
       }
 
       //Valid get instances with no parameter
@@ -179,7 +178,6 @@ class ServerTest
           case Failure(ex) =>
             fail(ex)
         }
-
       }
 
       //No instances of that type present, still need to be 200 OK
@@ -198,6 +196,11 @@ class ServerTest
 
       //Wrong parameter value
       Get("/instances?ComponentType=Car") ~> addAuthorization("User") ~> server.routes ~> check {
+        assert(status === StatusCodes.BAD_REQUEST)
+        responseAs[String].toLowerCase should include("could not deserialize parameter")
+      }
+      //Missing parameter value
+      Get("/instances?ComponentType=") ~> addAuthorization("User") ~> server.routes ~> check {
         assert(status === StatusCodes.BAD_REQUEST)
         responseAs[String].toLowerCase should include("could not deserialize parameter")
       }
@@ -262,6 +265,11 @@ class ServerTest
       Get("/instances/count?ComponentType=Car") ~> addAuthorization("User") ~> server.routes ~> check {
         assert(status === StatusCodes.BAD_REQUEST)
         responseAs[String].toLowerCase should include("could not deserialize parameter")
+      }
+      //Missing Parameter value
+      Get("/instances/count?ComponentType=") ~> addAuthorization("User") ~> Route.seal(server.routes) ~> check {
+        assert(status === StatusCodes.BAD_REQUEST)
+        responseAs[String].toLowerCase should include("could not deserialize parameter string")
       }
 
       //Wrong user type
