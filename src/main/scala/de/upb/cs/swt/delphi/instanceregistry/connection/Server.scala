@@ -116,15 +116,21 @@ class Server(handler: RequestHandler) extends HttpApp
             } ~
             path("label") {
               entity(as[JsValue]) { json => addLabel(Id, json.asJsObject) }
+            } ~
+            path("logs") {
+              retrieveLogs(Id)
+            } ~
+            path("attach") {
+              streamLogs(Id)
+            } ~
+            path("command") {
+              entity(as[JsValue]) { json => runCommandInContainer(Id, json.asJsObject) }
             }
         }
     } ~
-      path("command") {
-        runCommandInContainer()
-      } ~
-      path("events") {
-        streamEvents()
-      }
+    path("events") {
+      streamEvents()
+    }
 
 
   /**
@@ -916,38 +922,52 @@ class Server(handler: RequestHandler) extends HttpApp
     *
     * @return Server route that either maps to 200 Ok or the respective error codes.
     */
-  def runCommandInContainer(): server.Route = parameters('Id.as[Long], 'Command.as[String],
-    'AttachStdin.as[Boolean].?, 'AttachStdout.as[Boolean].?,
-    'AttachStderr.as[Boolean].?, 'DetachKeys.as[String].?, 'Privileged.as[Boolean].?, 'Tty.as[Boolean].?, 'User.as[String].?
-  ) { (id, command, attachStdin, attachStdout, attachStderr, detachKeys, privileged, tty, user) =>
+  def runCommandInContainer(id:Long, json: JsObject): server.Route = {
     authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
       post {
         log.debug(s"POST /command has been called")
-        handler.handleCommand(id, command, attachStdin, attachStdout, attachStderr, detachKeys, privileged, tty, user) match {
-          case handler.OperationResult.IdUnknown =>
-            log.warning(s"Cannot run command $command to $id, id not found.")
-            complete {
-              HttpResponse(StatusCodes.NotFound, entity = s"Cannot run command, id $id not found.")
+
+        val privileged = Try(json.fields("Privileged").toString.toBoolean) match {
+          case Success(res) => Some(res)
+          case Failure(_) => None
+        }
+
+        val user = Try(json.fields("User").toString) match {
+          case Success(res) => Some(res)
+          case Failure(_) => None
+        }
+
+        Try(json.fields("Command").toString) match {
+          case Success(command) =>
+            handler.handleCommand(id, command, None, None, None, None, privileged, None, user) match {
+              case handler.OperationResult.IdUnknown =>
+                log.warning(s"Cannot run command $command to $id, id not found.")
+                complete {
+                  HttpResponse(StatusCodes.NotFound, entity = s"Cannot run command, id $id not found.")
+                }
+              case handler.OperationResult.NoDockerContainer =>
+                log.warning(s"Cannot run command $command to $id, $id is no docker container.")
+                complete {
+                  HttpResponse(StatusCodes.BadRequest, entity = s"Cannot run command, $id is no docker container.")
+                }
+              case handler.OperationResult.Ok =>
+                complete {
+                  HttpResponse(StatusCodes.OK)
+                }
+              case r =>
+                complete {
+                  HttpResponse(StatusCodes.InternalServerError, entity = s"Internal server error, unknown operation result $r")
+                }
             }
-          case handler.OperationResult.NoDockerContainer =>
-            log.warning(s"Cannot run command $command to $id, $id is no docker container.")
-            complete {
-              HttpResponse(StatusCodes.BadRequest, entity = s"Cannot run command, $id is no docker container.")
-            }
-          case handler.OperationResult.Ok =>
-            complete {
-              HttpResponse(StatusCodes.OK)
-            }
-          case r =>
-            complete {
-              HttpResponse(StatusCodes.InternalServerError, entity = s"Internal server error, unknown operation result $r")
-            }
+          case Failure(ex) =>
+            log.warning(s"Failed to unmarshal parameters with message ${ex.getMessage}. Data: $json")
+            complete{HttpResponse(StatusCodes.BadRequest, entity = "Wrong data format supplied.")}
         }
       }
     }
   }
 
-  def retrieveLogs(): server.Route = parameters('Id.as[Long], 'StdErr.as[Boolean].?) { (id, stdErrOption) =>
+  def retrieveLogs(id: Long): server.Route = parameters('StdErr.as[Boolean].?) { stdErrOption =>
     authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
       get {
         log.debug(s"GET /logs?Id=$id has been called")
@@ -982,7 +1002,7 @@ class Server(handler: RequestHandler) extends HttpApp
     }
   }
 
-  def streamLogs(): server.Route = parameters('Id.as[Long], 'StdErr.as[Boolean].?) { (id, stdErrOption) =>
+  def streamLogs(id: Long): server.Route = parameters('StdErr.as[Boolean].?) { stdErrOption =>
 
 
     val stdErrSelected = stdErrOption.isDefined && stdErrOption.get

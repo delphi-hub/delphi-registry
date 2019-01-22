@@ -347,7 +347,7 @@ paths:
       tags:
         - Basic Operations
       consumes:
-        - text/plain
+        - application/json
       summary: Add a label to the instance with the specified id
       description: >-
         This command will add the specified label to the instance with the
@@ -374,6 +374,65 @@ paths:
           description: 'Bad request, your label exceeded the character limit'
         '404':
           description: 'Not found, the id you specified could not be found'
+  /instances/{Id}/logs:
+    get:
+      tags:
+        - Basic Operations
+      summary: Retrieve the logging output of the specified instance
+      description: This command retrieves the docker container logging output for the specified instance, if the instance is in fact running inside a docker container.
+      operationId: retreiveLogs
+      parameters:
+        - name: Id
+          in: path
+          description: Id of the instance
+          required: true
+          type: integer
+          format: int64
+        - name: StdErr
+          in: query
+          description: Switch to select the stderr channel
+          required: false
+          type: boolean
+      responses:
+        '200':
+          description: Success, log string is being returned
+          schema:
+            type: string
+            example: "I am logging output .."
+        '400':
+          description: Selected instance not running inside docker container
+        '404':
+          description: Id not found on the server
+        '500':
+          description: Internal Server Error
+  /instances/{Id}/attach:
+    get:
+      tags:
+        - Basic Operations
+      summary: Stream logging output from instance
+      description: 'This command streams the docker container logging output for the specified instance. NOTE: This is a websocket endpoint, so only valid websocket requests will be processed. Swagger does not provide sufficient support for websockets, so this documentation might be confusing as it defines a HTTP method, etc. The names of parameters and response-codes are valid though.'
+      operationId: streamLogs
+      parameters:
+        - name: Id
+          in: path
+          description: Id of the instance
+          required: true
+          type: integer
+          format: int64
+        - name: StdErr
+          in: query
+          description: Switch to select the stderr channel
+          required: false
+          type: boolean
+      responses:
+        '200':
+          description: Success, logs are being streamed via websocket connection.
+        '400':
+          description: Selected instance not running inside docker container
+        '404':
+          description: Id not found on the server
+        '500':
+          description: Internal Server Error
   /instances/deploy:
     post:
       tags:
@@ -688,6 +747,49 @@ paths:
           description: One of the ids was not found on the server
         '500':
           description: Internal server error
+  /instances/{Id}/command:
+    post:
+      tags:
+        - Docker Operations
+      summary: Runs a command into a docker container
+      description: >-
+        This command runs a specified command inside a docker container.
+      operationId: command
+      parameters:
+        - in: path
+          name: Id
+          description: The ID of the instance that is a docker container
+          required: true
+          type: integer
+          format: int64
+        - in: body
+          name: CommandData
+          description: The data needed to run the command
+          required: true
+          schema:
+            type: object
+            required:
+              - Command
+            properties:
+              Command:
+                type: string
+                example: "rm -rf *"
+              Privileged:
+                type: boolean
+              User:
+                type: string
+                example: root
+      responses:
+        '200':
+          description: 'OK'
+        '400':
+          description: >-
+            Cannot run command, ID is no docker container.
+        '404':
+          description: Cannot run command, ID not found.
+        '500':
+          description: Internal server error, unknown operation result DESCRIPTION
+  
 definitions:
   InstanceLink:
     type: object
