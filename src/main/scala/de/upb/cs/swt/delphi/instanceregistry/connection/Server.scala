@@ -58,7 +58,7 @@ class Server(handler: RequestHandler) extends HttpApp
           network()
         } ~
         path("deploy") {
-          deployContainer()
+          entity(as[JsValue]) { json => deployContainer(json.asJsObject)}
         } ~
         path("count") {
           numberOfInstances()
@@ -419,36 +419,42 @@ class Server(handler: RequestHandler) extends HttpApp
     *
     * @return Server route that either maps to 202 ACCEPTED and the generated id of the instance, or the resp. error codes.
     */
-  def deployContainer(): server.Route = parameters('ComponentType.as[String], 'InstanceName.as[String].?) { (compTypeString, name) =>
+  def deployContainer(json: JsObject): server.Route = {
     authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
       post {
-        if (name.isEmpty) {
-          log.debug(s"POST /instances/deploy?ComponentType=$compTypeString has been called")
-        } else {
-          log.debug(s"POST /instances/deploy?ComponentType=$compTypeString&name=${name.get} has been called")
-        }
-        val compType: ComponentType = ComponentType.values.find(v => v.toString == compTypeString).orNull
 
-        if (compType != null) {
-          log.info(s"Trying to deploy container of type $compType" + (if (name.isDefined) {
-            s" with name ${name.get}..."
-          } else {
-            "..."
-          }))
-          handler.handleDeploy(compType, name) match {
-            case Success(id) =>
-              complete {
-                HttpResponse(StatusCodes.Accepted, entity = id.toString)
-              }
-            case Failure(x) =>
-              complete {
-                HttpResponse(StatusCodes.InternalServerError, entity = s"Internal server error. Message: ${x.getMessage}")
-              }
-          }
+        log.debug(s"POST /instances/deploy has been called with data: $json")
 
-        } else {
-          log.error(s"Failed to deserialize parameter string $compTypeString to ComponentType.")
-          complete(HttpResponse(StatusCodes.BadRequest, entity = s"Could not deserialize parameter string $compTypeString to ComponentType"))
+        val name = Try(json.fields("InstanceName").toString.replace("\"", "")).toOption
+
+        Try(json.fields("ComponentType").toString.replace("\"", "")) match {
+          case Success(compTypeString) =>
+            val compType: ComponentType = ComponentType.values.find(v => v.toString == compTypeString).orNull
+
+            if (compType != null) {
+              log.info(s"Trying to deploy container of type $compType" + (if (name.isDefined) {
+                s" with name ${name.get}..."
+              } else {
+                "..."
+              }))
+              handler.handleDeploy(compType, name) match {
+                case Success(id) =>
+                  complete {
+                    HttpResponse(StatusCodes.Accepted, entity = id.toString)
+                  }
+                case Failure(x) =>
+                  complete {
+                    HttpResponse(StatusCodes.InternalServerError, entity = s"Internal server error. Message: ${x.getMessage}")
+                  }
+              }
+
+            } else {
+              log.error(s"Failed to deserialize parameter string $compTypeString to ComponentType.")
+              complete(HttpResponse(StatusCodes.BadRequest, entity = s"Could not deserialize parameter string $compTypeString to ComponentType"))
+            }
+          case Failure(ex) =>
+            log.warning(s"Failed to unmarshal parameters with message ${ex.getMessage}. Data: $json")
+            complete{HttpResponse(StatusCodes.BadRequest, entity = "Wrong data format supplied.")}
         }
       }
     }
@@ -890,7 +896,7 @@ class Server(handler: RequestHandler) extends HttpApp
       post {
         log.debug(s"POST /instances/$id/label has been called with data $json.")
 
-        Try[String](json.fields("Label").toString) match {
+        Try[String](json.fields("Label").toString.replace("\"", "")) match {
           case Success(label) =>
             handler.handleAddLabel(id, label) match {
               case handler.OperationResult.IdUnknown =>
@@ -932,12 +938,12 @@ class Server(handler: RequestHandler) extends HttpApp
           case Failure(_) => None
         }
 
-        val user = Try(json.fields("User").toString) match {
+        val user = Try(json.fields("User").toString.replace("\"", "")) match {
           case Success(res) => Some(res)
           case Failure(_) => None
         }
 
-        Try(json.fields("Command").toString) match {
+        Try(json.fields("Command").toString.replace("\"", "")) match {
           case Success(command) =>
             handler.handleCommand(id, command, None, None, None, None, privileged, None, user) match {
               case handler.OperationResult.IdUnknown =>
