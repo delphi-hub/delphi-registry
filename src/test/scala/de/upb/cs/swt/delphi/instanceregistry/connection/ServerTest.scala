@@ -651,18 +651,18 @@ class ServerTest
     /** Minimal tests for docker operations **/
 
     "fail to deploy if component type is invalid" in {
-      Post("/instances/deploy?ComponentType=Car") ~> addAuthorization("Admin") ~> server.routes ~> check {
+      Post("/instances/deploy", HttpEntity(ContentTypes.`application/json`, """{"ComponentType": "Car"}""")) ~> addAuthorization("Admin") ~> server.routes ~> check {
         status shouldEqual StatusCodes.BAD_REQUEST
         responseAs[String].toLowerCase should include("could not deserialize")
       }
 
       //Wrong user type
-      Post("/instances/deploy?ComponentType=Crawler") ~> addAuthorization("User") ~> server.routes ~> check {
+      Post("/instances/deploy", HttpEntity(ContentTypes.`application/json`, """{"ComponentType": "Crawler"}""")) ~> addAuthorization("User") ~> server.routes ~> check {
         rejection.isInstanceOf[AuthenticationFailedRejection] shouldBe true
       }
 
       //No authorization
-      Post("/instances/deploy?ComponentType=Crawler") ~> server.routes ~> check {
+      Post("/instances/deploy", HttpEntity(ContentTypes.`application/json`, """{"ComponentType": "Crawler"}""")) ~> server.routes ~> check {
         rejection.isInstanceOf[AuthenticationFailedRejection] shouldBe true
       }
     }
