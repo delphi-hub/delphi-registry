@@ -17,7 +17,7 @@ import spray.json.JsonParser.ParsingException
 import spray.json._
 
 import scala.concurrent.ExecutionContext
-import scala.util.{Failure, Success}
+import scala.util.{Failure, Success, Try}
 
 /**
   * Web server configuration for Instance Registry API.
@@ -73,7 +73,7 @@ class Server(handler: RequestHandler) extends HttpApp
             } ~
             path("matchingResult") {
               entity(as[JsValue]) {
-                json => matchInstance(Id, json.asJsObject.fields("MatchingSuccessful").toString(), json.asJsObject.fields("SenderId").toString())
+                json => matchInstance(Id, json.asJsObject)
               }
             } ~
             path("eventList") {
@@ -349,25 +349,36 @@ class Server(handler: RequestHandler) extends HttpApp
     *
     * @return Server route that either maps to 200 OK or to the respective error codes
     */
-  def matchInstance(callerId: Long, matchingResultStr: String, matchedInstanceIdStr: String): server.Route = {
+  def matchInstance(affectedInstanceId: Long, json: JsObject): server.Route = {
     authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Component)) { token =>
 
-      val matchingResult: Boolean = matchingResultStr.toBoolean
-      val matchedInstanceId: Long = matchedInstanceIdStr.toLong
       post {
-        log.debug(s"POST /instances/$callerId/matchingResult has been called with parameters : matchedInstanceId=$matchedInstanceId&MatchingSuccessful=$matchingResult")
+        log.debug(s"POST /instances/$affectedInstanceId/matchingResult has been called with entity $json")
 
-        handler.handleMatchingResult(callerId, matchedInstanceId, matchingResult) match {
-          case handler.OperationResult.IdUnknown =>
-            log.warning(s"Cannot apply matching result for id $callerId to id $matchedInstanceId, at least one id could not be found")
-            complete {
-              HttpResponse(StatusCodes.NotFound, entity = s"One of the ids $callerId and $matchedInstanceId was not found.")
+        Try[(Boolean, Long)] {
+          val callerId = json.fields("SenderId").toString.toLong
+          val result = json.fields("MatchingSuccessful").toString.toBoolean
+          (result, callerId)
+        } match {
+          case Success((result, callerId)) =>
+
+            handler.handleMatchingResult(callerId, affectedInstanceId, result) match {
+              case handler.OperationResult.IdUnknown =>
+                log.warning(s"Cannot apply matching result for id $callerId to id $affectedInstanceId, at least one id could not be found")
+                complete {
+                  HttpResponse(StatusCodes.NotFound, entity = s"One of the ids $callerId and $affectedInstanceId was not found.")
+                }
+              case handler.OperationResult.Ok =>
+                complete {
+                  s"Matching result $result processed."
+                }
             }
-          case handler.OperationResult.Ok =>
-            complete {
-              s"Matching result $matchingResult processed."
-            }
+
+          case Failure(ex) =>
+            log.warning(s"Failed to unmarshal parameters with message ${ex.getMessage}. Data: $json")
+            complete{HttpResponse(StatusCodes.BadRequest, entity = "Wrong data format supplied.")}
         }
+
       }
     }
   }
