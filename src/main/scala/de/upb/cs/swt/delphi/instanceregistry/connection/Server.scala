@@ -58,16 +58,18 @@ class Server(handler: RequestHandler) extends HttpApp
           network()
         } ~
         path("deploy") {
-          entity(as[JsValue]) { json => deployContainer(json.asJsObject)}
+          entity(as[JsValue]) { json => deployContainer(json.asJsObject) }
         } ~
         path("count") {
           numberOfInstances()
         } ~
-        path(LongNumber) { Id => retrieveInstance(Id) } ~
         pathPrefix(LongNumber) { Id =>
-          path("deregister") {
-            deregister(Id)
+          pathEnd {
+            retrieveInstance(Id)
           } ~
+            path("deregister") {
+              deregister(Id)
+            } ~
             path("matchingInstance") {
               matchingInstance(Id)
             } ~
@@ -128,9 +130,9 @@ class Server(handler: RequestHandler) extends HttpApp
             }
         }
     } ~
-    path("events") {
-      streamEvents()
-    }
+      path("events") {
+        streamEvents()
+      }
 
 
   /**
@@ -382,7 +384,9 @@ class Server(handler: RequestHandler) extends HttpApp
 
           case Failure(ex) =>
             log.warning(s"Failed to unmarshal parameters with message ${ex.getMessage}. Data: $json")
-            complete{HttpResponse(StatusCodes.BadRequest, entity = "Wrong data format supplied.")}
+            complete {
+              HttpResponse(StatusCodes.BadRequest, entity = "Wrong data format supplied.")
+            }
         }
 
       }
@@ -454,7 +458,9 @@ class Server(handler: RequestHandler) extends HttpApp
             }
           case Failure(ex) =>
             log.warning(s"Failed to unmarshal parameters with message ${ex.getMessage}. Data: $json")
-            complete{HttpResponse(StatusCodes.BadRequest, entity = "Wrong data format supplied.")}
+            complete {
+              HttpResponse(StatusCodes.BadRequest, entity = "Wrong data format supplied.")
+            }
         }
       }
     }
@@ -808,7 +814,9 @@ class Server(handler: RequestHandler) extends HttpApp
             }
           case Failure(ex) =>
             log.warning(s"Failed to unmarshal parameters with message ${ex.getMessage}. Data: $json")
-            complete{HttpResponse(StatusCodes.BadRequest, entity = "Wrong data format supplied.")}
+            complete {
+              HttpResponse(StatusCodes.BadRequest, entity = "Wrong data format supplied.")
+            }
         }
       }
     }
@@ -916,7 +924,9 @@ class Server(handler: RequestHandler) extends HttpApp
             }
           case Failure(ex) =>
             log.warning(s"Failed to unmarshal parameters with message ${ex.getMessage}. Data: $json")
-            complete{HttpResponse(StatusCodes.BadRequest, entity = "Wrong data format supplied.")}
+            complete {
+              HttpResponse(StatusCodes.BadRequest, entity = "Wrong data format supplied.")
+            }
         }
       }
     }
@@ -928,7 +938,7 @@ class Server(handler: RequestHandler) extends HttpApp
     *
     * @return Server route that either maps to 200 Ok or the respective error codes.
     */
-  def runCommandInContainer(id:Long, json: JsObject): server.Route = {
+  def runCommandInContainer(id: Long, json: JsObject): server.Route = {
     authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
       post {
         log.debug(s"POST /command has been called")
@@ -967,7 +977,9 @@ class Server(handler: RequestHandler) extends HttpApp
             }
           case Failure(ex) =>
             log.warning(s"Failed to unmarshal parameters with message ${ex.getMessage}. Data: $json")
-            complete{HttpResponse(StatusCodes.BadRequest, entity = "Wrong data format supplied.")}
+            complete {
+              HttpResponse(StatusCodes.BadRequest, entity = "Wrong data format supplied.")
+            }
         }
       }
     }
