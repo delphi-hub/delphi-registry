@@ -25,7 +25,7 @@ object Registry extends AppLogging {
     }
   }
 
-  private val requestHandler = new RequestHandler(configuration, dao, DockerConnection.fromEnvironment())
+  private val requestHandler = new RequestHandler(configuration, dao, DockerConnection.fromEnvironment(configuration))
 
   private val server: Server = new Server(requestHandler)
 

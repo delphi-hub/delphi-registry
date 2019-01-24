@@ -40,6 +40,78 @@ sudo bash ./Delphi_install.sh
 inside the registry's root directory. This installation script will create the required repositories, build the docker images, and register them directly at the local docker registry. 
 The registry requires an initial instance of ElasticSearch to be running.
 
+## Adapt the configuration file
+Before you can start the application, you have to make sure your configuration file contains valid data. The file can be found at *src/main/scala/de/upb/cs/swt/delphi/instanceregistry/Configuration.scala*, and most of its attributes are string or integer values. The following table describes the attributes in more detail.
+
+|Attribute | Type | Default Value |Explanation |
+| :---: | :---: | :---: | :--- |
+|```bindHost``` | ```String``` | ```"0.0.0.0"``` | Host address that the registry server should be bound to |
+|```bindPort``` | ```Int``` | ```8087``` | Port that the registry server should be reachable at |
+|```defaultCrawlerPort``` | ```Int``` | ```8882``` | Port that Delphi Crawlers are reachable at. This may only be adapted if you manually changed the default port of crawlers before registering the respective image. |
+|```defaultWebApiPort``` | ```Int``` | ```8080``` | Port that Delphi WebAPIs are reachable at. This may only be adapted if you manually changed the default port of WebAPIs before registering the respective image. |
+|```defaultWebAppPort``` | ```Int``` | ```8085``` | Port that Delphi WebApps are reachable at. This may only be adapted if you manually changed the default port of WebApps before registering the respective image. |
+|```crawlerDockerImageName``` | ```String``` | ```"delphi-crawler:1.0.0-SNAPSHOT"``` | Name of the Docker image for Delphi Crawlers. May only be changed if you manually specified a different name when creating the image.|
+|```webApiDockerImageName``` | ```String``` | ```"delphi-webapi:1.0.0-SNAPSHOT"``` | Name of the Docker image for Delphi WebAPIs. May only be changed if you manually specified a different name when creating the image.|
+|```webAppDockerImageName``` | ```String``` | ```"delphi-webapp:1.0.0-SNAPSHOT"``` | Name of the Docker image for Delphi WebApps. May only be changed if you manually specified a different name when creating the image.|
+|```defaultElasticSearchInstanceHost``` | ```String``` | ```"elasticsearch://172.17.0.1"``` | Host that the default ElasticSearch instance is located at.|
+|```defaultElasticSearchInstancePort``` | ```Int``` | ```9200``` | Port that the default ElasticSearch instance is reachable at.|
+|```uriInLocalNetwork``` | ```String``` | ```"http://172.17.0.1:8087"``` | URI that the registry is reachable at for all docker containers. In most of the use-cases this is going to be the gateway of the default docker bridge.<br>**Note:** For OSX you have to set this value to the DNS name of the docker host, which is ```http://host.docker.internal:8087``` (If the registry is running on the host).|
+|```maxLabelLength``` | ```Int``` | ```50``` | Maximum number of characters for instance labels. Longer labels will be rejected.|
+|```dockerOperationTimeout``` | ```Timeout``` | ```Timeout(20 seconds)``` | Default timeout for docker operations. If any of the async Docker operations (deploy, stop, pause, ..) takes longer than this, it will be aborted.|
+|```defaultDockerUri``` | ```String``` | ```http://localhost:9095``` | Default uri to connect to docker. It will be used if the environment variable ```DELPHI_DOCKER_HOST``` is not specified.|
+|```jwtSecretKey``` | ```String``` | ```changeme``` | Secret key to use for JWT signature (HS256). This setting can be overridden by specifying the ```JWT_SECRET``` environment variable.|
+|```useInMemoryDB``` | ```Boolean``` | ```true``` | If set to true, all instance data will be kept in memory instead of using a MySQL database.|
+|```databaseHost``` | ```String``` | ```"jdbc:mysql://localhost/"``` | Host that the MySQL database is reachable at (only necessary if *useInMemoryDB* is false).|
+|```databaseName``` | ```String``` | ```""``` | Name of the MySQL database to use (only necessary if *useInMemoryDB* is false).|
+|```databaseDriver``` | ```String``` | ```"com.mysql.jdbc.Driver"``` | Driver to use for the MySQL connection (only necessary if *useInMemoryDB* is false).|
+|```databaseUsername``` | ```String``` | ```""``` | Username to use for the MySQL connection (only necessary if *useInMemoryDB* is false).|
+|```databasePassword``` | ```String``` | ```""``` | Password to use for the MySQL connection (only necessary if *useInMemoryDB* is false).|
+|```maxTotalNoRequest``` | ```Int``` | ```2000``` | Maximum number of requests that are allowed to be executed during the current refresh period regardless of their origin.|
+|```maxIndividualIpReq``` | ```Int``` | ```200``` | Maximum number of requests that are allowed to be executed during the current refresh period for one specific origin ip.|
+|```ipLogRefreshRate``` | ```FiniteDuration``` | ```2.minutes``` | Duration of the log refresh period.|
+
+
+## Docker configuration
+By default, Docker is expected to be reachable at ```http://localhost:9095``` (see configuration attribute ```defaultDockerUri``` above), but you can override this setting by specifying the docker host URI in the environment variable *DELPHI_DOCKER_HOST*. You can also change the port that your Docker HTTP service is hosted on by executing the steps below on the Docker host machine.
+
+### Linux
+To change the port to 9095, go to the docker service file:
+
+```
+sudo nano /lib/systemd/system/docker.service
+```
+
+Change the line that starts with ```ExecStart``` to look like this:
+
+```
+ExecStart=/usr/bin/dockerd -H fd:// -H=tcp://0.0.0.0:9095
+```
+
+Save your changes, close the editor and execute
+
+```
+systemctl daemon-reload
+sudo service docker restart
+```
+
+### OSX
+Docker does not expose it's HTTP api on OSX for security reasons (as described [here](https://github.com/docker/for-mac/issues/770#issuecomment-252560286)), but you can run a docker container to redirect the API calls. To accept calls on your local machine's port 9095, execute:
+
+```
+docker run -d -v /var/run/docker.sock:/var/run/docker.sock -p 127.0.0.1:9095:1234 bobrik/socat TCP-LISTEN:1234,fork UNIX-CONNECT:/var/run/docker.sock
+```
+
+## Run the application
+There are two ways of running the registry application. You can either run the application directly, or build a docker image defined by the *build.sbt* file, and run a container based on this image. Either way, you have to set the correct configuration values before starting the application (see section **Adapt the configuration file** above for more information). Make sure the Docker images of all Delphi components are present at the host's registry, as described in the **Requirements** section.
+
+**Note:** For OSX you have to set Java's ```prefereIPv4Stack``` option to ```true``` before executing any of the steps below. In order to do so, execute ```export JAVA_OPTIONS="-Djava.net.preferIPv4Stack=true"``` in the terminal before calling ```sbt```.
+
+### Run the registry directly
+If you want to execute the registry directly on your local machine, simply go to the root folder of the repository and execute ```sbt run```. The application will stream all logging output to the terminal. You can terminate any time by pressing *RETURN*.
+### Run the registry in Docker
+For Windows users, to build a docker image containing the registry, go to the root folder of the repository and execute ```sbt docker:publishLocal```. This will build the application, create a docker image named ```delphi-registry:1.0.0-SNAPSHOT```, and register the image at your local docker registry.<br />
+For Linux users, the installation script mentioned in **Requirements** section will create docker image for registry named ```delphi-registry:1.0.0-SNAPSHOT```, and registers the image at your local docker registry.
+
 ## Authorization
 This application relies on *JSON Web Tokens* (JWTs) using the *HMAC with SHA-256* (HS256) algorithm for authorization purposes. A valid, base64-encoded token must be put into the ```Authorization``` header of every HTTP request that is being issued to the registry. The HTTP header must look like this:
 ```
@@ -70,56 +142,6 @@ Using the above token, a valid call to the registry at ```localhost:8087``` usin
 ```
 curl -X POST -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE1NDcxMDYzOTksIm5iZiI6MTU0NzEwNjM5OSwiZXhwIjoxNTU0MDE0Nzk5LCJ1c2VyX2lkIjoiRGVidWdVc2VyIiwidXNlcl90eXBlIjoiQWRtaW4ifQ.TeDa8JkFANVEufPaxXv3AXSojcaiKdOlBKeU5cLaHpg" localhost:8087/deploy?ComponentType=WebApi
 ```
-
-## Adapt the configuration file
-Before you can start the application, you have to make sure your configuration file contains valid data. The file can be found at *src/main/scala/de/upb/cs/swt/delphi/instanceregistry/Configuration.scala*, and most of its attributes are string or integer values. The following table describes the attributes in more detail.
-
-|Attribute | Type | Default Value |Explanation |
-| :---: | :---: | :---: | :--- |
-|```bindHost``` | ```String``` | ```"0.0.0.0"``` | Host address that the registry server should be bound to |
-|```bindPort``` | ```Int``` | ```8087``` | Port that the registry server should be reachable at |
-|```defaultCrawlerPort``` | ```Int``` | ```8882``` | Port that Delphi Crawlers are reachable at. This may only be adapted if you manually changed the default port of crawlers before registering the respective image. |
-|```defaultWebApiPort``` | ```Int``` | ```8080``` | Port that Delphi WebAPIs are reachable at. This may only be adapted if you manually changed the default port of WebAPIs before registering the respective image. |
-|```defaultWebAppPort``` | ```Int``` | ```8085``` | Port that Delphi WebApps are reachable at. This may only be adapted if you manually changed the default port of WebApps before registering the respective image. |
-|```crawlerDockerImageName``` | ```String``` | ```"delphi-crawler:1.0.0-SNAPSHOT"``` | Name of the Docker image for Delphi Crawlers. May only be changed if you manually specified a different name when creating the image.|
-|```webApiDockerImageName``` | ```String``` | ```"delphi-webapi:1.0.0-SNAPSHOT"``` | Name of the Docker image for Delphi WebAPIs. May only be changed if you manually specified a different name when creating the image.|
-|```webAppDockerImageName``` | ```String``` | ```"delphi-webapp:1.0.0-SNAPSHOT"``` | Name of the Docker image for Delphi WebApps. May only be changed if you manually specified a different name when creating the image.|
-|```defaultElasticSearchInstanceHost``` | ```String``` | ```"elasticsearch://172.17.0.1"``` | Host that the default ElasticSearch instance is located at.|
-|```defaultElasticSearchInstancePort``` | ```Int``` | ```9200``` | Port that the default ElasticSearch instance is reachable at.|
-|```uriInLocalNetwork``` | ```String``` | ```"http://172.17.0.1:8087"``` | URI that the registry is reachable at for all docker containers. In most of the use-cases this is going to be the gateway of the default docker bridge.|
-|```maxLabelLength``` | ```Int``` | ```50``` | Maximum number of characters for instance labels. Longer labels will be rejected.|
-|```dockerOperationTimeout``` | ```Timeout``` | ```Timeout(20 seconds)``` | Default timeout for docker operations. If any of the async Docker operations (deploy, stop, pause, ..) takes longer than this, it will be aborted.|
-|```jwtSecretKey``` | ```String``` | ```changeme``` | Secret key to use for JWT signature (HS256). This setting can be overridden by specifying the ```JWT_SECRET``` environment variable.|
-|```useInMemoryDB``` | ```Boolean``` | ```true``` | If set to true, all instance data will be kept in memory instead of using a MySQL database.|
-|```databaseHost``` | ```String``` | ```"jdbc:mysql://localhost/"``` | Host that the MySQL database is reachable at (only necessary if *useInMemoryDB* is false).|
-|```databaseName``` | ```String``` | ```""``` | Name of the MySQL database to use (only necessary if *useInMemoryDB* is false).|
-|```databaseDriver``` | ```String``` | ```"com.mysql.jdbc.Driver"``` | Driver to use for the MySQL connection (only necessary if *useInMemoryDB* is false).|
-|```databaseUsername``` | ```String``` | ```""``` | Username to use for the MySQL connection (only necessary if *useInMemoryDB* is false).|
-|```databasePassword``` | ```String``` | ```""``` | Password to use for the MySQL connection (only necessary if *useInMemoryDB* is false).|
-|```maxTotalNoRequest``` | ```Int``` | ```2000``` | Maximum number of requests that are allowed to be executed during the current refresh period regardless of their origin.|
-|```maxIndividualIpReq``` | ```Int``` | ```200``` | Maximum number of requests that are allowed to be executed during the current refresh period for one specific origin ip.|
-|```ipLogRefreshRate``` | ```FiniteDuration``` | ```2.minutes``` | Duration of the log refresh period.|
-
-By default, Docker is expected to be reachable at *http://localhost:9095*, but you can override this setting by specifying the docker host URI in the environment variable *DELPHI_DOCKER_HOST*.
-To change the port of your http docker API to 9095, execute
-```
-edit /lib/systemd/system/docker.service
-ExecStart=/usr/bin/dockerd -H fd:// -H=tcp://0.0.0.0:9095
-systemctl daemon-reload
-sudo service docker restart
-```
-
-
-
-
-
-## Run the application
-There are two ways of running the registry application. You can either run the application directly, or build a docker image defined by the *build.sbt* file, and run a container based on this image. Either way, you have to set the correct configuration values before starting the application (see section **Adapt the configuration file** above for more information). We are currently working on a setup script that will prepare all images that need to be present on your docker host. Until its finished, you have to register the images manually, as described in the **Requirements** section.
-### Run the registry directly
-If you want to execute the registry directly on your local machine, simply go to the root folder of the repository and execute ```sbt run```. The application will stream all logging output to the terminal. You can terminate any time by pressing *RETURN*.
-### Run the registry in Docker
-For Windows users, to build a docker image containing the registry, go to the root folder of the repository and execute ```sbt docker:publishLocal```. This will build the application, create a docker image named ```delphi-registry:1.0.0-SNAPSHOT```, and register the image at your local docker registry.<br />
-For Linux users, the installation script mentioned in **Requirements** section will create docker image for registry named ```delphi-registry:1.0.0-SNAPSHOT```, and registers the image at your local docker registry.
 
 ## Contributing
 
