@@ -47,7 +47,7 @@ class ServerTest
 
   private val configuration: Configuration = new Configuration()
   private val dao: InstanceDAO = new DynamicInstanceDAO(configuration)
-  private val requestHandler: RequestHandler = new RequestHandler(configuration, dao, DockerConnection.fromEnvironment())
+  private val requestHandler: RequestHandler = new RequestHandler(configuration, dao, DockerConnection.fromEnvironment(configuration))
   private val server: Server = new Server(requestHandler)
 
   //JSON CONSTANTS

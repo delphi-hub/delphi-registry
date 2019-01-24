@@ -32,6 +32,7 @@ class Configuration( ) {
   val maxLabelLength: Int = 50
 
   val dockerOperationTimeout: Timeout = Timeout(20 seconds)
+  val defaultDockerUri: String = "http://localhost:9095"
 
   val jwtSecretKey: String = sys.env.getOrElse("JWT_SECRET", "changeme")
 
