@@ -20,7 +20,7 @@ class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach 
 
   val configuration: Configuration = new Configuration()
   val dao: InstanceDAO = new DynamicInstanceDAO(configuration)
-  val handler: RequestHandler = new RequestHandler(configuration, dao, DockerConnection.fromEnvironment())
+  val handler: RequestHandler = new RequestHandler(configuration, dao, DockerConnection.fromEnvironment(configuration))
 
   private def buildInstance(id: Long, componentType: ComponentType = ComponentType.ElasticSearch, dockerId: Option[String] = None, state: InstanceState.Value = InstanceState.Stopped, labels: List[String] = List.empty[String]): Instance = {
     Instance(Some(id), "https://localhost", 12345, "TestInstance", componentType, dockerId, state, labels, List.empty[InstanceLink], List.empty[InstanceLink])
