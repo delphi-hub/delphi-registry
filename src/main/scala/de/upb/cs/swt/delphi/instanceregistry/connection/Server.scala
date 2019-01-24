@@ -10,7 +10,7 @@ import akka.stream.scaladsl.{Flow, Sink, Source}
 import de.upb.cs.swt.delphi.instanceregistry.authorization.AccessTokenEnums.UserType
 import de.upb.cs.swt.delphi.instanceregistry.authorization.{AccessToken, AuthProvider}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.ComponentType
-import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.{EventJsonSupport, InstanceJsonSupport, InstanceLinkJsonSupport, Instance}
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model._
 import de.upb.cs.swt.delphi.instanceregistry.{AppLogging, Registry, RequestHandler}
 import spray.json.JsonParser.ParsingException
 import spray.json._
@@ -18,6 +18,8 @@ import spray.json._
 import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Success}
 import de.upb.cs.swt.delphi.instanceregistry.requestLimiter.{IpLogActor, RequestLimitScheduler}
+
+import akka.http.scaladsl.server.directives.Credentials
 
 /**
   * Web server configuration for Instance Registry API.
@@ -68,7 +70,8 @@ class Server (handler: RequestHandler) extends HttpApp
       path("assignInstance") { assignInstance()} ~
       path("command") { runCommandInContainer()} ~
       /****************EVENT OPERATIONS****************/
-      path("events") { streamEvents()}
+      path("events") { streamEvents()} ~
+      path("authenticate") {authenticate()}
 
 
   /**
@@ -705,6 +708,16 @@ class Server (handler: RequestHandler) extends HttpApp
     }
   }
 
+  def authenticate() : server.Route = {
+    log.info("Request is in authenticate")
+    authenticateBasic(realm = "secure", AuthProvider.authenticateBasicJWT) {
+      case Success(userName) =>
+        complete(AuthProvider.generateJwt(userName))
+      case _ =>
+        complete{HttpResponse(StatusCodes.InternalServerError, entity = s"Internal server error, unknown operation result")}
+    }
+
+  }
 
 }
 

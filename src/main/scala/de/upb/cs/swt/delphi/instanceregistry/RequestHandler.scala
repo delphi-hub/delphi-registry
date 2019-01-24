@@ -10,7 +10,7 @@ import de.upb.cs.swt.delphi.instanceregistry.Docker.{ContainerAlreadyStoppedExce
 import akka.stream.scaladsl.{Keep, Sink, Source}
 import akka.stream.{ActorMaterializer, Materializer, OverflowStrategy}
 import de.upb.cs.swt.delphi.instanceregistry.connection.RestClient
-import de.upb.cs.swt.delphi.instanceregistry.daos.InstanceDAO
+import de.upb.cs.swt.delphi.instanceregistry.daos.{AuthDAO, InstanceDAO}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.{ComponentType, InstanceState}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.LinkEnums.LinkState
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model._
@@ -20,7 +20,7 @@ import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
 
-class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, connection: DockerConnection) extends AppLogging {
+class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao: InstanceDAO, connection: DockerConnection) extends AppLogging {
 
 
 
@@ -37,6 +37,7 @@ class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, con
   def initialize(): Unit = {
     log.info("Initializing request handler...")
     instanceDao.initialize()
+    authDao.initialize()
     if (!instanceDao.allInstances().exists(instance => instance.name.equals("Default ElasticSearch Instance"))) {
       //Add default ES instance
       handleRegister(Instance(None,
@@ -56,6 +57,7 @@ class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, con
   def shutdown() : Unit = {
     eventActor ! PoisonPill
     instanceDao.shutdown()
+    authDao.shutdown()
   }
 
   /**

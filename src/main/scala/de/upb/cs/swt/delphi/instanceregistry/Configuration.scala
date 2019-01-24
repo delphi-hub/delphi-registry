@@ -43,6 +43,13 @@ class Configuration( ) {
   val databaseUsername = ""
   val databasePassword = ""
 
+  //Auth database configuration
+  val authDatabaseHost = "jdbc:mysql://localhost/"
+  val authDatabaseName = ""
+  val authDatabaseDriver = "com.mysql.jdbc.Driver"
+  val authDatabaseUsername = ""
+  val authDatabasePassword = ""
+
   //Request Limiter
   val maxTotalNoRequest: Int = 2000
   val maxIndividualIpReq: Int = 200

@@ -1,10 +1,15 @@
 package de.upb.cs.swt.delphi.instanceregistry.authorization
 
+import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
+import java.util.Base64
+
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.DateTime
 import akka.http.scaladsl.server.directives.Credentials
 import de.upb.cs.swt.delphi.instanceregistry.authorization.AccessTokenEnums.UserType
-import pdi.jwt.{Jwt, JwtAlgorithm}
+import de.upb.cs.swt.delphi.instanceregistry.daos.{AuthDAO, DatabaseAuthDAO}
+import pdi.jwt.{Jwt, JwtAlgorithm, JwtClaim}
 import de.upb.cs.swt.delphi.instanceregistry.{AppLogging, Registry}
 import spray.json._
 
@@ -13,6 +18,50 @@ import scala.util.{Failure, Success, Try}
 object AuthProvider extends AppLogging {
 
   implicit val system : ActorSystem = Registry.system
+  val authDAO : AuthDAO = new DatabaseAuthDAO(Registry.configuration)
+
+  def authenticateBasicJWT(credentials: Credentials) : Option[String] = {
+    credentials match {
+      case p @ Credentials.Provided(userName)  => {
+        if (userSecret(userName).isEmpty) {
+          None
+        } else if(p.verify(userSecret(userName), hashString)){
+          Some(userName)
+        } else {
+          None
+        }
+      }
+      case _ => None
+    }
+  }
+
+  def hashString: String => String = { secret: String =>
+    MessageDigest.getInstance("SHA-256").digest(secret.getBytes(StandardCharsets.UTF_8)).map("%02x".format(_)).mkString("")
+  }
+
+  private def userSecret(userName: String): String ={
+    val user = authDAO.getUserWithUsername(userName)
+    if(user.isDefined){
+      user.get.secret
+    } else {
+      ""
+    }
+  }
+
+  def generateJwt(useGenericName: String): String = {
+    val validFor: Long = 1
+    val user = authDAO.getUserWithUsername(useGenericName)
+
+    val claim = JwtClaim()
+      .issuedNow
+      .expiresIn(validFor * 60)
+      .startsNow
+      . + ("user_id", user.get.userName)
+      . + ("user_type", user.get.userType)
+
+    val secretKey = Registry.configuration.jwtSecretKey
+    Jwt.encode(claim, secretKey, JwtAlgorithm.HS256)
+  }
 
   def authenticateOAuth(credentials: Credentials) : Option[AccessToken] = {
     credentials match {
