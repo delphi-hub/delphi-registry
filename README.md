@@ -104,7 +104,7 @@ docker run -d -v /var/run/docker.sock:/var/run/docker.sock -p 127.0.0.1:9095:123
 ## Run the application
 There are two ways of running the registry application. You can either run the application directly, or build a docker image defined by the *build.sbt* file, and run a container based on this image. Either way, you have to set the correct configuration values before starting the application (see section **Adapt the configuration file** above for more information). Make sure the Docker images of all Delphi components are present at the host's registry, as described in the **Requirements** section.
 
-**Note:** For OSX you have to set Java's ```prefereIPv4Stack``` option to ```true``` before executing any of the steps below. In order to do so, execute ```export JAVA_OPTIONS="-Djava.net.preferIPv4Stack=true"``` in the terminal before calling ```sbt```.
+**Note:** For OSX you have to set Java's ```prefereIPv4Stack``` option to ```true``` before executing any of the steps below. In order to do so, execute ```export _JAVA_OPTIONS="-Djava.net.preferIPv4Stack=true"``` in the terminal before calling ```sbt```.
 
 ### Run the registry directly
 If you want to execute the registry directly on your local machine, simply go to the root folder of the repository and execute ```sbt run```. The application will stream all logging output to the terminal. You can terminate any time by pressing *RETURN*.
