@@ -5,7 +5,7 @@ import java.io.File
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import de.upb.cs.swt.delphi.instanceregistry.Docker._
-import de.upb.cs.swt.delphi.instanceregistry.daos.{DynamicInstanceDAO, InstanceDAO}
+import de.upb.cs.swt.delphi.instanceregistry.daos._
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.{Instance, InstanceLink}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.{ComponentType, InstanceState}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.LinkEnums.LinkState
@@ -20,7 +20,8 @@ class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach 
 
   val configuration: Configuration = new Configuration()
   val dao: InstanceDAO = new DynamicInstanceDAO(configuration)
-  val handler: RequestHandler = new RequestHandler(configuration, dao, DockerConnection.fromEnvironment(configuration))
+  val authDAO: AuthDAO = new DynamicAuthDAO(configuration)
+  val handler: RequestHandler = new RequestHandler(configuration, authDAO, dao, DockerConnection.fromEnvironment(configuration))
 
   private def buildInstance(id: Long, componentType: ComponentType = ComponentType.ElasticSearch, dockerId: Option[String] = None, state: InstanceState.Value = InstanceState.Stopped, labels: List[String] = List.empty[String]): Instance = {
     Instance(Some(id), "https://localhost", 12345, "TestInstance", componentType, dockerId, state, labels, List.empty[InstanceLink], List.empty[InstanceLink])

@@ -25,9 +25,15 @@ object Registry extends AppLogging {
     }
   }
 
-  private val auth: AuthDAO = new DatabaseAuthDAO(configuration)
+  private val authDao: AuthDAO = {
+    if (configuration.useInMemoryDB) {
+      new DynamicAuthDAO(configuration)
+    } else {
+      new DatabaseAuthDAO(configuration)
+    }
+  }
 
-  private val requestHandler = new RequestHandler(configuration, auth, dao, DockerConnection.fromEnvironment())
+  private val requestHandler = new RequestHandler(configuration, authDao, dao, DockerConnection.fromEnvironment(configuration))
 
   private val server: Server = new Server(requestHandler)
 

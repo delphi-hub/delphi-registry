@@ -2,8 +2,6 @@ package de.upb.cs.swt.delphi.instanceregistry.authorization
 
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
-import java.util.Base64
-
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.DateTime
 import akka.http.scaladsl.server.directives.Credentials
@@ -15,10 +13,9 @@ import spray.json._
 
 import scala.util.{Failure, Success, Try}
 
-object AuthProvider extends AppLogging {
+class AuthProvider(authDAO: AuthDAO) extends AppLogging {
 
   implicit val system : ActorSystem = Registry.system
-  val authDAO : AuthDAO = new DatabaseAuthDAO(Registry.configuration)
 
   def authenticateBasicJWT(credentials: Credentials) : Option[String] = {
     credentials match {

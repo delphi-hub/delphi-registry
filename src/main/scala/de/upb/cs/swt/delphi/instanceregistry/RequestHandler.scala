@@ -9,6 +9,7 @@ import akka.stream.{ActorMaterializer, Materializer, OverflowStrategy}
 import akka.util.Timeout
 import de.upb.cs.swt.delphi.instanceregistry.Docker.DockerActor._
 import de.upb.cs.swt.delphi.instanceregistry.Docker.{ContainerAlreadyStoppedException, DockerActor, DockerConnection}
+import de.upb.cs.swt.delphi.instanceregistry.authorization.AuthProvider
 import de.upb.cs.swt.delphi.instanceregistry.connection.RestClient
 import de.upb.cs.swt.delphi.instanceregistry.daos.{AuthDAO, InstanceDAO}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.{ComponentType, InstanceState}
@@ -26,6 +27,8 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
   implicit val system: ActorSystem = Registry.system
   implicit val materializer: Materializer = ActorMaterializer()
   implicit val ec: ExecutionContext = system.dispatcher
+
+  val authProvider: AuthProvider = new AuthProvider(authDao)
 
   val (eventActor, eventPublisher) = Source.actorRef[RegistryEvent](10, OverflowStrategy.dropNew)
     .toMat(Sink.asPublisher(fanout = true))(Keep.both)

@@ -23,7 +23,7 @@ import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import de.upb.cs.swt.delphi.instanceregistry.Docker.DockerConnection
-import de.upb.cs.swt.delphi.instanceregistry.daos.{DynamicInstanceDAO, InstanceDAO}
+import de.upb.cs.swt.delphi.instanceregistry.daos._
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.EventEnums.EventType
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.{ComponentType, InstanceState}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.LinkEnums.LinkState
@@ -47,7 +47,8 @@ class ServerTest
 
   private val configuration: Configuration = new Configuration()
   private val dao: InstanceDAO = new DynamicInstanceDAO(configuration)
-  private val requestHandler: RequestHandler = new RequestHandler(configuration, dao, DockerConnection.fromEnvironment(configuration))
+  private val authDao: AuthDAO = new DynamicAuthDAO(configuration)
+  private val requestHandler: RequestHandler = new RequestHandler(configuration, authDao, dao, DockerConnection.fromEnvironment(configuration))
   private val server: Server = new Server(requestHandler)
 
   //JSON CONSTANTS
