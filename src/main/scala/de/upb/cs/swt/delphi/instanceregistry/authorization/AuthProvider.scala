@@ -45,6 +45,23 @@ class AuthProvider(authDAO: AuthDAO) extends AppLogging {
     }
   }
 
+  def isDelphiAuthorizationToken(tokenString: String): Boolean ={
+    Jwt.decodeRawAll(tokenString, Registry.configuration.jwtSecretKey, Seq(JwtAlgorithm.HS256)) match {
+      case Success((_, payload, _)) =>
+        parseDelphiTokenPayload(payload) match {
+          case Success(componentType) =>
+            log.info(s"Successfully parsed Delphi Authorization token")
+            true
+          case Failure(ex) =>
+            log.error(ex, s"Failed to parse Delphi Authorization with message ${ex.getMessage}")
+            false
+        }
+      case Failure(ex) =>
+        log.warning(s"Failed to validate jwt token with message ${ex.getMessage}")
+        false
+    }
+  }
+
   def generateJwt(useGenericName: String): String = {
     val validFor: Long = 1
     val user = authDAO.getUserWithUsername(useGenericName)
@@ -119,6 +136,20 @@ class AuthProvider(authDAO: AuthDAO) extends AppLogging {
         expiresAt = expiresAtDate,
         issuedAt = issuedAtDate,
         notBefore = notBeforeDate
+      )
+    }
+  }
+
+  private def parseDelphiTokenPayload(jwtPayload: String) : Try[DelphiToken] = {
+    Try[DelphiToken] {
+      val json = jwtPayload.parseJson.asJsObject
+
+      val id = json.fields("id").asInstanceOf[JsNumber].value.toLongExact
+      val componentType = json.fields("componentType").asInstanceOf[JsString].value
+
+      DelphiToken(
+        id = id,
+        componentType = componentType
       )
     }
   }

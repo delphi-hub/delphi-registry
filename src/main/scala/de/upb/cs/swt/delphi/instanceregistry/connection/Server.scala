@@ -1,8 +1,9 @@
 package de.upb.cs.swt.delphi.instanceregistry.connection
 
 import akka.actor.ActorSystem
+import akka.http.scaladsl.server.RequestContext
 import akka.http.scaladsl.model.ws.{Message, TextMessage}
-import akka.http.scaladsl.model.{HttpResponse, StatusCodes}
+import akka.http.scaladsl.model.{HttpHeader, HttpResponse, StatusCodes}
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.{HttpApp, Route}
 import akka.stream.ActorMaterializer
@@ -1084,14 +1085,21 @@ class Server(handler: RequestHandler) extends HttpApp
   }
 
   def authenticate() : server.Route = {
-    log.info("Request is in authenticate")
-    authenticateBasic(realm = "secure", handler.authProvider.authenticateBasicJWT) {
-      case userName =>
-        complete(handler.authProvider.generateJwt(userName))
-      case _ =>
-        complete{HttpResponse(StatusCodes.InternalServerError, entity = s"Internal server error, unknown operation result")}
-    }
+    headerValueByName("Delphi-Authorization") { token =>
+      log.info(s"Requested with Delphi-Authorization token $token")
+      if(handler.authProvider.isDelphiAuthorizationToken(token)){
+        log.info(s"valid delphi authorization token")
+        authenticateBasic(realm = "secure", handler.authProvider.authenticateBasicJWT) {
+          case userName =>
+            complete(handler.authProvider.generateJwt(userName))
+          case _ =>
+            complete{HttpResponse(StatusCodes.InternalServerError, entity = s"Internal server error, unknown operation result")}
+        }
+      } else {
+        complete{HttpResponse(StatusCodes.Unauthorized, entity = s"Not valid Delphi-authorization")}
+      }
 
+    }
   }
 
 }
