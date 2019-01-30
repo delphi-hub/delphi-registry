@@ -274,11 +274,10 @@ class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, con
             fireDockerOperationErrorEvent(None, s"Deploy failed with message: ${ex.getMessage}")
             Failure(new RuntimeException(s"Failed to deploy container, docker host not reachable (${ex.getMessage})."))
           case Success((dockerId, host, port)) =>
-            val normalizedHost = host.substring(1, host.length - 1)
-            log.info(s"Deployed new container with id $dockerId, host $normalizedHost and port $port.")
+            log.info(s"Deployed new container with id $dockerId, host $host and port $port.")
 
             val newInstance = Instance(Some(id),
-              normalizedHost,
+              host,
               port,
               name.getOrElse(s"Generic $componentType"),
               componentType,

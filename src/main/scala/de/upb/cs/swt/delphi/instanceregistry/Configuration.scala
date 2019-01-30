@@ -9,6 +9,10 @@ class Configuration( ) {
   val bindHost: String = "0.0.0.0"
   val bindPort: Int = 8087
 
+  //Traefik data
+  val traefikBaseHost: String = "delphi.cs.upb.de"
+  val traefikDockerNetwork: String = "web"
+
 
   val recoveryFileName : String = "dump.temp"
 
