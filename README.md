@@ -47,6 +47,9 @@ Before you can start the application, you have to make sure your configuration f
 | :---: | :---: | :---: | :--- |
 |```bindHost``` | ```String``` | ```"0.0.0.0"``` | Host address that the registry server should be bound to |
 |```bindPort``` | ```Int``` | ```8087``` | Port that the registry server should be reachable at |
+|```traefikBaseHost``` | ```String``` | ```"delphi.cs.upb.de"``` | The host part of the URL that traefik is configured to append to instance URLs. |
+|```traefikDockerNetwork``` | ```String``` | ```"web"``` | The Docker network Traefik is configured to use. |
+|```traefikUri``` | ```String``` | ```"http://172.17.0.1:80"``` | The URI that the Traefik reverse-proxy is hosted at.|
 |```defaultCrawlerPort``` | ```Int``` | ```8882``` | Port that Delphi Crawlers are reachable at. This may only be adapted if you manually changed the default port of crawlers before registering the respective image. |
 |```defaultWebApiPort``` | ```Int``` | ```8080``` | Port that Delphi WebAPIs are reachable at. This may only be adapted if you manually changed the default port of WebAPIs before registering the respective image. |
 |```defaultWebAppPort``` | ```Int``` | ```8085``` | Port that Delphi WebApps are reachable at. This may only be adapted if you manually changed the default port of WebApps before registering the respective image. |
@@ -58,7 +61,7 @@ Before you can start the application, you have to make sure your configuration f
 |```uriInLocalNetwork``` | ```String``` | ```"http://172.17.0.1:8087"``` | URI that the registry is reachable at for all docker containers. In most of the use-cases this is going to be the gateway of the default docker bridge.<br>**Note:** For OSX you have to set this value to the DNS name of the docker host, which is ```http://host.docker.internal:8087``` (If the registry is running on the host).|
 |```maxLabelLength``` | ```Int``` | ```50``` | Maximum number of characters for instance labels. Longer labels will be rejected.|
 |```dockerOperationTimeout``` | ```Timeout``` | ```Timeout(20 seconds)``` | Default timeout for docker operations. If any of the async Docker operations (deploy, stop, pause, ..) takes longer than this, it will be aborted.|
-|```defaultDockerUri``` | ```String``` | ```http://localhost:9095``` | Default uri to connect to docker. It will be used if the environment variable ```DELPHI_DOCKER_HOST``` is not specified.|
+|```dockerUri``` | ```String``` | ```http://localhost:9095``` | Default uri to connect to docker. It will be used if the environment variable ```DELPHI_DOCKER_HOST``` is not specified.|
 |```jwtSecretKey``` | ```String``` | ```changeme``` | Secret key to use for JWT signature (HS256). This setting can be overridden by specifying the ```JWT_SECRET``` environment variable.|
 |```useInMemoryDB``` | ```Boolean``` | ```true``` | If set to true, all instance data will be kept in memory instead of using a MySQL database.|
 |```databaseHost``` | ```String``` | ```"jdbc:mysql://localhost/"``` | Host that the MySQL database is reachable at (only necessary if *useInMemoryDB* is false).|

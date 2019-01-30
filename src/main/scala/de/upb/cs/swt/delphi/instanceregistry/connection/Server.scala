@@ -10,7 +10,7 @@ import akka.stream.scaladsl.{Flow, Sink, Source}
 import de.upb.cs.swt.delphi.instanceregistry.authorization.AccessTokenEnums.UserType
 import de.upb.cs.swt.delphi.instanceregistry.authorization.{AccessToken, AuthProvider}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.ComponentType
-import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.{EventJsonSupport, Instance, InstanceJsonSupport, InstanceLinkJsonSupport}
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model._
 import de.upb.cs.swt.delphi.instanceregistry.requestLimiter.{IpLogActor, RequestLimitScheduler}
 import de.upb.cs.swt.delphi.instanceregistry.{AppLogging, Registry, RequestHandler}
 import spray.json.JsonParser.ParsingException
@@ -26,6 +26,7 @@ class Server(handler: RequestHandler) extends HttpApp
   with InstanceJsonSupport
   with EventJsonSupport
   with InstanceLinkJsonSupport
+  with ConfigurationInfoJsonSupport
   with AppLogging {
 
   implicit val system: ActorSystem = Registry.system
@@ -130,6 +131,9 @@ class Server(handler: RequestHandler) extends HttpApp
     } ~
     path("events") {
       streamEvents()
+    } ~
+    path("configuration") {
+      configurationInfo()
     }
 
 
@@ -407,6 +411,23 @@ class Server(handler: RequestHandler) extends HttpApp
           case Failure(_) => complete {
             HttpResponse(StatusCodes.NotFound, entity = s"Id $id not found.")
           }
+        }
+      }
+    }
+  }
+
+  /**
+    * Returns general configuration information containing the docker uri and the traefik host
+    *
+    * @return ConfigurationInfo object
+    */
+  def configurationInfo(): server.Route = {
+    authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
+      get {
+        log.debug(s"GET /configuration has been called")
+
+        complete {
+          handler.generateConfigurationInfo().toJson(ConfigurationInfoFormat).toString
         }
       }
     }

@@ -121,6 +121,10 @@ class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, con
     instanceDao.getEventsFor(id)
   }
 
+  def generateConfigurationInfo(): ConfigurationInfo = {
+    ConfigurationInfo(DockerHttpUri = configuration.dockerUri, TraefikProxyUri = configuration.traefikUri)
+  }
+
   def getMatchingInstanceOfType(callerId: Long, compType: ComponentType): (OperationResult.Value, Try[Instance]) = {
     log.info(s"Started matching: Instance with id $callerId is looking for instance of type $compType.")
     if (!instanceDao.hasInstance(callerId)) {
