@@ -1087,7 +1087,7 @@ class Server(handler: RequestHandler) extends HttpApp
   def authenticate() : server.Route = {
     headerValueByName("Delphi-Authorization") { token =>
       log.info(s"Requested with Delphi-Authorization token $token")
-      if(handler.authProvider.isDelphiAuthorizationToken(token)){
+      if(handler.authProvider.isValidDelphiToken(token)){
         log.info(s"valid delphi authorization token")
         authenticateBasic(realm = "secure", handler.authProvider.authenticateBasicJWT) {
           case userName =>

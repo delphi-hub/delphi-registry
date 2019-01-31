@@ -22,7 +22,7 @@ class DatabaseAuthDAO (configuration : Configuration) extends AuthDAO with AppLo
   private val users : TableQuery[Users] = TableQuery[Users]
   private val dbAuth = Database.forURL(configuration.authDatabaseHost + configuration.authDatabaseName, driver = configuration.authDatabaseDriver, user = configuration.authDatabaseUsername, password = configuration.authDatabasePassword)
 
-  override def getUserWithUsername(userName: String): Option[Authenticate] =
+  override def getUserWithUsername(userName: String): Option[DelphiUser] =
   {
     if(hasUserWithUsername(userName)) {
       val result = Await.result(dbAuth.run(users.filter(_.userName === userName).result.headOption), Duration.Inf)
@@ -38,6 +38,7 @@ class DatabaseAuthDAO (configuration : Configuration) extends AuthDAO with AppLo
 
   override def initialize() : Unit = {
     if(dbTest()){
+      log.info("Initializing sql auth DAO...")
       val authTables = List(users)
       val authExisting = dbAuth.run(MTable.getTables)
       val authCreateAction = authExisting.flatMap( v => {
@@ -47,9 +48,6 @@ class DatabaseAuthDAO (configuration : Configuration) extends AuthDAO with AppLo
         dbAuth.run(DBIO.sequence(createIfNotExist))
       })
       Await.result(authCreateAction, Duration.Inf)
-
-      log.info("Initializing sql instance DAO...")
-      clearData()
       log.info("Successfully initialized.")
     } else {
       log.error("Not found any database with the provided settings.")
@@ -64,13 +62,12 @@ class DatabaseAuthDAO (configuration : Configuration) extends AuthDAO with AppLo
   }
 
   override def shutdown(): Unit = {
-    log.info("Shutting down dynamic instance DAO...")
-    clearData()
+    log.info("Shutting down dynamic auth DAO...")
     log.info("Shutdown complete.")
   }
 
-  private def dataToObjectAuthenticate(userName: String, secret: String, userType: String): Authenticate = {
-    Authenticate.apply(userName, secret, userType)
+  private def dataToObjectAuthenticate(userName: String, secret: String, userType: String): DelphiUser = {
+    DelphiUser.apply(userName, secret, userType)
   }
 
   private def dbTest(): Boolean = {
@@ -79,10 +76,6 @@ class DatabaseAuthDAO (configuration : Configuration) extends AuthDAO with AppLo
     } catch {
       case e: Throwable => throw e
     }
-  }
-
-  private[daos] def clearData() : Unit = {
-    removeAllUsers()
   }
 
   private def removeAllUsers(): Unit = {

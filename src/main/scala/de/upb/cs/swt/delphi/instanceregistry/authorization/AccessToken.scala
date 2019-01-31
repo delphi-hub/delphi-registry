@@ -9,7 +9,6 @@ final case class AccessToken(userId: String,
                              issuedAt: DateTime,
                              notBefore: DateTime)
 
-final case class DelphiToken(id: Long, componentType: String)
 
 object AccessTokenEnums {
 

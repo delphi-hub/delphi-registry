@@ -5,27 +5,27 @@ import spray.json.{DefaultJsonProtocol, JsString, JsValue, JsonFormat}
 
 trait RequestJsonSupport extends SprayJsonSupport with DefaultJsonProtocol{
 
-  implicit val AuthenticateFormat = new JsonFormat[AuthenticateEnums.CommandType] {
+  implicit val DelphiUserFormat = new JsonFormat[delphiUserEnums.CommandType] {
 
-    def write(compType: AuthenticateEnums.CommandType) = JsString(compType.toString)
+    def write(compType: delphiUserEnums.CommandType) = JsString(compType.toString)
 
-    def read(value: JsValue): AuthenticateEnums.CommandType = value match {
+    def read(value: JsValue): delphiUserEnums.CommandType = value match {
       case JsString(s) => s match {
-        case "userName" => AuthenticateEnums.CommandType.userName
-        case "secret" => AuthenticateEnums.CommandType.secret
-        case "userType" => AuthenticateEnums.CommandType.userType
+        case "userName" => delphiUserEnums.CommandType.userName
+        case "secret" => delphiUserEnums.CommandType.secret
+        case "userType" => delphiUserEnums.CommandType.userType
         case x => throw new RuntimeException(s"Unexpected string value $x.")
       }
       case y => throw new RuntimeException(s"Unexpected type $y while deserializing")
     }
   }
 
-  implicit val UserAuthenticate: JsonFormat[Authenticate] = jsonFormat3(Authenticate)
+  implicit val AuthDelphiUserFormat: JsonFormat[DelphiUser] = jsonFormat3(DelphiUser)
 }
 
-final case class Authenticate(userName: String, secret: String, userType: String)
+final case class DelphiUser(userName: String, secret: String, userType: String)
 
-object AuthenticateEnums {
+object delphiUserEnums {
 
   type CommandType = CommandType.Value
 

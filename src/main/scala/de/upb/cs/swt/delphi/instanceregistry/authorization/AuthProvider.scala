@@ -20,9 +20,9 @@ class AuthProvider(authDAO: AuthDAO) extends AppLogging {
   def authenticateBasicJWT(credentials: Credentials) : Option[String] = {
     credentials match {
       case p @ Credentials.Provided(userName)  => {
-        if (userSecret(userName).isEmpty) {
+        if (getSecretForUser(userName).isEmpty) {
           None
-        } else if(p.verify(userSecret(userName), hashString)){
+        } else if(p.verify(getSecretForUser(userName).get, hashString)){
           Some(userName)
         } else {
           None
@@ -36,20 +36,20 @@ class AuthProvider(authDAO: AuthDAO) extends AppLogging {
     MessageDigest.getInstance("SHA-256").digest(secret.getBytes(StandardCharsets.UTF_8)).map("%02x".format(_)).mkString("")
   }
 
-  private def userSecret(userName: String): String ={
+  private def getSecretForUser(userName: String): Option[String] ={
     val user = authDAO.getUserWithUsername(userName)
     if(user.isDefined){
-      user.get.secret
+      Some(user.get.secret)
     } else {
-      ""
+      None
     }
   }
 
-  def isDelphiAuthorizationToken(tokenString: String): Boolean ={
-    Jwt.decodeRawAll(tokenString, Registry.configuration.jwtSecretKey, Seq(JwtAlgorithm.HS256)) match {
+  def isValidDelphiToken(token: String): Boolean ={
+    Jwt.decodeRawAll(token, Registry.configuration.jwtSecretKey, Seq(JwtAlgorithm.HS256)) match {
       case Success((_, payload, _)) =>
         parseDelphiTokenPayload(payload) match {
-          case Success(componentType) =>
+          case Success(user_type) =>
             log.info(s"Successfully parsed Delphi Authorization token")
             true
           case Failure(ex) =>
@@ -62,9 +62,9 @@ class AuthProvider(authDAO: AuthDAO) extends AppLogging {
     }
   }
 
-  def generateJwt(useGenericName: String): String = {
-    val validFor: Long = 1
-    val user = authDAO.getUserWithUsername(useGenericName)
+  def generateJwt(userName: String): String = {
+    val validFor: Long = Registry.configuration.authenticationValidFor
+    val user = authDAO.getUserWithUsername(userName)
 
     val claim = JwtClaim()
       .issuedNow
@@ -140,17 +140,14 @@ class AuthProvider(authDAO: AuthDAO) extends AppLogging {
     }
   }
 
-  private def parseDelphiTokenPayload(jwtPayload: String) : Try[DelphiToken] = {
-    Try[DelphiToken] {
+  private def parseDelphiTokenPayload(jwtPayload: String) : Try[(String, String)] = {
+    Try[(String, String)] {
       val json = jwtPayload.parseJson.asJsObject
 
-      val id = json.fields("id").asInstanceOf[JsNumber].value.toLongExact
-      val componentType = json.fields("componentType").asInstanceOf[JsString].value
+      val user_id = json.fields("user_id").asInstanceOf[JsString].value
+      val user_type = json.fields("user_type").asInstanceOf[JsString].value
 
-      DelphiToken(
-        id = id,
-        componentType = componentType
-      )
+      (user_id, user_type)
     }
   }
 

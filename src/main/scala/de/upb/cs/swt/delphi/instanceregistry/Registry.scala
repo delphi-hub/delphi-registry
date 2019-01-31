@@ -18,7 +18,7 @@ object Registry extends AppLogging {
   val configuration = new Configuration()
 
   private val dao : InstanceDAO  = {
-    if (configuration.useInMemoryDB) {
+    if (configuration.useInMemoryInstanceDB) {
       new DynamicInstanceDAO(configuration)
     } else {
       new DatabaseInstanceDAO(configuration)
@@ -26,7 +26,7 @@ object Registry extends AppLogging {
   }
 
   private val authDao: AuthDAO = {
-    if (configuration.useInMemoryDB) {
+    if (configuration.useInMemoryAuthDB) {
       new DynamicAuthDAO(configuration)
     } else {
       new DatabaseAuthDAO(configuration)

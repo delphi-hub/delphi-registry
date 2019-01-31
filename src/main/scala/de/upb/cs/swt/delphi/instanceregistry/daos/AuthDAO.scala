@@ -1,6 +1,6 @@
 package de.upb.cs.swt.delphi.instanceregistry.daos
 
-import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.Authenticate
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.{DelphiUser}
 
 trait AuthDAO {
 
@@ -14,7 +14,7 @@ trait AuthDAO {
     * @param userName
     * @return
     */
-  def getUserWithUsername(userName: String) : Option[Authenticate]
+  def getUserWithUsername(userName: String) : Option[DelphiUser]
 
   /**
     * Checks whether the DAO holds an user with the specified username.
