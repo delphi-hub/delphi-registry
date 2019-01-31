@@ -65,8 +65,12 @@ class DockerActor(connection: DockerConnection) extends Actor with ActorLogging 
         case Failure(ex) => sender ! Failure(ex)
         case Success(containerResult) =>
           Await.ready(container.start(containerResult.Id), Duration.Inf)
-          log.info(s"Docker Instance created and started, host is $traefikHostUrl")
-          sender ! Success(containerResult.Id, traefikHostUrl, instancePort)
+
+          val containerInfo = Await.result(container.get(containerResult.Id), Duration.Inf)
+
+          log.info(s"Docker Instance created and started, ip is ${containerInfo.IPAddress}, host is $traefikHostUrl")
+
+          sender ! Success(containerResult.Id, containerInfo.IPAddress, instancePort, traefikHostUrl)
       }
 
     case stop(containerId) =>

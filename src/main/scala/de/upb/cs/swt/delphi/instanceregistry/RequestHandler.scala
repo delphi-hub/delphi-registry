@@ -269,7 +269,7 @@ class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, con
         implicit val timeout: Timeout = configuration.dockerOperationTimeout
 
         val future: Future[Any] = dockerActor ? create(componentType, id)
-        val deployResult = Await.result(future, timeout.duration).asInstanceOf[Try[(String, String, Int)]]
+        val deployResult = Await.result(future, timeout.duration).asInstanceOf[Try[(String, String, Int, String)]]
 
         deployResult match {
           case Failure(ex) =>
@@ -277,8 +277,10 @@ class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, con
             instanceDao.removeInstance(id)
             fireDockerOperationErrorEvent(None, s"Deploy failed with message: ${ex.getMessage}")
             Failure(new RuntimeException(s"Failed to deploy container, docker host not reachable (${ex.getMessage})."))
-          case Success((dockerId, host, port)) =>
-            log.info(s"Deployed new container with id $dockerId, host $host and port $port.")
+          case Success((dockerId, host, port, traefikHost)) =>
+            log.info(s"Deployed new container with id $dockerId, host $host, port $port and Traefik host $traefikHost.")
+
+            val traefikConfig = TraefikConfiguration(traefikHost, configuration.traefikUri)
 
             val newInstance = Instance(Some(id),
               host,
@@ -289,7 +291,8 @@ class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, con
               InstanceState.Deploying,
               List.empty[String],
               List.empty[InstanceLink],
-              List.empty[InstanceLink]
+              List.empty[InstanceLink],
+              Some(traefikConfig)
             )
 
             instanceDao.updateInstance(newInstance) match {

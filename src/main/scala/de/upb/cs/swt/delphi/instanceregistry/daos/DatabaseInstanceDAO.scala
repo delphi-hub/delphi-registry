@@ -42,8 +42,9 @@ class DatabaseInstanceDAO (configuration : Configuration) extends InstanceDAO wi
     val dockerId = instance.dockerId
     val instanceState = instance.instanceState.toString
     val labels = getListAsString(instance.labels)
+    val traefikHost = instance.traefikConfiguration.map(conf => conf.hostName)
 
-    val addFuture: Future[Long] = db.run((instances returning instances.map(_.id)) += (id, host, port, name, componentType, dockerId, instanceState, labels))
+    val addFuture: Future[Long] = db.run((instances returning instances.map(_.id)) += (id, host, port, name, componentType, dockerId, instanceState, labels, traefikHost))
     val instanceId = Await.result(addFuture, Duration.Inf)
 
     log.info(s"Added instance ${instance.name} with id $instanceId to database.")
@@ -83,9 +84,10 @@ class DatabaseInstanceDAO (configuration : Configuration) extends InstanceDAO wi
       val port = instance.portNumber
       val dockerId = instance.dockerId
       val instanceState = instance.instanceState.toString
+      val traefikHost = instance.traefikConfiguration.map(_.hostName)
 
-      val q = for {i <- instances if i.id === instance.id.get} yield (i.host, i.portNumber, i.dockerId, i.instanceState)
-      Await.result(db.run(q.update(host, port, dockerId, instanceState)), Duration.Inf)
+      val q = for {i <- instances if i.id === instance.id.get} yield (i.host, i.portNumber, i.dockerId, i.instanceState, i.traefikHostName)
+      Await.result(db.run(q.update(host, port, dockerId, instanceState, traefikHost)), Duration.Inf)
       Success()
     } else {
       Failure(new RuntimeException(s"Id ${instance.id.get} not found."))
@@ -390,14 +392,27 @@ class DatabaseInstanceDAO (configuration : Configuration) extends InstanceDAO wi
     listItems.split(",").toList
   }
 
-  private def dataToObjectInstance(options : Option[(Long, String, Long, String, String, Option[String], String, String)]): Instance = {
+  private def dataToObjectInstance(options : Option[(Long, String, Long, String, String, Option[String], String, String, Option[String])]): Instance = {
     val optionValue = options.get
     val componentTypeObj = getComponentTypeFromString(optionValue._5)
     val instanceStateObj = getInstanceStateFromString(optionValue._7)
     val labelsList = getListFromString(optionValue._8)
     val linksTo = getLinksTo(optionValue._1)
     val LinksFrom = getLinksFrom(optionValue._1)
-    Instance.apply(Option(optionValue._1), optionValue._2, optionValue._3, optionValue._4, componentTypeObj, optionValue._6, instanceStateObj, labelsList, linksTo, LinksFrom)
+
+    val traefikConfig = optionValue._9.map(host => TraefikConfiguration(host, configuration.traefikUri))
+
+    Instance(Option(optionValue._1),
+      optionValue._2,
+      optionValue._3,
+      optionValue._4,
+      componentTypeObj,
+      optionValue._6,
+      instanceStateObj,
+      labelsList,
+      linksTo,
+      LinksFrom,
+      traefikConfig)
   }
 
   private def removeInstancesWithId(id: Long): Unit ={
