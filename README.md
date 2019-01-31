@@ -11,6 +11,7 @@ this repository is purely experimental!
 
 ## What is the registry component?
 The Delphi registry is a server that provides access to all information and operations needed to set up, run and manage the Delphi system. By default, the REST interface is exposed at *0.0.0.0:8087*, and contains endpoints for:
+
 * Retrieving a list of all instances of a certain type (Crawler, WebApi, WebApp, ElasticSearch)
 * Retrieving the whole network graph (all instances and links between instances)
 * Deploying new instances of a certain type to a docker host
@@ -37,8 +38,21 @@ For Linux users, checkout Delphi Registry repository and execute the command
 ```
 sudo bash ./Delphi_install.sh
 ``` 
-inside the registry's root directory. This installation script will create the required repositories, build the docker images, and register them directly at the local docker registry. 
+inside the ```/Setup``` directory. This installation script will create the required repositories, build the docker images, and register them directly at the local docker registry.
 The registry requires an initial instance of ElasticSearch to be running.
+
+To allow access to Delphi components deployed via Docker, the registry supports the reverse-proxy [Traefik](https://traefik.io/). While it is running, it will automatically detected containers deployed by the registry, and provide access to them using the host specified in each instances' ```Host``` attribute.
+Windows users can install Traefik (using Docker) based on [this tutorial](https://docs.traefik.io/#the-traefik-quickstart-using-docker). For Linux users, Traefik will be installed and started by the installation script mentioned above.
+
+**Note:** Traefik must be running inside the same Docker network as the containers it is associated with. By default the name for this network is expected to be ```delphi```. Windows users have to manually create it using ```docker network create delphi``` before starting Traefik. If you want to change this network name, please follow these steps:
+
+1. Go to ```docker-compose.yml``` file (for Windows: Create during tutorial; for Linux found in ```/Setup```)
+
+2. Change the item *services->traefik->networks* to your new network name
+
+3. Change the item *networks->delphi->external:true* to *networks->your-network-name->external:true*. Save and close the file
+
+4. Change the ````traefikDockerNetwork`` setting in the configuration file to your new network name (see section below for details)
 
 ## Adapt the configuration file
 Before you can start the application, you have to make sure your configuration file contains valid data. The file can be found at *src/main/scala/de/upb/cs/swt/delphi/instanceregistry/Configuration.scala*, and most of its attributes are string or integer values. The following table describes the attributes in more detail.
@@ -47,8 +61,8 @@ Before you can start the application, you have to make sure your configuration f
 | :---: | :---: | :---: | :--- |
 |```bindHost``` | ```String``` | ```"0.0.0.0"``` | Host address that the registry server should be bound to |
 |```bindPort``` | ```Int``` | ```8087``` | Port that the registry server should be reachable at |
-|```traefikBaseHost``` | ```String``` | ```"delphi.cs.upb.de"``` | The host part of the URL that traefik is configured to append to instance URLs. |
-|```traefikDockerNetwork``` | ```String``` | ```"web"``` | The Docker network Traefik is configured to use. |
+|```traefikBaseHost``` | ```String``` | ```"delphi.de"``` | The host part of the URL that traefik is configured to append to instance URLs. |
+|```traefikDockerNetwork``` | ```String``` | ```"delphi"``` | The Docker network Traefik is configured to use. |
 |```traefikUri``` | ```String``` | ```"http://172.17.0.1:80"``` | The URI that the Traefik reverse-proxy is hosted at.|
 |```defaultCrawlerPort``` | ```Int``` | ```8882``` | Port that Delphi Crawlers are reachable at. This may only be adapted if you manually changed the default port of crawlers before registering the respective image. |
 |```defaultWebApiPort``` | ```Int``` | ```8080``` | Port that Delphi WebAPIs are reachable at. This may only be adapted if you manually changed the default port of WebAPIs before registering the respective image. |

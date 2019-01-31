@@ -10,8 +10,8 @@ class Configuration( ) {
   val bindPort: Int = 8087
 
   //Traefik data
-  val traefikBaseHost: String = "delphi.cs.upb.de"
-  val traefikDockerNetwork: String = "web"
+  val traefikBaseHost: String = "delphi.de"
+  val traefikDockerNetwork: String = "delphi"
   val traefikUri: String = "http://172.17.0.1:80"
 
 

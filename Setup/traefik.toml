@@ -1,0 +1,11 @@
+[entryPoints]
+    [entryPoints.http]
+    address = ":80"
+
+[api]
+
+[docker]
+
+domain = "delphi.de"
+
+
