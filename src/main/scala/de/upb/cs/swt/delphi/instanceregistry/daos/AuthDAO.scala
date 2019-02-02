@@ -1,8 +1,16 @@
 package de.upb.cs.swt.delphi.instanceregistry.daos
 
-import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.{DelphiUser}
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.DelphiUser
+
+import scala.util.Try
 
 trait AuthDAO {
+
+  /**
+    * Add user
+    * @return
+    */
+  def addUser(delphiUser : DelphiUser) : Try[Long]
 
   /**
     * Initializes the DAO

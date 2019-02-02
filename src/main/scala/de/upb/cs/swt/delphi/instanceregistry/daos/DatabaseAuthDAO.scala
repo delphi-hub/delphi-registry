@@ -1,8 +1,13 @@
 package de.upb.cs.swt.delphi.instanceregistry.daos
 
 
+import java.nio.charset.StandardCharsets
+
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
+
+import scala.concurrent.Future
+import scala.util.{Failure, Success}
 import de.upb.cs.swt.delphi.instanceregistry.{AppLogging, Configuration, Registry}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model._
 import slick.lifted.TableQuery
@@ -12,6 +17,8 @@ import slick.jdbc.MySQLProfile.api._
 import slick.jdbc.meta.MTable
 
 import scala.concurrent.duration.Duration
+import scala.util.Try
+import java.security.MessageDigest
 
 class DatabaseAuthDAO (configuration : Configuration) extends AuthDAO with AppLogging{
 
@@ -26,10 +33,28 @@ class DatabaseAuthDAO (configuration : Configuration) extends AuthDAO with AppLo
   {
     if(hasUserWithUsername(userName)) {
       val result = Await.result(dbAuth.run(users.filter(_.userName === userName).result.headOption), Duration.Inf)
-      Some(dataToObjectAuthenticate(result.get._2, result.get._3, result.get._4))
+      Some(dataToObjectAuthenticate(result.get._1, result.get._2, result.get._3, result.get._4))
     } else {
       None
     }
+  }
+
+  override def addUser(delphiUser : DelphiUser) : Try[Long] = {
+    if(hasUserWithUsername(delphiUser.userName)){
+      Failure(new RuntimeException(s"username ${delphiUser.userName} is already exist."))
+    } else {
+      val id = 0L //Will be set by DB
+      val userName = delphiUser.userName
+      val secret = delphiUser.secret
+      val userType = delphiUser.userType
+
+      val addFuture: Future[Long] = dbAuth.run((users returning users.map(_.id)) += (id, userName, hashString(secret), userType))
+      val userId = Await.result(addFuture, Duration.Inf)
+
+      log.info(s"Added user ${delphiUser.userName} with id $userId to database.")
+      Success(userId)
+    }
+
   }
 
   override def hasUserWithUsername(username: String) : Boolean = {
@@ -66,8 +91,8 @@ class DatabaseAuthDAO (configuration : Configuration) extends AuthDAO with AppLo
     log.info("Shutdown complete.")
   }
 
-  private def dataToObjectAuthenticate(userName: String, secret: String, userType: String): DelphiUser = {
-    DelphiUser.apply(userName, secret, userType)
+  private def dataToObjectAuthenticate(id:Long, userName: String, secret: String, userType: String): DelphiUser = {
+    DelphiUser.apply(Option(id), userName, secret, userType)
   }
 
   private def dbTest(): Boolean = {
@@ -81,5 +106,9 @@ class DatabaseAuthDAO (configuration : Configuration) extends AuthDAO with AppLo
   private def removeAllUsers(): Unit = {
     val action = users.delete
     dbAuth.run(action)
+  }
+
+  private def hashString(secret: String): String = {
+    MessageDigest.getInstance("SHA-256").digest(secret.getBytes(StandardCharsets.UTF_8)).map("%02x".format(_)).mkString("")
   }
 }

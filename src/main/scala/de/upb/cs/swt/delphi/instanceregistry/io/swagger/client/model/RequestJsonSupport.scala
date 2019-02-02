@@ -20,10 +20,10 @@ trait RequestJsonSupport extends SprayJsonSupport with DefaultJsonProtocol{
     }
   }
 
-  implicit val AuthDelphiUserFormat: JsonFormat[DelphiUser] = jsonFormat3(DelphiUser)
+  implicit val AuthDelphiUserFormat: JsonFormat[DelphiUser] = jsonFormat4(DelphiUser)
 }
 
-final case class DelphiUser(userName: String, secret: String, userType: String)
+final case class DelphiUser(id: Option[Long], userName: String, secret: String, userType: String)
 
 object delphiUserEnums {
 

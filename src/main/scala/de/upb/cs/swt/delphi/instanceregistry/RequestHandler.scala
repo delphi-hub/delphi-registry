@@ -943,6 +943,24 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
     }
   }
 
+  /**
+    * Add user to user database
+    *
+    * @param user
+    * @return
+    */
+  def handleAddUser(user: DelphiUser): Try[Long] = {
+
+    val noIdUser = DelphiUser(id = None, userName = user.userName, secret = user.secret, userType = user.userType)
+
+    authDao.addUser(noIdUser) match {
+      case Success(id) =>
+        log.info(s"Successfully handled create user request")
+        Success(id)
+      case Failure(x) => Failure(x)
+    }
+  }
+
 
   def isInstanceIdPresent(id: Long): Boolean = {
     instanceDao.hasInstance(id)

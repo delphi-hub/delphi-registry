@@ -11,7 +11,7 @@ import akka.stream.scaladsl.{Flow, Sink, Source}
 import de.upb.cs.swt.delphi.instanceregistry.authorization.AccessTokenEnums.UserType
 import de.upb.cs.swt.delphi.instanceregistry.authorization.{AccessToken, AuthProvider}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.ComponentType
-import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.{EventJsonSupport, Instance, InstanceJsonSupport, InstanceLinkJsonSupport}
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model._
 import de.upb.cs.swt.delphi.instanceregistry.requestLimiter.{IpLogActor, RequestLimitScheduler}
 import de.upb.cs.swt.delphi.instanceregistry.{AppLogging, Registry, RequestHandler}
 import spray.json.JsonParser.ParsingException
@@ -25,6 +25,7 @@ import scala.util.{Failure, Success, Try}
   */
 class Server(handler: RequestHandler) extends HttpApp
   with InstanceJsonSupport
+  with RequestJsonSupport
   with EventJsonSupport
   with InstanceLinkJsonSupport
   with AppLogging {
@@ -129,6 +130,13 @@ class Server(handler: RequestHandler) extends HttpApp
             }
         }
     } ~
+    pathPrefix("users") {
+      path("add") {
+        entity(as[String]) {
+          jsonString => addUser(jsonString)
+        }
+      }
+    }~
     path("events") {
       streamEvents()
     } ~
@@ -1099,6 +1107,39 @@ class Server(handler: RequestHandler) extends HttpApp
         complete{HttpResponse(StatusCodes.Unauthorized, entity = s"Not valid Delphi-authorization")}
       }
 
+    }
+  }
+
+  def addUser(UserString: String): server.Route = Route.seal{
+
+    authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
+
+      post {
+        log.debug(s"POST /users/add has been called, parameter is: $UserString")
+
+        try {
+          val paramInstance: DelphiUser = UserString.parseJson.convertTo[DelphiUser](AuthDelphiUserFormat)
+          handler.handleAddUser(paramInstance) match {
+            case Success(id) =>
+              complete {
+                id.toString
+              }
+            case Failure(ex) =>
+              log.error(ex, "Failed to handle registration of instance.")
+              complete(HttpResponse(StatusCodes.InternalServerError, entity = "An internal server error occurred."))
+          }
+        } catch {
+          case dx: DeserializationException =>
+            log.error(dx, "Deserialization exception")
+            complete(HttpResponse(StatusCodes.BadRequest, entity = s"Could not deserialize parameter instance with message ${dx.getMessage}."))
+          case px: ParsingException =>
+            log.error(px, "Failed to parse JSON while registering")
+            complete(HttpResponse(StatusCodes.BadRequest, entity = s"Failed to parse JSON entity with message ${px.getMessage}"))
+          case x: Exception =>
+            log.error(x, "Uncaught exception while deserializing.")
+            complete(HttpResponse(StatusCodes.InternalServerError, entity = "An internal server error occurred."))
+        }
+      }
     }
   }
 
