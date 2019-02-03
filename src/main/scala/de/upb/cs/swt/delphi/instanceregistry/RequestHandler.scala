@@ -275,7 +275,7 @@ class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, con
             Failure(new RuntimeException(s"Failed to deploy container, docker host not reachable (${ex.getMessage})."))
           case Success((dockerId, host, port)) =>
             val normalizedHost = host.substring(1, host.length - 1)
-            log.info(s"Deployed new '$componentType' container with id: $dockerId, host: $normalizedHost and port: $port.")
+            log.info(s"Deployed new '$componentType' container with docker id: $dockerId, host: $normalizedHost and port: $port.")
 
             val newInstance = Instance(Some(id),
               normalizedHost,
@@ -510,16 +510,15 @@ class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, con
         OperationResult.Ok
       }
     } else if (instanceDao.getInstance(id).get.instanceState != InstanceState.Paused) {
-      log.info(s"Handling /stop for instance with id $id...")
+      log.debug(s"Handling /stop for instance with id $id...")
 
       val instance = instanceDao.getInstance(id).get
 
-      log.info("Stopping container...")
       implicit val timeout: Timeout = configuration.dockerOperationTimeout
 
       (dockerActor ? stop(instance.dockerId.get)).map {
         _ =>
-          log.info(s"Instance $id stopped.")
+          log.info(s"Docker Instance $id stopped.")
           instanceDao.setStateFor(instance.id.get, InstanceState.Stopped)
           fireStateChangedEvent(instanceDao.getInstance(instance.id.get).get)
       }.recover {
@@ -560,7 +559,6 @@ class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, con
       log.info(s"Handling /start for instance with id $id...")
       val instance = instanceDao.getInstance(id).get
       if (instance.instanceState == InstanceState.Stopped) {
-        log.info("Starting container...")
         implicit val timeout: Timeout = configuration.dockerOperationTimeout
 
         (dockerActor ? start(instance.dockerId.get)).map {
@@ -600,8 +598,6 @@ class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, con
       if (notSafeToDelete) {
         OperationResult.BlockingDependency
       } else if (instance.instanceState != InstanceState.Running) {
-        log.info("Deleting container...")
-
         implicit val timeout: Timeout = configuration.dockerOperationTimeout
 
         (dockerActor ? delete(instance.dockerId.get)).map {

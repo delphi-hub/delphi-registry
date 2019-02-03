@@ -736,7 +736,7 @@ class Server(handler: RequestHandler) extends HttpApp
   def deleteContainer(id: Long): server.Route = {
     authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
       post {
-        log.debug(s"POST /delete?Id=$id has been called")
+        log.debug(s"POST /instances/$id/delete has been called")
         handler.handleDeleteContainer(id) match {
           case handler.OperationResult.IdUnknown =>
             log.warning(s"Cannot delete id $id, that id was not found.")

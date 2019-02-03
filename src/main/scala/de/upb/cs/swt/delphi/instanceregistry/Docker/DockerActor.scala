@@ -25,13 +25,13 @@ class DockerActor(connection: DockerConnection) extends Actor with ActorLogging 
   def receive: PartialFunction[Any, Unit] = {
 
     case start(containerId) =>
-      log.info(s"Docker Container started")
-     Try(Await.result(container.start(containerId), Duration.Inf)) match {
-       case Success(_) =>
-         sender ! Status.Success
-       case Failure(ex) =>
-         sender ! Status.Failure(ex)
-     }
+      log.debug(s"Docker Container started")
+      Try(Await.result(container.start(containerId), Duration.Inf)) match {
+        case Success(_) =>
+          sender ! Status.Success
+        case Failure(ex) =>
+          sender ! Status.Failure(ex)
+      }
 
     case create(componentType, instanceId, containerName) =>
       val containerConfig = ContainerConfig(Image = DockerImage.getImageName(componentType),
@@ -58,7 +58,7 @@ class DockerActor(connection: DockerConnection) extends Actor with ActorLogging 
       }
 
     case stop(containerId) =>
-      log.info(s"Stopping docker container..")
+      log.debug(s"Stopping docker container..")
 
       Try(Await.result(container.stop(containerId), Duration.Inf)) match {
         case Success(_) =>
@@ -68,9 +68,8 @@ class DockerActor(connection: DockerConnection) extends Actor with ActorLogging 
       }
 
 
-
     case delete(containerId) =>
-      log.info(s"Deleting docker container..")
+      log.debug(s"Deleting docker container..")
       Try(Await.result(container.remove(containerId, force = false, removeVolumes = false), Duration.Inf)) match {
         case Success(_) =>
           sender ! Status.Success
@@ -79,7 +78,7 @@ class DockerActor(connection: DockerConnection) extends Actor with ActorLogging 
       }
 
     case pause(containerId) =>
-      log.info(s"Pausing docker container..")
+      log.debug(s"Pausing docker container..")
       Try(Await.result(container.pause(containerId), Duration.Inf)) match {
         case Success(_) =>
           sender ! Status.Success
@@ -88,7 +87,7 @@ class DockerActor(connection: DockerConnection) extends Actor with ActorLogging 
       }
 
     case unpause(containerId) =>
-      log.info(s"Unpausing docker container..")
+      log.debug(s"Unpausing docker container..")
       Try(Await.result(container.unpause(containerId), Duration.Inf)) match {
         case Success(_) =>
           sender ! Status.Success
@@ -97,7 +96,7 @@ class DockerActor(connection: DockerConnection) extends Actor with ActorLogging 
       }
 
     case restart(containerId) =>
-      log.info(s"Restarting docker container..")
+      log.debug(s"Restarting docker container..")
       Try(Await.result(container.restart(containerId), Duration.Inf)) match {
         case Success(_) =>
           sender ! Status.Success
@@ -106,7 +105,7 @@ class DockerActor(connection: DockerConnection) extends Actor with ActorLogging 
       }
 
     case runCommand(containerId, command, attachStdin, attachStdout, attachStderr, detachKeys, privileged, tty, user) =>
-      log.info(s"running command in docker container..")
+      log.debug(s"running command in docker container..")
       val createCommand = Try(Await.result(container.commandCreate(containerId, command, attachStdin, attachStdout, attachStderr, detachKeys, privileged, tty, user), Duration.Inf))
       createCommand match {
         case Failure(ex) => sender ! Failure(ex)
@@ -124,7 +123,7 @@ class DockerActor(connection: DockerConnection) extends Actor with ActorLogging 
 
       log.info(s"Fetching Container logs: stdErrSelected -> $stdErrSelected, stream -> $stream")
 
-      if(!stream){
+      if (!stream) {
         val logResult = Try(Await.result(container.retrieveLogs(containerId, stdErrSelected), Duration.Inf))
         logResult match {
           case Failure(ex) =>
@@ -173,4 +172,5 @@ object DockerActor {
                          tty: Option[Boolean],
                          user: Option[String]
                        )
+
 }
