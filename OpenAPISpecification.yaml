@@ -20,6 +20,8 @@ tags:
       containers
   - name: Docker Operations
     description: Operations on instances that are running in a docker container
+  - name: User Management
+    description: Operations related to the user database of Delphi-Management
 schemes:
   - https
   - http
@@ -43,6 +45,81 @@ paths:
               TraefikProxyUri:
                 type: string
                 example: "172.0.2.1:80"
+  /users/authenticate:
+    post:
+      tags:
+        - User Management
+      summary: Authenticates a user and returns a valid JWT
+      description: >- 
+        This endpoints validates the username and password that must 
+        be supplied in the Authorization header (using HTTP Basic Authentication).
+        If valid, a JSON Web Token will be generated and returned, that may be used 
+        to authenticate the user for subsequent requests.
+      operationId: authenticate
+      parameters:
+        - in: header
+          name: Delphi-Authorization
+          description: >-
+            Valid JWT that autenticates the calling entity.
+          type: string
+          required: true
+        - in: header
+          name: Authorization
+          description: >- 
+            HTTP Basic Authentication following the schema 'Basic <User:Password>
+            where the concatination of username and password is Base64-Encoded.
+          type: string
+          required: true
+      responses:
+        '200':
+          description: Supplied data is valid, a JWT is returned
+          schema:
+            type: string
+            example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c
+        '401':
+          description: Unauthorized, invalid username / password supplied.
+  /users/add:
+    post:
+      tags:
+        - User Management
+      summary: Adds a new users for the registry
+      description: >-
+        Adds a new user that is passed in the requests entity. The id of the user
+        will be returned.
+      operationId: addUser
+      parameters:
+        - in: body
+          name: DelphiUser
+          description: The user to add
+          required: true
+          schema:
+            type: object
+            required:
+              - userName
+              - secret
+              - userType
+            properties:
+              userName:
+                type: string
+                example: MyUser
+              secret:
+                type: string
+                example: 123Pass
+              userType:
+                type: string
+                enum:
+                  - Admin
+                  - User
+                  - Component
+      responses:
+        '200':
+          description: OK, user has been added, id is returned
+          schema:
+            type: integer
+            format: int64
+            example: 42
+        '400':
+          description: Bad request, name already exists
   /instances/register:
     post:
       tags:

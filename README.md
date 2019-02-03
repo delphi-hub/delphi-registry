@@ -77,12 +77,19 @@ Before you can start the application, you have to make sure your configuration f
 |```dockerOperationTimeout``` | ```Timeout``` | ```Timeout(20 seconds)``` | Default timeout for docker operations. If any of the async Docker operations (deploy, stop, pause, ..) takes longer than this, it will be aborted.|
 |```dockerUri``` | ```String``` | ```http://localhost:9095``` | Default uri to connect to docker. It will be used if the environment variable ```DELPHI_DOCKER_HOST``` is not specified.|
 |```jwtSecretKey``` | ```String``` | ```changeme``` | Secret key to use for JWT signature (HS256). This setting can be overridden by specifying the ```JWT_SECRET``` environment variable.|
-|```useInMemoryDB``` | ```Boolean``` | ```true``` | If set to true, all instance data will be kept in memory instead of using a MySQL database.|
-|```databaseHost``` | ```String``` | ```"jdbc:mysql://localhost/"``` | Host that the MySQL database is reachable at (only necessary if *useInMemoryDB* is false).|
-|```databaseName``` | ```String``` | ```""``` | Name of the MySQL database to use (only necessary if *useInMemoryDB* is false).|
-|```databaseDriver``` | ```String``` | ```"com.mysql.jdbc.Driver"``` | Driver to use for the MySQL connection (only necessary if *useInMemoryDB* is false).|
-|```databaseUsername``` | ```String``` | ```""``` | Username to use for the MySQL connection (only necessary if *useInMemoryDB* is false).|
-|```databasePassword``` | ```String``` | ```""``` | Password to use for the MySQL connection (only necessary if *useInMemoryDB* is false).|
+|```useInMemoryInstanceDB``` | ```Boolean``` | ```true``` | If set to true, all instance data will be kept in memory instead of using a MySQL database.|
+|```instanceDatabaseHost``` | ```String``` | ```"jdbc:mysql://localhost/"``` | Host that the MySQL instance database is reachable at (only necessary if *useInMemoryInstanceDB* is false).|
+|```instanceDatabaseName``` | ```String``` | ```""``` | Name of the MySQL instance database to use (only necessary if *useInMemoryInstanceDB* is false).|
+|```instanceDatabaseDriver``` | ```String``` | ```"com.mysql.jdbc.Driver"``` | Driver to use for the MySQL connection (only necessary if *useInMemoryInstanceDB* is false).|
+|```instanceDatabaseUsername``` | ```String``` | ```""``` | Username to use for the MySQL instance DB connection (only necessary if *useInMemoryInstanceDB* is false).|
+|```instanceDatabasePassword``` | ```String``` | ```""``` | Password to use for the MySQL instance DB connection (only necessary if *useInMemoryInstanceDB* is false).|
+|```useInMemoryAuthDB``` | ```Boolean``` | ```true``` | If set to true, all user data will be kept in memory instead of using a MySQL database.|
+|```authDatabaseHost``` | ```String``` | ```"jdbc:mysql://localhost/"``` | Host that the MySQL users database is reachable at (only necessary if *useInMemoryAuthDB* is false).|
+|```authDatabaseName``` | ```String``` | ```""``` | Name of the MySQL user database to use (only necessary if *useInMemoryAuthDB* is false).|
+|```authDatabaseDriver``` | ```String``` | ```"com.mysql.jdbc.Driver"``` | Driver to use for the MySQL users DB connection (only necessary if *useInMemoryAuthDB* is false).|
+|```authDatabaseUsername``` | ```String``` | ```""``` | Username to use for the MySQL users DB connection (only necessary if *useInMemoryAuthDB* is false).|
+|```authDatabasePassword``` | ```String``` | ```""``` | Password to use for the MySQL users DB connection (only necessary if *useInMemoryAuthDB* is false).|
+|```authenticationValidFor``` | ```Int``` | ```30``` | Default duration that user tokens are valid for (in minutes).|
 |```maxTotalNoRequest``` | ```Int``` | ```2000``` | Maximum number of requests that are allowed to be executed during the current refresh period regardless of their origin.|
 |```maxIndividualIpReq``` | ```Int``` | ```200``` | Maximum number of requests that are allowed to be executed during the current refresh period for one specific origin ip.|
 |```ipLogRefreshRate``` | ```FiniteDuration``` | ```2.minutes``` | Duration of the log refresh period.|
@@ -157,7 +164,7 @@ eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE1NDcxMDYzOTksIm5iZiI6MTU0NzEwNjM
 Using the above token, a valid call to the registry at ```localhost:8087``` using *curl* looks like this:
 
 ```
-curl -X POST -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE1NDcxMDYzOTksIm5iZiI6MTU0NzEwNjM5OSwiZXhwIjoxNTU0MDE0Nzk5LCJ1c2VyX2lkIjoiRGVidWdVc2VyIiwidXNlcl90eXBlIjoiQWRtaW4ifQ.TeDa8JkFANVEufPaxXv3AXSojcaiKdOlBKeU5cLaHpg" localhost:8087/deploy?ComponentType=WebApi
+curl -X POST -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE1NDcxMDYzOTksIm5iZiI6MTU0NzEwNjM5OSwiZXhwIjoxNTU0MDE0Nzk5LCJ1c2VyX2lkIjoiRGVidWdVc2VyIiwidXNlcl90eXBlIjoiQWRtaW4ifQ.TeDa8JkFANVEufPaxXv3AXSojcaiKdOlBKeU5cLaHpg" -H "Content-type: application/json" -d '{"ComponentType":"WebApi"}' localhost:8087/instances/deploy
 ```
 
 ## Contributing

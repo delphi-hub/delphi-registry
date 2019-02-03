@@ -61,3 +61,12 @@ class InstanceLinks(tag: Tag) extends Table[(Long, Long, Long, String)](tag, "in
 
   def * = (id, idFrom, idTo, linkState)
 }
+
+class Users(tag: Tag) extends Table[(Long, String, String, String)](tag, "users") {
+  def id = column[Long]("id", O.PrimaryKey, O.AutoInc) // This is the primary key column
+  def userName = column[String]("userName", O.Length(100), NotNull)
+  def secret=column[String]("secret", O.Length(65), NotNull)
+  def userType=column[String]("userType", O.Length(50), NotNull)
+
+  def * = (id, userName, secret, userType)
+}
