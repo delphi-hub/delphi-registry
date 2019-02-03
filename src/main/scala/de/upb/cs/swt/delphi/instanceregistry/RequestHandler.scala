@@ -247,7 +247,7 @@ class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, con
   }
 
   def handleDeploy(componentType: ComponentType, name: Option[String]): Try[Long] = {
-    log.info(s"Deploying container of type $componentType")
+    log.debug(s"Deploying container of type $componentType")
     val instance = Instance(None,
       "",
       -1L,
@@ -275,7 +275,7 @@ class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, con
             Failure(new RuntimeException(s"Failed to deploy container, docker host not reachable (${ex.getMessage})."))
           case Success((dockerId, host, port)) =>
             val normalizedHost = host.substring(1, host.length - 1)
-            log.info(s"Deployed new container with id $dockerId, host $normalizedHost and port $port.")
+            log.info(s"Deployed new '$componentType' container with id: $dockerId, host: $normalizedHost and port: $port.")
 
             val newInstance = Instance(Some(id),
               normalizedHost,
@@ -291,12 +291,12 @@ class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, con
 
             instanceDao.updateInstance(newInstance) match {
               case Success(_) =>
-                log.info("Successfully registered.")
+                log.info("Instance successfully registered.")
                 fireInstanceAddedEvent(newInstance)
                 fireNumbersChangedEvent(newInstance.componentType)
                 Success(id)
               case Failure(x) =>
-                log.info(s"Failed to register. Exception: $x")
+                log.warning(s"Failed to register. Exception: $x")
                 Failure(x)
             }
         }

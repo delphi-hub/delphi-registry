@@ -1,15 +1,13 @@
 package de.upb.cs.swt.delphi.instanceregistry.Docker
 
 import akka.actor.{Actor, ActorLogging, ActorSystem, Props, Status}
-import akka.http.scaladsl.model.ws.Message
 import akka.stream.ActorMaterializer
 import de.upb.cs.swt.delphi.instanceregistry.Docker.DockerActor._
 import de.upb.cs.swt.delphi.instanceregistry.Registry
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.ComponentType
-import org.reactivestreams.Publisher
 
 import scala.concurrent.duration._
-import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.{Await, ExecutionContext}
 import scala.util.{Failure, Success, Try}
 
 class DockerActor(connection: DockerConnection) extends Actor with ActorLogging {
@@ -45,7 +43,7 @@ class DockerActor(connection: DockerConnection) extends Actor with ActorLogging 
         case Failure(ex) => sender ! Failure(ex)
         case Success(containerResult) =>
           Await.ready(container.start(containerResult.Id), Duration.Inf)
-          log.info(s"Docker Instance created and started")
+          log.debug(s"Docker Instance created and started")
           val containerInfo = Await.result(container.get(containerResult.Id), Duration.Inf)
 
           val instancePort = componentType match {
@@ -55,7 +53,7 @@ class DockerActor(connection: DockerConnection) extends Actor with ActorLogging 
             case t => throw new RuntimeException(s"Invalid component type $t, cannot deploy container.")
           }
 
-          log.info("ip address is " + containerInfo.IPAddress)
+          log.debug("ip address is " + containerInfo.IPAddress)
           sender ! Success(containerResult.Id, containerInfo.IPAddress, instancePort)
       }
 

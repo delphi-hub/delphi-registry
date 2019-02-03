@@ -32,9 +32,7 @@ object Registry extends AppLogging {
 
   def main(args: Array[String]): Unit = {
     requestHandler.initialize()
-    log.info("Starting server ...")
     server.startServer(configuration.bindHost, configuration.bindPort)
-    log.info("Shutting down ...")
     requestHandler.shutdown()
     system.terminate()
   }

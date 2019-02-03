@@ -436,7 +436,7 @@ class Server(handler: RequestHandler) extends HttpApp
             val compType: ComponentType = ComponentType.values.find(v => v.toString == compTypeString).orNull
 
             if (compType != null) {
-              log.info(s"Trying to deploy container of type $compType" + (if (name.isDefined) {
+              log.debug(s"Trying to deploy container of type $compType" + (if (name.isDefined) {
                 s" with name ${name.get}..."
               } else {
                 "..."
@@ -453,7 +453,7 @@ class Server(handler: RequestHandler) extends HttpApp
               }
 
             } else {
-              log.error(s"Failed to deserialize parameter string $compTypeString to ComponentType.")
+              log.warning(s"Failed to deserialize parameter string $compTypeString to ComponentType.")
               complete(HttpResponse(StatusCodes.BadRequest, entity = s"Could not deserialize parameter string $compTypeString to ComponentType"))
             }
           case Failure(ex) =>
