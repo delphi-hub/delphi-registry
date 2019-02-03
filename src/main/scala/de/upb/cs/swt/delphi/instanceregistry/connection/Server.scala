@@ -434,7 +434,7 @@ class Server(handler: RequestHandler) extends HttpApp
     * @return ConfigurationInfo object
     */
   def configurationInfo(): server.Route = {
-    authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
+    authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
       get {
         log.debug(s"GET /configuration has been called")
 
