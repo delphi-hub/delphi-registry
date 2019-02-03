@@ -147,7 +147,7 @@ eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE1NDcxMDYzOTksIm5iZiI6MTU0NzEwNjM
 Using the above token, a valid call to the registry at ```localhost:8087``` using *curl* looks like this:
 
 ```
-curl -X POST -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE1NDcxMDYzOTksIm5iZiI6MTU0NzEwNjM5OSwiZXhwIjoxNTU0MDE0Nzk5LCJ1c2VyX2lkIjoiRGVidWdVc2VyIiwidXNlcl90eXBlIjoiQWRtaW4ifQ.TeDa8JkFANVEufPaxXv3AXSojcaiKdOlBKeU5cLaHpg" localhost:8087/deploy?ComponentType=WebApi
+curl -X POST -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE1NDcxMDYzOTksIm5iZiI6MTU0NzEwNjM5OSwiZXhwIjoxNTU0MDE0Nzk5LCJ1c2VyX2lkIjoiRGVidWdVc2VyIiwidXNlcl90eXBlIjoiQWRtaW4ifQ.TeDa8JkFANVEufPaxXv3AXSojcaiKdOlBKeU5cLaHpg" -H "Content-type: application/json" -d '{"ComponentType":"WebApi"}' localhost:8087/instances/deploy
 ```
 
 ## Contributing
