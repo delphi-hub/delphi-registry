@@ -8,9 +8,9 @@ import akka.http.scaladsl.server.{HttpApp, Route}
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.{Flow, Sink, Source}
 import de.upb.cs.swt.delphi.instanceregistry.authorization.AccessTokenEnums.UserType
-import de.upb.cs.swt.delphi.instanceregistry.authorization.{AccessToken, AuthProvider}
+import de.upb.cs.swt.delphi.instanceregistry.authorization.AccessToken
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.ComponentType
-import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.{EventJsonSupport, Instance, InstanceJsonSupport, InstanceLinkJsonSupport}
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model._
 import de.upb.cs.swt.delphi.instanceregistry.requestLimiter.{IpLogActor, RequestLimitScheduler}
 import de.upb.cs.swt.delphi.instanceregistry.{AppLogging, Registry, RequestHandler}
 import spray.json.JsonParser.ParsingException
@@ -24,6 +24,7 @@ import scala.util.{Failure, Success, Try}
   */
 class Server(handler: RequestHandler) extends HttpApp
   with InstanceJsonSupport
+  with UserJsonSupport
   with EventJsonSupport
   with InstanceLinkJsonSupport
   with AppLogging {
@@ -128,9 +129,20 @@ class Server(handler: RequestHandler) extends HttpApp
             }
         }
     } ~
+    pathPrefix("users") {
+      path("add") {
+        entity(as[String]) {
+          jsonString => addUser(jsonString)
+        }
+      } ~
+      path("authenticate") {
+        authenticate()
+      }
+    }~
     path("events") {
       streamEvents()
     }
+
 
 
   /**
@@ -142,7 +154,7 @@ class Server(handler: RequestHandler) extends HttpApp
     */
   def register(InstanceString: String): server.Route = Route.seal {
 
-    authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Component)) { token =>
+    authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.Component)) { token =>
 
       post {
         log.debug(s"POST /instances/register has been called, parameter is: $InstanceString")
@@ -182,7 +194,7 @@ class Server(handler: RequestHandler) extends HttpApp
     * @return Server route that either maps to a 200 OK response if successful, or to the respective error codes.
     */
   def deregister(id: Long): server.Route = {
-    authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Component)) { token =>
+    authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.Component)) { token =>
       post {
         log.debug(s"POST instance/$id/deregister has been called")
 
@@ -215,7 +227,7 @@ class Server(handler: RequestHandler) extends HttpApp
     * @return Server route that either maps to a 200 OK response containing the list of instances, or the resp. error codes.
     */
   def fetchInstancesOfType(): server.Route = parameters('ComponentType.as[String].?) { compTypeString =>
-    authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.User)) { token =>
+    authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.User)) { token =>
       get {
         log.debug(s"GET /instances?ComponentType=$compTypeString has been called")
 
@@ -249,7 +261,7 @@ class Server(handler: RequestHandler) extends HttpApp
     * @return Server route that either maps to a 200 OK response containing the number of instance, or the resp. error codes.
     */
   def numberOfInstances(): server.Route = parameters('ComponentType.as[String].?) { compTypeString =>
-    authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.User)) { token =>
+    authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.User)) { token =>
       get {
         log.debug(s"GET instances/count?ComponentType=$compTypeString has been called")
 
@@ -283,7 +295,7 @@ class Server(handler: RequestHandler) extends HttpApp
     * @return Server route that either maps to 200 OK and the respective instance as entity, or 404.
     */
   def retrieveInstance(id: Long): server.Route = {
-    authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.User)) { token =>
+    authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.User)) { token =>
       get {
         log.debug(s"GET /instances/$id has been called")
 
@@ -307,7 +319,7 @@ class Server(handler: RequestHandler) extends HttpApp
     * @return Server route that either maps to 200 OK response containing the instance, or the resp. error codes.
     */
   def matchingInstance(id: Long): server.Route = parameters('ComponentType.as[String]) { (compTypeString) =>
-    authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Component)) { token =>
+    authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.Component)) { token =>
       get {
         log.debug(s"GET instance/$id/matchingInstance?ComponentType=$compTypeString has been called")
 
@@ -356,7 +368,7 @@ class Server(handler: RequestHandler) extends HttpApp
     * @return Server route that either maps to 200 OK or to the respective error codes
     */
   def matchInstance(affectedInstanceId: Long, json: JsObject): server.Route = {
-    authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Component)) { token =>
+    authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.Component)) { token =>
 
       post {
         log.debug(s"POST /instances/$affectedInstanceId/matchingResult has been called with entity $json")
@@ -396,7 +408,7 @@ class Server(handler: RequestHandler) extends HttpApp
     * @return Server route mapping to either 200 OK and the list of event, or the resp. error codes.
     */
   def eventList(id: Long): server.Route = {
-    authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.User)) { token =>
+    authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.User)) { token =>
       get {
         log.debug(s"GET instances/$id//eventList has been called")
 
@@ -420,7 +432,7 @@ class Server(handler: RequestHandler) extends HttpApp
     * @return Server route that either maps to 202 ACCEPTED and the generated id of the instance, or the resp. error codes.
     */
   def deployContainer(json: JsObject): server.Route = {
-    authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
+    authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
       post {
 
         log.debug(s"POST /instances/deploy has been called with data: $json")
@@ -467,7 +479,7 @@ class Server(handler: RequestHandler) extends HttpApp
     * @return Server route that either maps to 200 OK or the respective error codes
     */
   def reportStart(id: Long): server.Route = {
-    authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Component)) { token =>
+    authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.Component)) { token =>
       post {
         handler.handleReportStart(id) match {
           case handler.OperationResult.IdUnknown =>
@@ -500,7 +512,7 @@ class Server(handler: RequestHandler) extends HttpApp
     * @return Server route that either maps to 200 OK or the respective error codes
     */
   def reportStop(id: Long): server.Route = {
-    authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Component)) { token =>
+    authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.Component)) { token =>
       post {
         handler.handleReportStop(id) match {
           case handler.OperationResult.IdUnknown =>
@@ -533,7 +545,7 @@ class Server(handler: RequestHandler) extends HttpApp
     * @return Server route that either maps to 200 OK or the respective error codes
     */
   def reportFailure(id: Long): server.Route = parameters('ErrorLog.as[String].?) { (errorLog) =>
-    authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Component)) { token =>
+    authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.Component)) { token =>
       post {
         if (errorLog.isEmpty) {
           log.debug(s"POST /instances/$id/reportFailure has been called")
@@ -572,7 +584,7 @@ class Server(handler: RequestHandler) extends HttpApp
     * @return Server route that either maps to 202 ACCEPTED or the expected error codes.
     */
   def pause(id: Long): server.Route = {
-    authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
+    authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
       post {
         log.debug(s"POST /instances/$id/pause has been called")
         handler.handlePause(id) match {
@@ -611,7 +623,7 @@ class Server(handler: RequestHandler) extends HttpApp
     * @return Server route that either maps to 202 ACCEPTED or the expected error codes.
     */
   def resume(id: Long): server.Route = {
-    authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
+    authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
       post {
         log.debug(s"POST /instances/$id/resume has been called")
         handler.handleResume(id) match {
@@ -650,7 +662,7 @@ class Server(handler: RequestHandler) extends HttpApp
     * @return Server route that either maps to 202 ACCEPTED or the expected error codes.
     */
   def stop(id: Long): server.Route = {
-    authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
+    authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
       post {
         log.debug(s"POST /instances/$id/stop has been called")
         handler.handleStop(id) match {
@@ -689,7 +701,7 @@ class Server(handler: RequestHandler) extends HttpApp
     * @return Server route that either maps to 202 ACCEPTED or the expected error codes.
     */
   def start(id: Long): server.Route = {
-    authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
+    authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
       post {
         log.debug(s"POST /instances/$id/start has been called")
         handler.handleStart(id) match {
@@ -728,7 +740,7 @@ class Server(handler: RequestHandler) extends HttpApp
     * @return Server route that either maps to 202 ACCEPTED or the respective error codes.
     */
   def deleteContainer(id: Long): server.Route = {
-    authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
+    authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
       post {
         log.debug(s"POST /delete?Id=$id has been called")
         handler.handleDeleteContainer(id) match {
@@ -772,7 +784,7 @@ class Server(handler: RequestHandler) extends HttpApp
     * @return Server route that either maps to 202 ACCEPTED or the respective error codes
     */
   def assignInstance(id: Long, json: JsObject): server.Route = {
-    authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
+    authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
 
       post {
         log.debug(s"POST /instances/$id/assignInstance has been called with data : $json ")
@@ -821,7 +833,7 @@ class Server(handler: RequestHandler) extends HttpApp
     * @return Server route that either maps to 200 OK (and the list of links as content), or the respective error code.
     */
   def linksFrom(id: Long): server.Route = {
-    authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.User)) { token =>
+    authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.User)) { token =>
       get {
         log.debug(s"GET /instances/$id/linksFrom has been called.")
 
@@ -847,7 +859,7 @@ class Server(handler: RequestHandler) extends HttpApp
     * @return Server route that either maps to 200 OK (and the list of links as content), or the respective error code.
     */
   def linksTo(id: Long): server.Route = {
-    authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.User)) { token =>
+    authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.User)) { token =>
       get {
         log.debug(s"GET instances/$id/linksTo has been called.")
 
@@ -874,7 +886,7 @@ class Server(handler: RequestHandler) extends HttpApp
     * @return Server route that maps to 200 OK and the current InstanceNetwork as content.
     */
   def network(): server.Route = {
-    authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.User)) { token =>
+    authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.User)) { token =>
       get {
         log.debug(s"GET /instances/network has been called.")
         complete {
@@ -891,7 +903,7 @@ class Server(handler: RequestHandler) extends HttpApp
     * @return Server route that either maps to 200 OK or the respective error codes.
     */
   def addLabel(id: Long, json: JsObject): server.Route = {
-    authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
+    authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
 
       post {
         log.debug(s"POST /instances/$id/label has been called with data $json.")
@@ -929,7 +941,7 @@ class Server(handler: RequestHandler) extends HttpApp
     * @return Server route that either maps to 200 Ok or the respective error codes.
     */
   def runCommandInContainer(id:Long, json: JsObject): server.Route = {
-    authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
+    authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
       post {
         log.debug(s"POST /command has been called")
 
@@ -974,7 +986,7 @@ class Server(handler: RequestHandler) extends HttpApp
   }
 
   def retrieveLogs(id: Long): server.Route = parameters('StdErr.as[Boolean].?) { stdErrOption =>
-    authenticateOAuth2[AccessToken]("Secure Site", AuthProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
+    authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
       get {
         log.debug(s"GET /logs?Id=$id has been called")
 
@@ -1080,6 +1092,59 @@ class Server(handler: RequestHandler) extends HttpApp
     }
   }
 
+  def authenticate() : server.Route = {
+    post
+    {
+      headerValueByName("Delphi-Authorization") { token =>
+        log.info(s"Requested with Delphi-Authorization token $token")
+        if(handler.authProvider.isValidDelphiToken(token)){
+          log.info(s"valid delphi authorization token")
+          authenticateBasic(realm = "secure", handler.authProvider.authenticateBasicJWT) {
+            case userName =>
+              complete(handler.authProvider.generateJwt(userName))
+            case _ =>
+              complete{HttpResponse(StatusCodes.InternalServerError, entity = s"Internal server error, unknown operation result")}
+          }
+        } else {
+          complete{HttpResponse(StatusCodes.Unauthorized, entity = s"Not valid Delphi-authorization")}
+        }
+
+      }
+    }
+  }
+
+  def addUser(UserString: String): server.Route = Route.seal{
+
+    authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
+
+      post {
+        log.debug(s"POST /users/add has been called, parameter is: $UserString")
+
+        try {
+          val paramInstance: DelphiUser = UserString.parseJson.convertTo[DelphiUser](AuthDelphiUserFormat)
+          handler.handleAddUser(paramInstance) match {
+            case Success(id) =>
+              complete {
+                id.toString
+              }
+            case Failure(ex) =>
+              log.error(ex, "Failed to handle registration of instance.")
+              complete(HttpResponse(StatusCodes.BadRequest, entity = "Username already taken."))
+          }
+        } catch {
+          case dx: DeserializationException =>
+            log.error(dx, "Deserialization exception")
+            complete(HttpResponse(StatusCodes.BadRequest, entity = s"Could not deserialize parameter instance with message ${dx.getMessage}."))
+          case px: ParsingException =>
+            log.error(px, "Failed to parse JSON while registering")
+            complete(HttpResponse(StatusCodes.BadRequest, entity = s"Failed to parse JSON entity with message ${px.getMessage}"))
+          case x: Exception =>
+            log.error(x, "Uncaught exception while deserializing.")
+            complete(HttpResponse(StatusCodes.InternalServerError, entity = "An internal server error occurred."))
+        }
+      }
+    }
+  }
 
 }
 

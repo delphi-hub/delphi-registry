@@ -9,6 +9,7 @@ final case class AccessToken(userId: String,
                              issuedAt: DateTime,
                              notBefore: DateTime)
 
+
 object AccessTokenEnums {
 
   type UserType = UserType.Value

@@ -9,8 +9,9 @@ import akka.stream.{ActorMaterializer, Materializer, OverflowStrategy}
 import akka.util.Timeout
 import de.upb.cs.swt.delphi.instanceregistry.Docker.DockerActor._
 import de.upb.cs.swt.delphi.instanceregistry.Docker.{ContainerAlreadyStoppedException, DockerActor, DockerConnection}
+import de.upb.cs.swt.delphi.instanceregistry.authorization.AuthProvider
 import de.upb.cs.swt.delphi.instanceregistry.connection.RestClient
-import de.upb.cs.swt.delphi.instanceregistry.daos.InstanceDAO
+import de.upb.cs.swt.delphi.instanceregistry.daos.{AuthDAO, InstanceDAO}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.{ComponentType, InstanceState}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.LinkEnums.LinkState
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model._
@@ -20,12 +21,14 @@ import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
 
-class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, connection: DockerConnection) extends AppLogging {
+class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao: InstanceDAO, connection: DockerConnection) extends AppLogging {
 
 
   implicit val system: ActorSystem = Registry.system
   implicit val materializer: Materializer = ActorMaterializer()
   implicit val ec: ExecutionContext = system.dispatcher
+
+  val authProvider: AuthProvider = new AuthProvider(authDao)
 
   val (eventActor, eventPublisher) = Source.actorRef[RegistryEvent](10, OverflowStrategy.dropNew)
     .toMat(Sink.asPublisher(fanout = true))(Keep.both)
@@ -35,6 +38,7 @@ class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, con
   def initialize(): Unit = {
     log.info("Initializing request handler...")
     instanceDao.initialize()
+    authDao.initialize()
     if (!instanceDao.allInstances().exists(instance => instance.name.equals("Default ElasticSearch Instance"))) {
       //Add default ES instance
       handleRegister(Instance(None,
@@ -54,6 +58,7 @@ class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, con
   def shutdown(): Unit = {
     eventActor ! PoisonPill
     instanceDao.shutdown()
+    authDao.shutdown()
   }
 
   /**
@@ -935,6 +940,24 @@ class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, con
 
       OperationResult.Ok
 
+    }
+  }
+
+  /**
+    * Add user to user database
+    *
+    * @param user
+    * @return
+    */
+  def handleAddUser(user: DelphiUser): Try[Long] = {
+
+    val noIdUser = DelphiUser(id = None, userName = user.userName, secret = user.secret, userType = user.userType)
+
+    authDao.addUser(noIdUser) match {
+      case Success(id) =>
+        log.info(s"Successfully handled create user request")
+        Success(id)
+      case Failure(x) => Failure(x)
     }
   }
 
