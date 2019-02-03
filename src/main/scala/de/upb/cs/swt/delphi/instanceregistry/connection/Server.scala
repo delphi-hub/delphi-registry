@@ -1,15 +1,14 @@
 package de.upb.cs.swt.delphi.instanceregistry.connection
 
 import akka.actor.ActorSystem
-import akka.http.scaladsl.server.RequestContext
 import akka.http.scaladsl.model.ws.{Message, TextMessage}
-import akka.http.scaladsl.model.{HttpHeader, HttpResponse, StatusCodes}
+import akka.http.scaladsl.model.{HttpResponse, StatusCodes}
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.{HttpApp, Route}
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.{Flow, Sink, Source}
 import de.upb.cs.swt.delphi.instanceregistry.authorization.AccessTokenEnums.UserType
-import de.upb.cs.swt.delphi.instanceregistry.authorization.{AccessToken, AuthProvider}
+import de.upb.cs.swt.delphi.instanceregistry.authorization.AccessToken
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.ComponentType
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model._
 import de.upb.cs.swt.delphi.instanceregistry.requestLimiter.{IpLogActor, RequestLimitScheduler}
@@ -25,7 +24,7 @@ import scala.util.{Failure, Success, Try}
   */
 class Server(handler: RequestHandler) extends HttpApp
   with InstanceJsonSupport
-  with RequestJsonSupport
+  with UserJsonSupport
   with EventJsonSupport
   with InstanceLinkJsonSupport
   with AppLogging {
@@ -135,14 +134,15 @@ class Server(handler: RequestHandler) extends HttpApp
         entity(as[String]) {
           jsonString => addUser(jsonString)
         }
+      } ~
+      path("authenticate") {
+        authenticate()
       }
     }~
     path("events") {
       streamEvents()
-    } ~
-    path("authenticate") {
-      authenticate()
     }
+
 
 
   /**
@@ -1093,20 +1093,23 @@ class Server(handler: RequestHandler) extends HttpApp
   }
 
   def authenticate() : server.Route = {
-    headerValueByName("Delphi-Authorization") { token =>
-      log.info(s"Requested with Delphi-Authorization token $token")
-      if(handler.authProvider.isValidDelphiToken(token)){
-        log.info(s"valid delphi authorization token")
-        authenticateBasic(realm = "secure", handler.authProvider.authenticateBasicJWT) {
-          case userName =>
-            complete(handler.authProvider.generateJwt(userName))
-          case _ =>
-            complete{HttpResponse(StatusCodes.InternalServerError, entity = s"Internal server error, unknown operation result")}
+    post
+    {
+      headerValueByName("Delphi-Authorization") { token =>
+        log.info(s"Requested with Delphi-Authorization token $token")
+        if(handler.authProvider.isValidDelphiToken(token)){
+          log.info(s"valid delphi authorization token")
+          authenticateBasic(realm = "secure", handler.authProvider.authenticateBasicJWT) {
+            case userName =>
+              complete(handler.authProvider.generateJwt(userName))
+            case _ =>
+              complete{HttpResponse(StatusCodes.InternalServerError, entity = s"Internal server error, unknown operation result")}
+          }
+        } else {
+          complete{HttpResponse(StatusCodes.Unauthorized, entity = s"Not valid Delphi-authorization")}
         }
-      } else {
-        complete{HttpResponse(StatusCodes.Unauthorized, entity = s"Not valid Delphi-authorization")}
-      }
 
+      }
     }
   }
 
@@ -1126,7 +1129,7 @@ class Server(handler: RequestHandler) extends HttpApp
               }
             case Failure(ex) =>
               log.error(ex, "Failed to handle registration of instance.")
-              complete(HttpResponse(StatusCodes.InternalServerError, entity = "An internal server error occurred."))
+              complete(HttpResponse(StatusCodes.BadRequest, entity = "Username already taken."))
           }
         } catch {
           case dx: DeserializationException =>
