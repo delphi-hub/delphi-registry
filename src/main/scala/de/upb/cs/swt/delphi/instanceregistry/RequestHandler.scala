@@ -556,7 +556,7 @@ class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, con
     } else if (!isInstanceDockerContainer(id)) {
       OperationResult.NoDockerContainer
     } else {
-      log.info(s"Handling /start for instance with id $id...")
+      log.debug(s"Handling /start for instance with id $id...")
       val instance = instanceDao.getInstance(id).get
       if (instance.instanceState == InstanceState.Stopped) {
         implicit val timeout: Timeout = configuration.dockerOperationTimeout
@@ -589,7 +589,7 @@ class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, con
     } else if (!isInstanceDockerContainer(id)) {
       OperationResult.NoDockerContainer
     } else {
-      log.info(s"Handling /delete for instance with id $id...")
+      log.debug(s"Handling /delete for instance with id $id...")
       val instance = instanceDao.getInstance(id).get
 
       //It is not safe to delete instances when other running instances depend on it!

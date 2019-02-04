@@ -157,18 +157,18 @@ class Server(handler: RequestHandler) extends HttpApp
                 id.toString
               }
             case Failure(ex) =>
-              log.error(ex, "Failed to handle registration of instance.")
+              log.warning(s"Failed to handle registration of instance. ${ex.getMessage}")
               complete(HttpResponse(StatusCodes.InternalServerError, entity = "An internal server error occurred."))
           }
         } catch {
           case dx: DeserializationException =>
-            log.error(dx, "Deserialization exception")
-            complete(HttpResponse(StatusCodes.BadRequest, entity = s"Could not deserialize parameter instance with message ${dx.getMessage}."))
+            log.warning(s"Deserialization exception: ${dx.msg}")
+            complete(HttpResponse(StatusCodes.BadRequest, entity = s"Could not deserialize parameter instance with message: ${dx.getMessage}."))
           case px: ParsingException =>
-            log.error(px, "Failed to parse JSON while registering")
-            complete(HttpResponse(StatusCodes.BadRequest, entity = s"Failed to parse JSON entity with message ${px.getMessage}"))
+            log.warning(s"Failed to parse JSON while registering: ${px.summary}")
+            complete(HttpResponse(StatusCodes.BadRequest, entity = s"Failed to parse JSON entity with message: ${px.getMessage}"))
           case x: Exception =>
-            log.error(x, "Uncaught exception while deserializing.")
+            log.warning("Uncaught exception while deserializing")
             complete(HttpResponse(StatusCodes.InternalServerError, entity = "An internal server error occurred."))
         }
       }
@@ -237,7 +237,7 @@ class Server(handler: RequestHandler) extends HttpApp
           }
         }
         else {
-          log.error(s"Failed to deserialize parameter string $compTypeString to ComponentType.")
+          log.warning(s"Failed to deserialize parameter string $compTypeString to ComponentType.")
           complete(HttpResponse(StatusCodes.BadRequest, entity = s"Could not deserialize parameter string $compTypeString to ComponentType"))
         }
       }
@@ -271,7 +271,7 @@ class Server(handler: RequestHandler) extends HttpApp
           }
         }
         else {
-          log.error(s"Failed to deserialize parameter string $compTypeString to ComponentType.")
+          log.warning(s"Failed to deserialize parameter string $compTypeString to ComponentType.")
           complete(HttpResponse(StatusCodes.BadRequest, entity = s"Could not deserialize parameter string $compTypeString to ComponentType"))
         }
       }
