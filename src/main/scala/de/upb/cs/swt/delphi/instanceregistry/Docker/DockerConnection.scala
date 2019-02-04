@@ -12,13 +12,8 @@ import scala.concurrent.Future
 object DockerConnection {
 
 
-  def fromEnvironment(configuration: Configuration)(implicit system: ActorSystem, materializer: Materializer): DockerConnection = {
-    def env(key: String): Option[String] = sys.env.get(key).filter(_.nonEmpty)
-
-    val host = env("DELPHI_DOCKER_HOST").getOrElse {
-      configuration.defaultDockerUri
-    }
-    DockerHttpConnection(host)
+  def fromEnvironment(configuration: Configuration) (implicit system: ActorSystem, mat: Materializer): DockerConnection = {
+    DockerHttpConnection(configuration.dockerUri)
   }
 }
 

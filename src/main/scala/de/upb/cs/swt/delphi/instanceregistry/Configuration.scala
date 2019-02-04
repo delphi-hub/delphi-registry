@@ -9,6 +9,11 @@ class Configuration( ) {
   val bindHost: String = "0.0.0.0"
   val bindPort: Int = 8087
 
+  //Traefik data
+  val traefikBaseHost: String = "delphi.de"
+  val traefikDockerNetwork: String = "delphi"
+  val traefikUri: String = "http://172.17.0.1:80"
+
 
   val recoveryFileName : String = "dump.temp"
 
@@ -32,7 +37,7 @@ class Configuration( ) {
   val maxLabelLength: Int = 50
 
   val dockerOperationTimeout: Timeout = Timeout(20 seconds)
-  val defaultDockerUri: String = "http://localhost:9095"
+  val dockerUri: String = sys.env.getOrElse("DELPHI_DOCKER_HOST", "http://localhost:9095")
 
   val jwtSecretKey: String = sys.env.getOrElse("JWT_SECRET", "changeme")
 

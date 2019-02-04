@@ -69,7 +69,10 @@ trait JsonSupport extends SprayJsonSupport with DefaultJsonProtocol {
   }
   implicit val StatusFormat = jsonFormat6(ContainerStatus)
   implicit val ResponseFormat = jsonFormat2(CreateContainerResponse)
-  implicit val ConfigFormat = jsonFormat4(ContainerConfig)
+  implicit val ExposedPortConfigFormat = jsonFormat0(EmptyExposedPortConfig)
+  implicit val EndpointsConfigFormat = jsonFormat0(EmptyEndpointConfig)
+  implicit val NetworkConfigFormat = jsonFormat1(NetworkConfig)
+  implicit val ConfigFormat = jsonFormat7(ContainerConfig)
   implicit val NetworkFormat = jsonFormat1(Networks)
 }
 

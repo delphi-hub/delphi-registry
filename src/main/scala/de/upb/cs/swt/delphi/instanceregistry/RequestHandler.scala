@@ -126,6 +126,10 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
     instanceDao.getEventsFor(id)
   }
 
+  def generateConfigurationInfo(): ConfigurationInfo = {
+    ConfigurationInfo(DockerHttpUri = configuration.dockerUri, TraefikProxyUri = configuration.traefikUri)
+  }
+
   def getMatchingInstanceOfType(callerId: Long, compType: ComponentType): (OperationResult.Value, Try[Instance]) = {
     log.info(s"Started matching: Instance with id $callerId is looking for instance of type $compType.")
     if (!instanceDao.hasInstance(callerId)) {
@@ -270,7 +274,7 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
         implicit val timeout: Timeout = configuration.dockerOperationTimeout
 
         val future: Future[Any] = dockerActor ? create(componentType, id)
-        val deployResult = Await.result(future, timeout.duration).asInstanceOf[Try[(String, String, Int)]]
+        val deployResult = Await.result(future, timeout.duration).asInstanceOf[Try[(String, String, Int, String)]]
 
         deployResult match {
           case Failure(ex) =>
@@ -278,12 +282,13 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
             instanceDao.removeInstance(id)
             fireDockerOperationErrorEvent(None, s"Deploy failed with message: ${ex.getMessage}")
             Failure(new RuntimeException(s"Failed to deploy container, docker host not reachable (${ex.getMessage})."))
-          case Success((dockerId, host, port)) =>
-            val normalizedHost = host.substring(1, host.length - 1)
-            log.info(s"Deployed new container with id $dockerId, host $normalizedHost and port $port.")
+          case Success((dockerId, host, port, traefikHost)) =>
+            log.info(s"Deployed new container with id $dockerId, host $host, port $port and Traefik host $traefikHost.")
+
+            val traefikConfig = TraefikConfiguration(traefikHost, configuration.traefikUri)
 
             val newInstance = Instance(Some(id),
-              normalizedHost,
+              host,
               port,
               name.getOrElse(s"Generic $componentType"),
               componentType,
@@ -291,7 +296,8 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
               InstanceState.Deploying,
               List.empty[String],
               List.empty[InstanceLink],
-              List.empty[InstanceLink]
+              List.empty[InstanceLink],
+              Some(traefikConfig)
             )
 
             instanceDao.updateInstance(newInstance) match {

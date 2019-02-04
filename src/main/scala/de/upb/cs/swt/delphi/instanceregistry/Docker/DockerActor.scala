@@ -36,27 +36,41 @@ class DockerActor(connection: DockerConnection) extends Actor with ActorLogging 
      }
 
     case create(componentType, instanceId, containerName) =>
-      val containerConfig = ContainerConfig(Image = DockerImage.getImageName(componentType),
-        Env = Seq(s"INSTANCE_ID=$instanceId", s"DELPHI_IR_URI=${Registry.configuration.uriInLocalNetwork}",
-          s"DELPHI_JWT_SECRET=${Registry.configuration.jwtSecretKey}"))
+
+      val instancePort = componentType match {
+        case ComponentType.Crawler => Registry.configuration.defaultCrawlerPort
+        case ComponentType.WebApi => Registry.configuration.defaultWebApiPort
+        case ComponentType.WebApp => Registry.configuration.defaultWepAppPort
+        case t => throw new RuntimeException(s"Invalid component type $t, cannot deploy container.")
+      }
+
+      val networkConfig = NetworkConfig(Map(Registry.configuration.traefikDockerNetwork ->  EmptyEndpointConfig()))
+
+      val traefikHostUrl = componentType.toString.toLowerCase + instanceId.toString + "." + Registry.configuration.traefikBaseHost
+
+      val containerConfig = ContainerConfig(
+        Image = DockerImage.getImageName(componentType),
+        Env = Seq(
+          s"INSTANCE_ID=$instanceId",
+          s"DELPHI_IR_URI=${Registry.configuration.uriInLocalNetwork}",
+          s"DELPHI_JWT_SECRET=${Registry.configuration.jwtSecretKey}"
+        ),
+        Labels = Map("traefik.frontend.rule" -> s"Host:$traefikHostUrl"),
+        ExposedPorts = Map(s"$instancePort/tcp" -> EmptyExposedPortConfig()),
+        NetworkingConfig = networkConfig
+      )
 
       val createCommand = Try(Await.result(container.create(containerConfig, containerName), Duration.Inf))
       createCommand match {
         case Failure(ex) => sender ! Failure(ex)
         case Success(containerResult) =>
           Await.ready(container.start(containerResult.Id), Duration.Inf)
-          log.info(s"Docker Instance created and started")
+
           val containerInfo = Await.result(container.get(containerResult.Id), Duration.Inf)
 
-          val instancePort = componentType match {
-            case ComponentType.Crawler => Registry.configuration.defaultCrawlerPort
-            case ComponentType.WebApi => Registry.configuration.defaultWebApiPort
-            case ComponentType.WebApp => Registry.configuration.defaultWepAppPort
-            case t => throw new RuntimeException(s"Invalid component type $t, cannot deploy container.")
-          }
+          log.info(s"Docker Instance created and started, ip is ${containerInfo.IPAddress}, host is $traefikHostUrl")
 
-          log.info("ip address is " + containerInfo.IPAddress)
-          sender ! Success(containerResult.Id, containerInfo.IPAddress, instancePort)
+          sender ! Success(containerResult.Id, containerInfo.IPAddress, instancePort, traefikHostUrl)
       }
 
     case stop(containerId) =>

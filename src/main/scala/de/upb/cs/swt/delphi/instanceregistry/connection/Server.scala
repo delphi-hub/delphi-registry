@@ -27,6 +27,7 @@ class Server(handler: RequestHandler) extends HttpApp
   with UserJsonSupport
   with EventJsonSupport
   with InstanceLinkJsonSupport
+  with ConfigurationInfoJsonSupport
   with AppLogging {
 
   implicit val system: ActorSystem = Registry.system
@@ -141,6 +142,9 @@ class Server(handler: RequestHandler) extends HttpApp
     }~
     path("events") {
       streamEvents()
+    } ~
+    path("configuration") {
+      configurationInfo()
     }
 
 
@@ -419,6 +423,23 @@ class Server(handler: RequestHandler) extends HttpApp
           case Failure(_) => complete {
             HttpResponse(StatusCodes.NotFound, entity = s"Id $id not found.")
           }
+        }
+      }
+    }
+  }
+
+  /**
+    * Returns general configuration information containing the docker uri and the traefik host
+    *
+    * @return ConfigurationInfo object
+    */
+  def configurationInfo(): server.Route = {
+    authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
+      get {
+        log.debug(s"GET /configuration has been called")
+
+        complete {
+          handler.generateConfigurationInfo().toJson(ConfigurationInfoFormat).toString
         }
       }
     }

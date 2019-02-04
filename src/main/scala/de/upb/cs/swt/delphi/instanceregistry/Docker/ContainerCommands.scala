@@ -178,10 +178,17 @@ class ContainerCommands(connection: DockerConnection) extends JsonSupport with C
       response.status match {
         case StatusCodes.OK =>
           Unmarshal(response.entity).to[String].map { json =>
-            val out = json.parseJson.asJsObject.getFields("NetworkSettings")
-            out match {
-              case Seq(network) => Networks(network.asJsObject.fields("IPAddress").toString())
-              case _ => throw DeserializationException("Cannot find required field NetworkSettings/IPAddress")
+
+            Try[Networks]{
+              val ip = json.parseJson.asJsObject.fields("NetworkSettings")
+                .asJsObject.fields("Networks")
+                .asJsObject.fields(Registry.configuration.traefikDockerNetwork)
+                .asJsObject.getFields("IPAddress").head.toString.replace("\"", "")
+              Networks(ip)
+            } match {
+              case Success(network) => network
+              case Failure(ex) =>
+                throw DeserializationException(s"Failed to extract IPAddress from docker with message ${ex.getMessage}")
             }
 
           }
