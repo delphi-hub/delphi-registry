@@ -60,16 +60,18 @@ class Server(handler: RequestHandler) extends HttpApp
           network()
         } ~
         path("deploy") {
-          entity(as[JsValue]) { json => deployContainer(json.asJsObject)}
+          entity(as[JsValue]) { json => deployContainer(json.asJsObject) }
         } ~
         path("count") {
           numberOfInstances()
         } ~
-        path(LongNumber) { Id => retrieveInstance(Id) } ~
         pathPrefix(LongNumber) { Id =>
-          path("deregister") {
-            deregister(Id)
+          pathEnd {
+            retrieveInstance(Id)
           } ~
+            path("deregister") {
+              deregister(Id)
+            } ~
             path("matchingInstance") {
               matchingInstance(Id)
             } ~
@@ -139,7 +141,7 @@ class Server(handler: RequestHandler) extends HttpApp
       path("authenticate") {
         authenticate()
       }
-    }~
+    } ~
     path("events") {
       streamEvents()
     } ~
@@ -171,18 +173,18 @@ class Server(handler: RequestHandler) extends HttpApp
                 id.toString
               }
             case Failure(ex) =>
-              log.error(ex, "Failed to handle registration of instance.")
+              log.warning(s"Failed to handle registration of instance. ${ex.getMessage}")
               complete(HttpResponse(StatusCodes.InternalServerError, entity = "An internal server error occurred."))
           }
         } catch {
           case dx: DeserializationException =>
-            log.error(dx, "Deserialization exception")
-            complete(HttpResponse(StatusCodes.BadRequest, entity = s"Could not deserialize parameter instance with message ${dx.getMessage}."))
+            log.warning(s"Deserialization exception: ${dx.msg}")
+            complete(HttpResponse(StatusCodes.BadRequest, entity = s"Could not deserialize parameter instance with message: ${dx.getMessage}."))
           case px: ParsingException =>
-            log.error(px, "Failed to parse JSON while registering")
-            complete(HttpResponse(StatusCodes.BadRequest, entity = s"Failed to parse JSON entity with message ${px.getMessage}"))
+            log.warning(s"Failed to parse JSON while registering: ${px.summary}")
+            complete(HttpResponse(StatusCodes.BadRequest, entity = s"Failed to parse JSON entity with message: ${px.getMessage}"))
           case x: Exception =>
-            log.error(x, "Uncaught exception while deserializing.")
+            log.warning("Uncaught exception while deserializing")
             complete(HttpResponse(StatusCodes.InternalServerError, entity = "An internal server error occurred."))
         }
       }
@@ -251,7 +253,7 @@ class Server(handler: RequestHandler) extends HttpApp
           }
         }
         else {
-          log.error(s"Failed to deserialize parameter string $compTypeString to ComponentType.")
+          log.warning(s"Failed to deserialize parameter string $compTypeString to ComponentType.")
           complete(HttpResponse(StatusCodes.BadRequest, entity = s"Could not deserialize parameter string $compTypeString to ComponentType"))
         }
       }
@@ -285,7 +287,7 @@ class Server(handler: RequestHandler) extends HttpApp
           }
         }
         else {
-          log.error(s"Failed to deserialize parameter string $compTypeString to ComponentType.")
+          log.warning(s"Failed to deserialize parameter string $compTypeString to ComponentType.")
           complete(HttpResponse(StatusCodes.BadRequest, entity = s"Could not deserialize parameter string $compTypeString to ComponentType"))
         }
       }
@@ -328,7 +330,7 @@ class Server(handler: RequestHandler) extends HttpApp
         log.debug(s"GET instance/$id/matchingInstance?ComponentType=$compTypeString has been called")
 
         val compType: ComponentType = ComponentType.values.find(v => v.toString == compTypeString).orNull
-        log.info(s"Looking for instance of type $compType ...")
+        log.debug(s"Looking for instance of type $compType ...")
 
         if (compType != null) {
           handler.getMatchingInstanceOfType(id, compType) match {
@@ -358,7 +360,7 @@ class Server(handler: RequestHandler) extends HttpApp
               complete(HttpResponse(StatusCodes.NotFound, entity = s"Could not find matching instance of type $compType for instance with id $id."))
           }
         } else {
-          log.error(s"Failed to deserialize parameter string $compTypeString to ComponentType.")
+          log.warning(s"Failed to deserialize parameter string $compTypeString to ComponentType.")
           complete(HttpResponse(StatusCodes.BadRequest, entity = s"Could not deserialize parameter string $compTypeString to ComponentType"))
         }
       }
@@ -398,7 +400,9 @@ class Server(handler: RequestHandler) extends HttpApp
 
           case Failure(ex) =>
             log.warning(s"Failed to unmarshal parameters with message ${ex.getMessage}. Data: $json")
-            complete{HttpResponse(StatusCodes.BadRequest, entity = "Wrong data format supplied.")}
+            complete {
+              HttpResponse(StatusCodes.BadRequest, entity = "Wrong data format supplied.")
+            }
         }
 
       }
@@ -465,7 +469,7 @@ class Server(handler: RequestHandler) extends HttpApp
             val compType: ComponentType = ComponentType.values.find(v => v.toString == compTypeString).orNull
 
             if (compType != null) {
-              log.info(s"Trying to deploy container of type $compType" + (if (name.isDefined) {
+              log.debug(s"Trying to deploy container of type $compType" + (if (name.isDefined) {
                 s" with name ${name.get}..."
               } else {
                 "..."
@@ -482,12 +486,14 @@ class Server(handler: RequestHandler) extends HttpApp
               }
 
             } else {
-              log.error(s"Failed to deserialize parameter string $compTypeString to ComponentType.")
+              log.warning(s"Failed to deserialize parameter string $compTypeString to ComponentType.")
               complete(HttpResponse(StatusCodes.BadRequest, entity = s"Could not deserialize parameter string $compTypeString to ComponentType"))
             }
           case Failure(ex) =>
             log.warning(s"Failed to unmarshal parameters with message ${ex.getMessage}. Data: $json")
-            complete{HttpResponse(StatusCodes.BadRequest, entity = "Wrong data format supplied.")}
+            complete {
+              HttpResponse(StatusCodes.BadRequest, entity = "Wrong data format supplied.")
+            }
         }
       }
     }
@@ -763,7 +769,7 @@ class Server(handler: RequestHandler) extends HttpApp
   def deleteContainer(id: Long): server.Route = {
     authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
       post {
-        log.debug(s"POST /delete?Id=$id has been called")
+        log.debug(s"POST /instances/$id/delete has been called")
         handler.handleDeleteContainer(id) match {
           case handler.OperationResult.IdUnknown =>
             log.warning(s"Cannot delete id $id, that id was not found.")
@@ -841,7 +847,9 @@ class Server(handler: RequestHandler) extends HttpApp
             }
           case Failure(ex) =>
             log.warning(s"Failed to unmarshal parameters with message ${ex.getMessage}. Data: $json")
-            complete{HttpResponse(StatusCodes.BadRequest, entity = "Wrong data format supplied.")}
+            complete {
+              HttpResponse(StatusCodes.BadRequest, entity = "Wrong data format supplied.")
+            }
         }
       }
     }
@@ -949,7 +957,9 @@ class Server(handler: RequestHandler) extends HttpApp
             }
           case Failure(ex) =>
             log.warning(s"Failed to unmarshal parameters with message ${ex.getMessage}. Data: $json")
-            complete{HttpResponse(StatusCodes.BadRequest, entity = "Wrong data format supplied.")}
+            complete {
+              HttpResponse(StatusCodes.BadRequest, entity = "Wrong data format supplied.")
+            }
         }
       }
     }
@@ -961,7 +971,7 @@ class Server(handler: RequestHandler) extends HttpApp
     *
     * @return Server route that either maps to 200 Ok or the respective error codes.
     */
-  def runCommandInContainer(id:Long, json: JsObject): server.Route = {
+  def runCommandInContainer(id: Long, json: JsObject): server.Route = {
     authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
       post {
         log.debug(s"POST /command has been called")
@@ -1000,7 +1010,9 @@ class Server(handler: RequestHandler) extends HttpApp
             }
           case Failure(ex) =>
             log.warning(s"Failed to unmarshal parameters with message ${ex.getMessage}. Data: $json")
-            complete{HttpResponse(StatusCodes.BadRequest, entity = "Wrong data format supplied.")}
+            complete {
+              HttpResponse(StatusCodes.BadRequest, entity = "Wrong data format supplied.")
+            }
         }
       }
     }

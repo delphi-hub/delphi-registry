@@ -138,19 +138,19 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
     } else {
       tryLinkMatching(callerId, compType) match {
         case Success(instance) =>
-          log.info(s"Matching finished: First try yielded result $instance.")
+          log.debug(s"Matching finished: First try yielded result $instance.")
           (OperationResult.Ok, Success(instance))
         case Failure(ex) =>
           log.warning(s"Matching pending: First try failed, message was ${ex.getMessage}")
           tryLabelMatching(callerId, compType) match {
             case Success(instance) =>
-              log.info(s"Matching finished: Second try yielded result $instance.")
+              log.debug(s"Matching finished: Second try yielded result $instance.")
               (OperationResult.Ok, Success(instance))
             case Failure(ex2) =>
               log.warning(s"Matching pending: Second try failed, message was ${ex2.getMessage}")
               tryDefaultMatching(compType) match {
                 case Success(instance) =>
-                  log.info(s"Matching finished: Default matching yielded result $instance.")
+                  log.debug(s"Matching finished: Default matching yielded result $instance.")
                   (OperationResult.Ok, Success(instance))
                 case Failure(ex3) =>
                   log.warning(s"Matching failed: Default matching did not yield result, message was ${ex3.getMessage}.")
@@ -237,7 +237,7 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
         instanceDao.setStateFor(matchedInstanceId, InstanceState.NotReachable)
         fireStateChangedEvent(instanceDao.getInstance(matchedInstanceId).get) //Re-retrieve instance bc reference was invalidated by 'setStateFor'
       }
-      log.info(s"Applied matching result $matchingSuccess to instance with id $matchedInstanceId.")
+      log.debug(s"Applied matching result $matchingSuccess to instance with id $matchedInstanceId.")
 
       //Update link state
       if (!matchingSuccess) {
@@ -256,7 +256,7 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
   }
 
   def handleDeploy(componentType: ComponentType, name: Option[String]): Try[Long] = {
-    log.info(s"Deploying container of type $componentType")
+    log.debug(s"Deploying container of type $componentType")
     val instance = Instance(None,
       "",
       -1L,
@@ -278,12 +278,12 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
 
         deployResult match {
           case Failure(ex) =>
-            log.error(s"Failed to deploy container, docker host not reachable.")
+            log.warning(s"Failed to deploy container, docker host not reachable.")
             instanceDao.removeInstance(id)
             fireDockerOperationErrorEvent(None, s"Deploy failed with message: ${ex.getMessage}")
             Failure(new RuntimeException(s"Failed to deploy container, docker host not reachable (${ex.getMessage})."))
           case Success((dockerId, host, port, traefikHost)) =>
-            log.info(s"Deployed new container with id $dockerId, host $host, port $port and Traefik host $traefikHost.")
+            log.info(s"Deployed new $componentType container with docker id: $dockerId, host: $host, port: $port and Traefik host: $traefikHost.")
 
             val traefikConfig = TraefikConfiguration(traefikHost, configuration.traefikUri)
 
@@ -302,12 +302,12 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
 
             instanceDao.updateInstance(newInstance) match {
               case Success(_) =>
-                log.info("Successfully registered.")
+                log.info("Instance successfully registered.")
                 fireInstanceAddedEvent(newInstance)
                 fireNumbersChangedEvent(newInstance.componentType)
                 Success(id)
               case Failure(x) =>
-                log.info(s"Failed to register. Exception: $x")
+                log.warning(s"Failed to register. Exception: $x")
                 Failure(x)
             }
         }
@@ -430,7 +430,7 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
     } else {
       val instance = instanceDao.getInstance(id).get
       if (instance.instanceState == InstanceState.Running) {
-        log.info(s"Handling /pause for instance with id $id...")
+        log.debug(s"Handling /pause for instance with id $id...")
         implicit val timeout: Timeout = configuration.dockerOperationTimeout
 
         (dockerActor ? pause(instance.dockerId.get)).map {
@@ -466,7 +466,7 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
     } else {
       val instance = instanceDao.getInstance(id).get
       if (instance.instanceState == InstanceState.Paused) {
-        log.info(s"Handling /resume for instance with id $id...")
+        log.debug(s"Handling /resume for instance with id $id...")
         implicit val timeout: Timeout = configuration.dockerOperationTimeout
 
         (dockerActor ? unpause(instance.dockerId.get)).map {
@@ -504,7 +504,7 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
         log.warning(s"Cannot stop instance of type ${instance.componentType}.")
         OperationResult.InvalidTypeForOperation
       } else {
-        log.info(s"Calling /stop on non-docker instance $instance..")
+        log.debug(s"Calling /stop on non-docker instance $instance..")
         RestClient.executePost(RestClient.getUri(instance) + "/stop").map {
           response =>
             log.info(s"Request to /stop returned $response")
@@ -521,16 +521,15 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
         OperationResult.Ok
       }
     } else if (instanceDao.getInstance(id).get.instanceState != InstanceState.Paused) {
-      log.info(s"Handling /stop for instance with id $id...")
+      log.debug(s"Handling /stop for instance with id $id...")
 
       val instance = instanceDao.getInstance(id).get
 
-      log.info("Stopping container...")
       implicit val timeout: Timeout = configuration.dockerOperationTimeout
 
       (dockerActor ? stop(instance.dockerId.get)).map {
         _ =>
-          log.info(s"Instance $id stopped.")
+          log.info(s"Docker Instance $id stopped.")
           instanceDao.setStateFor(instance.id.get, InstanceState.Stopped)
           fireStateChangedEvent(instanceDao.getInstance(instance.id.get).get)
       }.recover {
@@ -568,10 +567,9 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
     } else if (!isInstanceDockerContainer(id)) {
       OperationResult.NoDockerContainer
     } else {
-      log.info(s"Handling /start for instance with id $id...")
+      log.debug(s"Handling /start for instance with id $id...")
       val instance = instanceDao.getInstance(id).get
       if (instance.instanceState == InstanceState.Stopped) {
-        log.info("Starting container...")
         implicit val timeout: Timeout = configuration.dockerOperationTimeout
 
         (dockerActor ? start(instance.dockerId.get)).map {
@@ -602,7 +600,7 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
     } else if (!isInstanceDockerContainer(id)) {
       OperationResult.NoDockerContainer
     } else {
-      log.info(s"Handling /delete for instance with id $id...")
+      log.debug(s"Handling /delete for instance with id $id...")
       val instance = instanceDao.getInstance(id).get
 
       //It is not safe to delete instances when other running instances depend on it!
@@ -611,8 +609,6 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
       if (notSafeToDelete) {
         OperationResult.BlockingDependency
       } else if (instance.instanceState != InstanceState.Running) {
-        log.info("Deleting container...")
-
         implicit val timeout: Timeout = configuration.dockerOperationTimeout
 
         (dockerActor ? delete(instance.dockerId.get)).map {
@@ -766,13 +762,13 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
     * @return Try[Instance], Success if matching was successful, Failure otherwise
     */
   private def tryLinkMatching(callerId: Long, componentType: ComponentType): Try[Instance] = {
-    log.info(s"Matching first try: Analyzing links for $callerId...")
+    log.debug(s"Matching first try: Analyzing links for $callerId...")
 
     val links = instanceDao.getLinksFrom(callerId).filter(link => link.linkState == LinkState.Assigned)
 
     links.size match {
       case 0 =>
-        log.info(s"Matching first try failed: No links present.")
+        log.debug(s"Matching first try failed: No links present.")
         Failure(new RuntimeException("No links for instance."))
       case 1 =>
         val instanceAssigned = instanceDao.getInstance(links.head.idTo)
@@ -832,13 +828,13 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
     * @return Success(Instance) if successful, Failure otherwise.
     */
   private def tryLabelMatching(callerId: Long, componentType: ComponentType): Try[Instance] = {
-    log.info(s"Matching second try: Analyzing labels for $callerId...")
+    log.debug(s"Matching second try: Analyzing labels for $callerId...")
 
     val possibleMatches = instanceDao.getInstancesOfType(componentType)
 
     possibleMatches.size match {
       case 0 =>
-        log.warning(s"Matching second try failed: There are no instances of type $componentType present.")
+        log.debug(s"Matching second try failed: There are no instances of type $componentType present.")
         Failure(new RuntimeException(s"Type $componentType not present."))
       case _ =>
         val labels = instanceDao.getInstance(callerId).get.labels
@@ -854,17 +850,17 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
           log.info(s"Finished matching second try: Successfully matched to  $result based on $noOfSharedLabels shared labels.")
           Success(result)
         } else {
-          log.warning(s"Matching second try failed: There are no instance with shared labels to $labels.")
+          log.debug(s"Matching second try failed: There are no instance with shared labels to $labels.")
           Failure(new RuntimeException(s"No instance with shared labels."))
         }
     }
   }
 
   private def tryDefaultMatching(componentType: ComponentType): Try[Instance] = {
-    log.info(s"Matching fallback: Searching for instances of type $componentType ...")
+    log.debug(s"Matching fallback: Searching for instances of type $componentType ...")
     getNumberOfInstances(componentType) match {
       case 0 =>
-        log.error(s"Matching failed: Cannot match to any instance of type $componentType, no such instance present.")
+        log.warning(s"Matching failed: Cannot match to any instance of type $componentType, no such instance present.")
         Failure(new RuntimeException(s"Cannot match to any instance of type $componentType, no instance present."))
       case 1 =>
         val instance: Instance = instanceDao.getInstancesOfType(componentType).head
