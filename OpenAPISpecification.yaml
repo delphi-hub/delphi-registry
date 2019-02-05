@@ -20,10 +20,106 @@ tags:
       containers
   - name: Docker Operations
     description: Operations on instances that are running in a docker container
+  - name: User Management
+    description: Operations related to the user database of Delphi-Management
 schemes:
   - https
   - http
 paths:
+  /configuration:
+    get:
+      tags:
+        - Meta
+      summary: Retreives general configuration information
+      description: Retrieves an object containing the most important configuration values of the registry. This contains the docker and traefik URIs.
+      operationId: configurationInfo
+      responses:
+        '200':
+          description: Configuration object
+          schema:
+            type: object
+            properties:
+              DockerHttpApi:
+                type: string
+                example: "172.0.2.1:9095"
+              TraefikProxyUri:
+                type: string
+                example: "172.0.2.1:80"
+  /users/authenticate:
+    post:
+      tags:
+        - User Management
+      summary: Authenticates a user and returns a valid JWT
+      description: >- 
+        This endpoints validates the username and password that must 
+        be supplied in the Authorization header (using HTTP Basic Authentication).
+        If valid, a JSON Web Token will be generated and returned, that may be used 
+        to authenticate the user for subsequent requests.
+      operationId: authenticate
+      parameters:
+        - in: header
+          name: Delphi-Authorization
+          description: >-
+            Valid JWT that autenticates the calling entity.
+          type: string
+          required: true
+        - in: header
+          name: Authorization
+          description: >- 
+            HTTP Basic Authentication following the schema 'Basic <User:Password>
+            where the concatination of username and password is Base64-Encoded.
+          type: string
+          required: true
+      responses:
+        '200':
+          description: Supplied data is valid, a JWT is returned
+          schema:
+            type: string
+            example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c
+        '401':
+          description: Unauthorized, invalid username / password supplied.
+  /users/add:
+    post:
+      tags:
+        - User Management
+      summary: Adds a new users for the registry
+      description: >-
+        Adds a new user that is passed in the requests entity. The id of the user
+        will be returned.
+      operationId: addUser
+      parameters:
+        - in: body
+          name: DelphiUser
+          description: The user to add
+          required: true
+          schema:
+            type: object
+            required:
+              - userName
+              - secret
+              - userType
+            properties:
+              userName:
+                type: string
+                example: MyUser
+              secret:
+                type: string
+                example: 123Pass
+              userType:
+                type: string
+                enum:
+                  - Admin
+                  - User
+                  - Component
+      responses:
+        '200':
+          description: OK, user has been added, id is returned
+          schema:
+            type: integer
+            format: int64
+            example: 42
+        '400':
+          description: Bad request, name already exists
   /instances/register:
     post:
       tags:
@@ -374,12 +470,15 @@ paths:
           description: 'Bad request, your label exceeded the character limit'
         '404':
           description: 'Not found, the id you specified could not be found'
-  /instances/{Id}/logs:
+  '/instances/{Id}/logs':
     get:
       tags:
         - Basic Operations
       summary: Retrieve the logging output of the specified instance
-      description: This command retrieves the docker container logging output for the specified instance, if the instance is in fact running inside a docker container.
+      description: >-
+        This command retrieves the docker container logging output for the
+        specified instance, if the instance is in fact running inside a docker
+        container.
       operationId: retreiveLogs
       parameters:
         - name: Id
@@ -395,22 +494,28 @@ paths:
           type: boolean
       responses:
         '200':
-          description: Success, log string is being returned
+          description: 'Success, log string is being returned'
           schema:
             type: string
-            example: "I am logging output .."
+            example: I am logging output ..
         '400':
           description: Selected instance not running inside docker container
         '404':
           description: Id not found on the server
         '500':
           description: Internal Server Error
-  /instances/{Id}/attach:
+  '/instances/{Id}/attach':
     get:
       tags:
         - Basic Operations
       summary: Stream logging output from instance
-      description: 'This command streams the docker container logging output for the specified instance. NOTE: This is a websocket endpoint, so only valid websocket requests will be processed. Swagger does not provide sufficient support for websockets, so this documentation might be confusing as it defines a HTTP method, etc. The names of parameters and response-codes are valid though.'
+      description: >-
+        This command streams the docker container logging output for the
+        specified instance. NOTE: This is a websocket endpoint, so only valid
+        websocket requests will be processed. Swagger does not provide
+        sufficient support for websockets, so this documentation might be
+        confusing as it defines a HTTP method, etc. The names of parameters and
+        response-codes are valid though.
       operationId: streamLogs
       parameters:
         - name: Id
@@ -426,7 +531,7 @@ paths:
           type: boolean
       responses:
         '200':
-          description: Success, logs are being streamed via websocket connection.
+          description: 'Success, logs are being streamed via websocket connection.'
         '400':
           description: Selected instance not running inside docker container
         '404':
@@ -747,13 +852,12 @@ paths:
           description: One of the ids was not found on the server
         '500':
           description: Internal server error
-  /instances/{Id}/command:
+  '/instances/{Id}/command':
     post:
       tags:
         - Docker Operations
       summary: Runs a command into a docker container
-      description: >-
-        This command runs a specified command inside a docker container.
+      description: This command runs a specified command inside a docker container.
       operationId: command
       parameters:
         - in: path
@@ -773,7 +877,7 @@ paths:
             properties:
               Command:
                 type: string
-                example: "rm -rf *"
+                example: rm -rf *
               Privileged:
                 type: boolean
               User:
@@ -781,15 +885,13 @@ paths:
                 example: root
       responses:
         '200':
-          description: 'OK'
+          description: OK
         '400':
-          description: >-
-            Cannot run command, ID is no docker container.
+          description: 'Cannot run command, ID is no docker container.'
         '404':
-          description: Cannot run command, ID not found.
+          description: 'Cannot run command, ID not found.'
         '500':
-          description: Internal server error, unknown operation result DESCRIPTION
-  
+          description: 'Internal server error, unknown operation result DESCRIPTION'
 definitions:
   InstanceLink:
     type: object

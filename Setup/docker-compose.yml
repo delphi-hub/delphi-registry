@@ -1,0 +1,22 @@
+version: '3.5'
+
+services:
+
+  traefik:
+    restart: always
+    image: traefik:1.6
+    container_name: traefik
+    ports:
+      - "80:80"
+      - "8080:8080"
+    networks:
+      - delphi
+    volumes:
+      - ./traefik.toml:/etc/traefik/traefik.toml
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+networks:
+  delphi:
+    external: true
+
+

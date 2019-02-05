@@ -6,7 +6,7 @@ import slick.jdbc.MySQLProfile
 import slick.jdbc.MySQLProfile.api._
 import slick.sql.SqlProfile.ColumnOption.{NotNull, SqlType}
 
-class Instances(tag: Tag) extends Table[(Long, String, Long, String, String, Option[String], String, String)](tag, "instances") {
+class Instances(tag: Tag) extends Table[(Long, String, Long, String, String, Option[String], String, String, Option[String])](tag, "instances") {
   def id = column[Long]("id", O.PrimaryKey, O.AutoInc) // This is the primary key column
   def host = column[String]("host", O.Length(255), NotNull)
   def portNumber = column[Long]("portNumber", NotNull)
@@ -17,7 +17,9 @@ class Instances(tag: Tag) extends Table[(Long, String, Long, String, String, Opt
   def instanceState = column[String]("instanceState", O.Length(50), NotNull)
   def labels = column[String]("labels", O.Length(255), NotNull)
 
-  def * = (id, host, portNumber, name, componentType, dockerId, instanceState, labels)
+  def traefikHostName = column[Option[String]]("traefikHostName", O.Length(255), O.Default(None))
+
+  def * = (id, host, portNumber, name, componentType, dockerId, instanceState, labels, traefikHostName)
 }
 
 class InstanceMatchingResults(tag: Tag) extends Table[(Long, Long, Boolean)](tag, "instance_matching_results") {
@@ -58,4 +60,13 @@ class InstanceLinks(tag: Tag) extends Table[(Long, Long, Long, String)](tag, "in
   def linkState=column[String]("linkState", O.Length(100), NotNull)
 
   def * = (id, idFrom, idTo, linkState)
+}
+
+class Users(tag: Tag) extends Table[(Long, String, String, String)](tag, "users") {
+  def id = column[Long]("id", O.PrimaryKey, O.AutoInc) // This is the primary key column
+  def userName = column[String]("userName", O.Length(100), NotNull)
+  def secret=column[String]("secret", O.Length(65), NotNull)
+  def userType=column[String]("userType", O.Length(50), NotNull)
+
+  def * = (id, userName, secret, userType)
 }

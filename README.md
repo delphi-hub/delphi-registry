@@ -11,6 +11,7 @@ this repository is purely experimental!
 
 ## What is the registry component?
 The Delphi registry is a server that provides access to all information and operations needed to set up, run and manage the Delphi system. By default, the REST interface is exposed at *0.0.0.0:8087*, and contains endpoints for:
+
 * Retrieving a list of all instances of a certain type (Crawler, WebApi, WebApp, ElasticSearch)
 * Retrieving the whole network graph (all instances and links between instances)
 * Deploying new instances of a certain type to a docker host
@@ -37,8 +38,21 @@ For Linux users, checkout Delphi Registry repository and execute the command
 ```
 sudo bash ./Delphi_install.sh
 ``` 
-inside the registry's root directory. This installation script will create the required repositories, build the docker images, and register them directly at the local docker registry. 
+inside the ```/Setup``` directory. This installation script will create the required repositories, build the docker images, and register them directly at the local docker registry.
 The registry requires an initial instance of ElasticSearch to be running.
+
+To allow access to Delphi components deployed via Docker, the registry supports the reverse-proxy [Traefik](https://traefik.io/). While it is running, it will automatically detected containers deployed by the registry, and provide access to them using the host specified in each instances' ```Host``` attribute.
+Windows users can install Traefik (using Docker) based on [this tutorial](https://docs.traefik.io/#the-traefik-quickstart-using-docker). For Linux users, Traefik will be installed and started by the installation script mentioned above.
+
+**Note:** Traefik must be running inside the same Docker network as the containers it is associated with. By default the name for this network is expected to be ```delphi```. Windows users have to manually create it using ```docker network create delphi``` before starting Traefik. If you want to change this network name, please follow these steps:
+
+1. Go to ```docker-compose.yml``` file (for Windows: Create during tutorial; for Linux found in ```/Setup```)
+
+2. Change the item *services->traefik->networks* to your new network name
+
+3. Change the item *networks->delphi->external:true* to *networks->your-network-name->external:true*. Save and close the file
+
+4. Change the ````traefikDockerNetwork`` setting in the configuration file to your new network name (see section below for details)
 
 ## Adapt the configuration file
 Before you can start the application, you have to make sure your configuration file contains valid data. The file can be found at *src/main/scala/de/upb/cs/swt/delphi/instanceregistry/Configuration.scala*, and most of its attributes are string or integer values. The following table describes the attributes in more detail.
@@ -47,6 +61,9 @@ Before you can start the application, you have to make sure your configuration f
 | :---: | :---: | :---: | :--- |
 |```bindHost``` | ```String``` | ```"0.0.0.0"``` | Host address that the registry server should be bound to |
 |```bindPort``` | ```Int``` | ```8087``` | Port that the registry server should be reachable at |
+|```traefikBaseHost``` | ```String``` | ```"delphi.de"``` | The host part of the URL that traefik is configured to append to instance URLs. |
+|```traefikDockerNetwork``` | ```String``` | ```"delphi"``` | The Docker network Traefik is configured to use. |
+|```traefikUri``` | ```String``` | ```"http://172.17.0.1:80"``` | The URI that the Traefik reverse-proxy is hosted at.|
 |```defaultCrawlerPort``` | ```Int``` | ```8882``` | Port that Delphi Crawlers are reachable at. This may only be adapted if you manually changed the default port of crawlers before registering the respective image. |
 |```defaultWebApiPort``` | ```Int``` | ```8080``` | Port that Delphi WebAPIs are reachable at. This may only be adapted if you manually changed the default port of WebAPIs before registering the respective image. |
 |```defaultWebAppPort``` | ```Int``` | ```8085``` | Port that Delphi WebApps are reachable at. This may only be adapted if you manually changed the default port of WebApps before registering the respective image. |
@@ -58,14 +75,21 @@ Before you can start the application, you have to make sure your configuration f
 |```uriInLocalNetwork``` | ```String``` | ```"http://172.17.0.1:8087"``` | URI that the registry is reachable at for all docker containers. In most of the use-cases this is going to be the gateway of the default docker bridge.<br>**Note:** For OSX you have to set this value to the DNS name of the docker host, which is ```http://host.docker.internal:8087``` (If the registry is running on the host).|
 |```maxLabelLength``` | ```Int``` | ```50``` | Maximum number of characters for instance labels. Longer labels will be rejected.|
 |```dockerOperationTimeout``` | ```Timeout``` | ```Timeout(20 seconds)``` | Default timeout for docker operations. If any of the async Docker operations (deploy, stop, pause, ..) takes longer than this, it will be aborted.|
-|```defaultDockerUri``` | ```String``` | ```http://localhost:9095``` | Default uri to connect to docker. It will be used if the environment variable ```DELPHI_DOCKER_HOST``` is not specified.|
+|```dockerUri``` | ```String``` | ```http://localhost:9095``` | Default uri to connect to docker. It will be used if the environment variable ```DELPHI_DOCKER_HOST``` is not specified.|
 |```jwtSecretKey``` | ```String``` | ```changeme``` | Secret key to use for JWT signature (HS256). This setting can be overridden by specifying the ```JWT_SECRET``` environment variable.|
-|```useInMemoryDB``` | ```Boolean``` | ```true``` | If set to true, all instance data will be kept in memory instead of using a MySQL database.|
-|```databaseHost``` | ```String``` | ```"jdbc:mysql://localhost/"``` | Host that the MySQL database is reachable at (only necessary if *useInMemoryDB* is false).|
-|```databaseName``` | ```String``` | ```""``` | Name of the MySQL database to use (only necessary if *useInMemoryDB* is false).|
-|```databaseDriver``` | ```String``` | ```"com.mysql.jdbc.Driver"``` | Driver to use for the MySQL connection (only necessary if *useInMemoryDB* is false).|
-|```databaseUsername``` | ```String``` | ```""``` | Username to use for the MySQL connection (only necessary if *useInMemoryDB* is false).|
-|```databasePassword``` | ```String``` | ```""``` | Password to use for the MySQL connection (only necessary if *useInMemoryDB* is false).|
+|```useInMemoryInstanceDB``` | ```Boolean``` | ```true``` | If set to true, all instance data will be kept in memory instead of using a MySQL database.|
+|```instanceDatabaseHost``` | ```String``` | ```"jdbc:mysql://localhost/"``` | Host that the MySQL instance database is reachable at (only necessary if *useInMemoryInstanceDB* is false).|
+|```instanceDatabaseName``` | ```String``` | ```""``` | Name of the MySQL instance database to use (only necessary if *useInMemoryInstanceDB* is false).|
+|```instanceDatabaseDriver``` | ```String``` | ```"com.mysql.jdbc.Driver"``` | Driver to use for the MySQL connection (only necessary if *useInMemoryInstanceDB* is false).|
+|```instanceDatabaseUsername``` | ```String``` | ```""``` | Username to use for the MySQL instance DB connection (only necessary if *useInMemoryInstanceDB* is false).|
+|```instanceDatabasePassword``` | ```String``` | ```""``` | Password to use for the MySQL instance DB connection (only necessary if *useInMemoryInstanceDB* is false).|
+|```useInMemoryAuthDB``` | ```Boolean``` | ```true``` | If set to true, all user data will be kept in memory instead of using a MySQL database.|
+|```authDatabaseHost``` | ```String``` | ```"jdbc:mysql://localhost/"``` | Host that the MySQL users database is reachable at (only necessary if *useInMemoryAuthDB* is false).|
+|```authDatabaseName``` | ```String``` | ```""``` | Name of the MySQL user database to use (only necessary if *useInMemoryAuthDB* is false).|
+|```authDatabaseDriver``` | ```String``` | ```"com.mysql.jdbc.Driver"``` | Driver to use for the MySQL users DB connection (only necessary if *useInMemoryAuthDB* is false).|
+|```authDatabaseUsername``` | ```String``` | ```""``` | Username to use for the MySQL users DB connection (only necessary if *useInMemoryAuthDB* is false).|
+|```authDatabasePassword``` | ```String``` | ```""``` | Password to use for the MySQL users DB connection (only necessary if *useInMemoryAuthDB* is false).|
+|```authenticationValidFor``` | ```Int``` | ```30``` | Default duration that user tokens are valid for (in minutes).|
 |```maxTotalNoRequest``` | ```Int``` | ```2000``` | Maximum number of requests that are allowed to be executed during the current refresh period regardless of their origin.|
 |```maxIndividualIpReq``` | ```Int``` | ```200``` | Maximum number of requests that are allowed to be executed during the current refresh period for one specific origin ip.|
 |```ipLogRefreshRate``` | ```FiniteDuration``` | ```2.minutes``` | Duration of the log refresh period.|
@@ -104,7 +128,7 @@ docker run -d -v /var/run/docker.sock:/var/run/docker.sock -p 127.0.0.1:9095:123
 ## Run the application
 There are two ways of running the registry application. You can either run the application directly, or build a docker image defined by the *build.sbt* file, and run a container based on this image. Either way, you have to set the correct configuration values before starting the application (see section **Adapt the configuration file** above for more information). Make sure the Docker images of all Delphi components are present at the host's registry, as described in the **Requirements** section.
 
-**Note:** For OSX you have to set Java's ```prefereIPv4Stack``` option to ```true``` before executing any of the steps below. In order to do so, execute ```export JAVA_OPTIONS="-Djava.net.preferIPv4Stack=true"``` in the terminal before calling ```sbt```.
+**Note:** For OSX you have to set Java's ```prefereIPv4Stack``` option to ```true``` before executing any of the steps below. In order to do so, execute ```export _JAVA_OPTIONS="-Djava.net.preferIPv4Stack=true"``` in the terminal before calling ```sbt```.
 
 ### Run the registry directly
 If you want to execute the registry directly on your local machine, simply go to the root folder of the repository and execute ```sbt run```. The application will stream all logging output to the terminal. You can terminate any time by pressing *RETURN*.
@@ -140,7 +164,7 @@ eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE1NDcxMDYzOTksIm5iZiI6MTU0NzEwNjM
 Using the above token, a valid call to the registry at ```localhost:8087``` using *curl* looks like this:
 
 ```
-curl -X POST -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE1NDcxMDYzOTksIm5iZiI6MTU0NzEwNjM5OSwiZXhwIjoxNTU0MDE0Nzk5LCJ1c2VyX2lkIjoiRGVidWdVc2VyIiwidXNlcl90eXBlIjoiQWRtaW4ifQ.TeDa8JkFANVEufPaxXv3AXSojcaiKdOlBKeU5cLaHpg" localhost:8087/deploy?ComponentType=WebApi
+curl -X POST -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE1NDcxMDYzOTksIm5iZiI6MTU0NzEwNjM5OSwiZXhwIjoxNTU0MDE0Nzk5LCJ1c2VyX2lkIjoiRGVidWdVc2VyIiwidXNlcl90eXBlIjoiQWRtaW4ifQ.TeDa8JkFANVEufPaxXv3AXSojcaiKdOlBKeU5cLaHpg" -H "Content-type: application/json" -d '{"ComponentType":"WebApi"}' localhost:8087/instances/deploy
 ```
 
 ## Contributing

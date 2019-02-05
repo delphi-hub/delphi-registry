@@ -9,6 +9,11 @@ class Configuration( ) {
   val bindHost: String = "0.0.0.0"
   val bindPort: Int = 8087
 
+  //Traefik data
+  val traefikBaseHost: String = "delphi.de"
+  val traefikDockerNetwork: String = "delphi"
+  val traefikUri: String = "http://172.17.0.1:80"
+
 
   val recoveryFileName : String = "dump.temp"
 
@@ -32,17 +37,28 @@ class Configuration( ) {
   val maxLabelLength: Int = 50
 
   val dockerOperationTimeout: Timeout = Timeout(20 seconds)
-  val defaultDockerUri: String = "http://localhost:9095"
+  val dockerUri: String = sys.env.getOrElse("DELPHI_DOCKER_HOST", "http://localhost:9095")
 
   val jwtSecretKey: String = sys.env.getOrElse("JWT_SECRET", "changeme")
 
   //Database configurations
-  val useInMemoryDB = true
-  val databaseHost = "jdbc:mysql://localhost/"
-  val databaseName = ""
-  val databaseDriver = "com.mysql.jdbc.Driver"
-  val databaseUsername = ""
-  val databasePassword = ""
+  val useInMemoryInstanceDB = true
+  val instanceDatabaseHost = "jdbc:mysql://localhost/"
+  val instanceDatabaseName = ""
+  val instanceDatabaseDriver = "com.mysql.jdbc.Driver"
+  val instanceDatabaseUsername = ""
+  val instanceDatabasePassword = ""
+
+  //Auth database configuration
+  val useInMemoryAuthDB = true
+  val authDatabaseHost = "jdbc:mysql://localhost/"
+  val authDatabaseName = ""
+  val authDatabaseDriver = "com.mysql.jdbc.Driver"
+  val authDatabaseUsername = ""
+  val authDatabasePassword = ""
+
+  //Authentication valid for the time
+  val authenticationValidFor = 30 //minutes
 
   //Request Limiter
   val maxTotalNoRequest: Int = 2000

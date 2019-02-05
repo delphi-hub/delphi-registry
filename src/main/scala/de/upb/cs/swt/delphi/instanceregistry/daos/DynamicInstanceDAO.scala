@@ -36,7 +36,7 @@ class DynamicInstanceDAO (configuration : Configuration) extends InstanceDAO wit
     val id = nextId()
 
     val newInstance = Instance(Some(id), instance.host, instance.portNumber, instance.name, instance.componentType,
-      instance.dockerId, instance.instanceState,instance.labels, instance.linksTo, instance.linksFrom)
+      instance.dockerId, instance.instanceState,instance.labels, instance.linksTo, instance.linksFrom, instance.traefikConfiguration)
     instances.add(newInstance)
     instanceMatchingResults.put(newInstance.id.get, mutable.MutableList())
     instanceEvents.put(newInstance.id.get, mutable.MutableList())
@@ -164,7 +164,8 @@ class DynamicInstanceDAO (configuration : Configuration) extends InstanceDAO wit
         state,
         instance.labels,
         instance.linksTo,
-        instance.linksFrom)
+        instance.linksFrom,
+        instance.traefikConfiguration)
       instances filter {i => i.id == instance.id} map instances.remove
       instances.add(newInstance)
       Success()
@@ -193,7 +194,8 @@ class DynamicInstanceDAO (configuration : Configuration) extends InstanceDAO wit
             instance.instanceState,
             instance.labels ++ List[String](label),
             instance.linksTo,
-            instance.linksFrom)
+            instance.linksFrom,
+            instance.traefikConfiguration)
           instances filter {i => i.id == instance.id} map instances.remove
           instances.add(newInstance)
           Success()
@@ -292,7 +294,8 @@ class DynamicInstanceDAO (configuration : Configuration) extends InstanceDAO wit
       instance.instanceState,
       instance.labels,
       linksTo,
-      linksFrom
+      linksFrom,
+      instance.traefikConfiguration
     )
   }
 

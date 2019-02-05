@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+####SETTINGS####
+DELPHI_NETWORK_NAME=delphi 
+
 ####DELPHI INSTALLATION#####
 #########################
 
@@ -10,7 +13,12 @@ sudo chown $SUDO_USER $LOGFILE
 echo " Starting installation of Delphi Application"
 echo " Logs can be found at: $LOGFILE"
 
+echo " Setting up Traefik..."
+sudo -u $SUDO_USER bash -c "docker network create $DELPHI_NETWORK_NAME &>> $LOGFILE"
+sudo -u $SUDO_USER bash -c "docker-compose up -d &>> $LOGFILE"
+echo " **Setup of Traefik completed**"
 
+echo " Cloning Delphi ..."
 sudo -u $SUDO_USER bash -c "git clone --progress https://github.com/delphi-hub/delphi.git --recurse-submodules>> $LOGFILE"
 echo " **Cloning of Delphi Repositories completed**"
 
@@ -27,7 +35,7 @@ echo " **Cloning of Delphi Repositories completed**"
 ## Installing Images and Creating Volumes
     
 echo " Building Delphi Images. This step might take several minutes"
-sudo -u $SUDO_USER bash -c "sbt docker:publishLocal &>> $LOGFILE"
+sudo -u $SUDO_USER bash -c "cd ..;sbt docker:publishLocal &>> $LOGFILE"
 echo " Delphi-Registry Image built" 
 sudo -u $SUDO_USER bash -c "(cd ./delphi/delphi-webapi;sbt docker:publishLocal) &>> $LOGFILE"
 echo " Delphi-WebApi Image built" 

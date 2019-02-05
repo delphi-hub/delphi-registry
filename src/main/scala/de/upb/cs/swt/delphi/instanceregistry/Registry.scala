@@ -4,7 +4,7 @@ import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import de.upb.cs.swt.delphi.instanceregistry.Docker._
 import de.upb.cs.swt.delphi.instanceregistry.connection.Server
-import de.upb.cs.swt.delphi.instanceregistry.daos.{DatabaseInstanceDAO, DynamicInstanceDAO, InstanceDAO}
+import de.upb.cs.swt.delphi.instanceregistry.daos._
 
 import scala.concurrent.ExecutionContext
 import scala.language.postfixOps
@@ -18,14 +18,22 @@ object Registry extends AppLogging {
   val configuration = new Configuration()
 
   private val dao : InstanceDAO  = {
-    if (configuration.useInMemoryDB) {
+    if (configuration.useInMemoryInstanceDB) {
       new DynamicInstanceDAO(configuration)
     } else {
       new DatabaseInstanceDAO(configuration)
     }
   }
 
-  private val requestHandler = new RequestHandler(configuration, dao, DockerConnection.fromEnvironment(configuration))
+  private val authDao: AuthDAO = {
+    if (configuration.useInMemoryAuthDB) {
+      new DynamicAuthDAO(configuration)
+    } else {
+      new DatabaseAuthDAO(configuration)
+    }
+  }
+
+  private val requestHandler = new RequestHandler(configuration, authDao, dao, DockerConnection.fromEnvironment(configuration))
 
   private val server: Server = new Server(requestHandler)
 

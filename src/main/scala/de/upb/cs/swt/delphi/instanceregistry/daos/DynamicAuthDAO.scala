@@ -1,0 +1,86 @@
+package de.upb.cs.swt.delphi.instanceregistry.daos
+
+import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
+
+import akka.actor.ActorSystem
+import akka.stream.ActorMaterializer
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.DelphiUser
+import de.upb.cs.swt.delphi.instanceregistry.{AppLogging, Configuration, Registry}
+
+import scala.collection.mutable
+import scala.concurrent.ExecutionContext
+import scala.util.{Failure, Success, Try}
+
+class DynamicAuthDAO (configuration : Configuration) extends AuthDAO with AppLogging{
+  implicit val system : ActorSystem = Registry.system
+  implicit val materializer : ActorMaterializer = Registry.materializer
+  implicit val ec : ExecutionContext = system.dispatcher
+
+  private val users : mutable.Set[DelphiUser] = new mutable.HashSet[DelphiUser]()
+
+  override def getUserWithUsername(userName: String): Option[DelphiUser] =
+  {
+    if(hasUserWithUsername(userName)) {
+      val query = users filter {i => i.userName == userName}
+      val user  = query.iterator.next()
+      Some(dataToObjectAuthenticate(user.id.get, user.userName, user.secret, user.userType))
+    } else {
+      None
+    }
+
+  }
+
+  override def addUser(delphiUser : DelphiUser) : Try[Long] = {
+    if(hasUserWithUsername(delphiUser.userName)){
+      Failure(new RuntimeException(s"username ${delphiUser.userName} is already exist."))
+    } else{
+      val id = nextId()
+      val newUser = DelphiUser(Some(id), delphiUser.userName, hashString(delphiUser.secret), delphiUser.userType)
+      users.add(newUser)
+
+      log.info(s"Added user ${newUser.userName} with id ${newUser.id.get} to database.")
+      Success(id)
+    }
+
+  }
+
+  override def hasUserWithUsername(username: String) : Boolean = {
+    val query = users filter {i => i.userName == username}
+    query.nonEmpty
+  }
+
+  override def initialize() : Unit = {
+    log.info("Initializing dynamic Auth DAO...")
+    clearData()
+    log.info("Successfully initialized Auth DAO.")
+
+  }
+
+  override def shutdown(): Unit = {
+    log.info("Shutting down dynamic Auth DAO...")
+    clearData()
+    log.info("Shutdown complete dynamic Auth DAO.")
+  }
+
+  private def dataToObjectAuthenticate(id:Long, userName: String, secret: String, userType: String): DelphiUser = {
+    DelphiUser.apply(Option(id), userName, secret, userType)
+  }
+
+
+  private[daos] def clearData() : Unit = {
+    users.clear()
+  }
+
+  private def nextId(): Long = {
+    if(users.isEmpty){
+      0L
+    } else {
+      (users.map(i => i.id.getOrElse(0L)) max) + 1L
+    }
+  }
+
+  private def hashString(secret: String): String = {
+    MessageDigest.getInstance("SHA-256").digest(secret.getBytes(StandardCharsets.UTF_8)).map("%02x".format(_)).mkString("")
+  }
+}
