@@ -314,7 +314,7 @@ class Server(handler: RequestHandler) extends HttpApp
         log.debug(s"GET instance/$id/matchingInstance?ComponentType=$compTypeString has been called")
 
         val compType: ComponentType = ComponentType.values.find(v => v.toString == compTypeString).orNull
-        log.info(s"Looking for instance of type $compType ...")
+        log.debug(s"Looking for instance of type $compType ...")
 
         if (compType != null) {
           handler.getMatchingInstanceOfType(id, compType) match {
@@ -344,7 +344,7 @@ class Server(handler: RequestHandler) extends HttpApp
               complete(HttpResponse(StatusCodes.NotFound, entity = s"Could not find matching instance of type $compType for instance with id $id."))
           }
         } else {
-          log.error(s"Failed to deserialize parameter string $compTypeString to ComponentType.")
+          log.warning(s"Failed to deserialize parameter string $compTypeString to ComponentType.")
           complete(HttpResponse(StatusCodes.BadRequest, entity = s"Could not deserialize parameter string $compTypeString to ComponentType"))
         }
       }
