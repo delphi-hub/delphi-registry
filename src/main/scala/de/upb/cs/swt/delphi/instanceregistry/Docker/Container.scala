@@ -25,7 +25,14 @@ case class ContainerConfig(
                             Image: String,
                             Entrypoint: Option[Seq[String]] = None,
                             Cmd: Seq[String] = Seq.empty,
-                            Env: Seq[String] = Seq.empty)
+                            Env: Seq[String] = Seq.empty,
+                            Labels: Map[String, String] = Map.empty[String,String],
+                            ExposedPorts: Map[String, EmptyExposedPortConfig] = Map.empty,
+                            NetworkingConfig: NetworkConfig = NetworkConfig(Map.empty))
+
+case class NetworkConfig(EndpointsConfig: Map[String, EmptyEndpointConfig])
+case class EmptyEndpointConfig()
+case class EmptyExposedPortConfig()
 
 case class Networks(
                      IPAddress: String

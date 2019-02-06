@@ -1,33 +1,34 @@
 package de.upb.cs.swt.delphi.instanceregistry
 
-import akka.NotUsed
 import akka.actor._
 import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.model.ws.Message
 import akka.pattern.{AskTimeoutException, ask}
+import akka.stream.scaladsl.{Keep, Sink, Source}
+import akka.stream.{ActorMaterializer, Materializer, OverflowStrategy}
 import akka.util.Timeout
 import de.upb.cs.swt.delphi.instanceregistry.Docker.DockerActor._
 import de.upb.cs.swt.delphi.instanceregistry.Docker.{ContainerAlreadyStoppedException, DockerActor, DockerConnection}
-import akka.stream.scaladsl.{Keep, Sink, Source}
-import akka.stream.{ActorMaterializer, Materializer, OverflowStrategy}
+import de.upb.cs.swt.delphi.instanceregistry.authorization.AuthProvider
 import de.upb.cs.swt.delphi.instanceregistry.connection.RestClient
-import de.upb.cs.swt.delphi.instanceregistry.daos.InstanceDAO
+import de.upb.cs.swt.delphi.instanceregistry.daos.{AuthDAO, InstanceDAO}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnums.{ComponentType, InstanceState}
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.LinkEnums.LinkState
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model._
+import org.reactivestreams.Publisher
 
-import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
 
-class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, connection: DockerConnection) extends AppLogging {
-
+class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao: InstanceDAO, connection: DockerConnection) extends AppLogging {
 
 
   implicit val system: ActorSystem = Registry.system
-  implicit val materializer : Materializer = ActorMaterializer()
+  implicit val materializer: Materializer = ActorMaterializer()
   implicit val ec: ExecutionContext = system.dispatcher
 
+  val authProvider: AuthProvider = new AuthProvider(authDao)
 
   val (eventActor, eventPublisher) = Source.actorRef[RegistryEvent](10, OverflowStrategy.dropNew)
     .toMat(Sink.asPublisher(fanout = true))(Keep.both)
@@ -37,6 +38,7 @@ class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, con
   def initialize(): Unit = {
     log.info("Initializing request handler...")
     instanceDao.initialize()
+    authDao.initialize()
     if (!instanceDao.allInstances().exists(instance => instance.name.equals("Default ElasticSearch Instance"))) {
       //Add default ES instance
       handleRegister(Instance(None,
@@ -53,9 +55,10 @@ class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, con
     log.info("Done initializing request handler.")
   }
 
-  def shutdown() : Unit = {
+  def shutdown(): Unit = {
     eventActor ! PoisonPill
     instanceDao.shutdown()
+    authDao.shutdown()
   }
 
   /**
@@ -111,31 +114,43 @@ class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, con
     instanceDao.allInstances().count(i => i.componentType == compType)
   }
 
-  def getEventList(id: Long) : Try[List[RegistryEvent]] = {
+  def getAllInstancesCount(): Int = {
+    instanceDao.allInstances().length
+  }
+
+  def getAllInstancesType(): List[Instance] = {
+    instanceDao.allInstances()
+  }
+
+  def getEventList(id: Long): Try[List[RegistryEvent]] = {
     instanceDao.getEventsFor(id)
+  }
+
+  def generateConfigurationInfo(): ConfigurationInfo = {
+    ConfigurationInfo(DockerHttpUri = configuration.dockerUri, TraefikProxyUri = configuration.traefikUri)
   }
 
   def getMatchingInstanceOfType(callerId: Long, compType: ComponentType): (OperationResult.Value, Try[Instance]) = {
     log.info(s"Started matching: Instance with id $callerId is looking for instance of type $compType.")
-    if(!instanceDao.hasInstance(callerId)){
+    if (!instanceDao.hasInstance(callerId)) {
       log.warning(s"Matching failed: No instance with id $callerId was found.")
       (OperationResult.IdUnknown, Failure(new RuntimeException(s"Id $callerId not present.")))
     } else {
       tryLinkMatching(callerId, compType) match {
         case Success(instance) =>
-          log.info(s"Matching finished: First try yielded result $instance.")
+          log.debug(s"Matching finished: First try yielded result $instance.")
           (OperationResult.Ok, Success(instance))
         case Failure(ex) =>
           log.warning(s"Matching pending: First try failed, message was ${ex.getMessage}")
           tryLabelMatching(callerId, compType) match {
             case Success(instance) =>
-              log.info(s"Matching finished: Second try yielded result $instance.")
+              log.debug(s"Matching finished: Second try yielded result $instance.")
               (OperationResult.Ok, Success(instance))
             case Failure(ex2) =>
               log.warning(s"Matching pending: Second try failed, message was ${ex2.getMessage}")
               tryDefaultMatching(compType) match {
                 case Success(instance) =>
-                  log.info(s"Matching finished: Default matching yielded result $instance.")
+                  log.debug(s"Matching finished: Default matching yielded result $instance.")
                   (OperationResult.Ok, Success(instance))
                 case Failure(ex3) =>
                   log.warning(s"Matching failed: Default matching did not yield result, message was ${ex3.getMessage}.")
@@ -147,11 +162,11 @@ class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, con
   }
 
   def handleInstanceLinkCreated(instanceIdFrom: Long, instanceIdTo: Long): OperationResult.Value = {
-    if(!instanceDao.hasInstance(instanceIdFrom) || !instanceDao.hasInstance(instanceIdTo)){
+    if (!instanceDao.hasInstance(instanceIdFrom) || !instanceDao.hasInstance(instanceIdTo)) {
       OperationResult.IdUnknown
     } else {
       val (instanceFrom, instanceTo) = (instanceDao.getInstance(instanceIdFrom).get, instanceDao.getInstance(instanceIdTo).get)
-      if(compatibleTypes(instanceFrom.componentType, instanceTo.componentType)){
+      if (compatibleTypes(instanceFrom.componentType, instanceTo.componentType)) {
         val link = InstanceLink(instanceIdFrom, instanceIdTo, LinkState.Assigned)
 
         instanceDao.addLink(link) match {
@@ -167,27 +182,28 @@ class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, con
   }
 
   def handleInstanceAssignment(instanceId: Long, newDependencyId: Long): OperationResult.Value = {
-    if(!instanceDao.hasInstance(instanceId) || !instanceDao.hasInstance(newDependencyId)){
+    if (!instanceDao.hasInstance(instanceId) || !instanceDao.hasInstance(newDependencyId)) {
       OperationResult.IdUnknown
-    } else if(!isInstanceDockerContainer(instanceId)){
+    } else if (!isInstanceDockerContainer(instanceId)) {
       OperationResult.NoDockerContainer
     } else {
       val instance = instanceDao.getInstance(instanceId).get
       val dependency = instanceDao.getInstance(newDependencyId).get
 
-      if(assignmentAllowed(instance.componentType) && compatibleTypes(instance.componentType, dependency.componentType)){
+      if (assignmentAllowed(instance.componentType) && compatibleTypes(instance.componentType, dependency.componentType)) {
         val link = InstanceLink(instanceId, newDependencyId, LinkState.Assigned)
-        if(instanceDao.addLink(link).isFailure){
+        if (instanceDao.addLink(link).isFailure) {
           //This should not happen, as ids are being verified above!
           OperationResult.InternalError
         } else {
 
           fireLinkAddedEvent(link)
 
-          implicit val timeout : Timeout = configuration.dockerOperationTimeout
+          implicit val timeout: Timeout = configuration.dockerOperationTimeout
 
-          (dockerActor ? restart(instance.dockerId.get)).map{
-            _ => log.info(s"Instance $instanceId restarted.")
+          (dockerActor ? restart(instance.dockerId.get)).map {
+            _ =>
+              log.info(s"Instance $instanceId restarted.")
               instanceDao.setStateFor(instance.id.get, InstanceState.Stopped) //Set to stopped, will report start automatically
               fireStateChangedEvent(instanceDao.getInstance(instanceId).get)
           }.recover {
@@ -219,12 +235,12 @@ class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, con
         fireStateChangedEvent(instanceDao.getInstance(matchedInstanceId).get) //Re-retrieve instance bc reference was invalidated by 'setStateFor'
       } else if (!matchingSuccess && matchedInstance.instanceState == InstanceState.Running) {
         instanceDao.setStateFor(matchedInstanceId, InstanceState.NotReachable)
-        fireStateChangedEvent(instanceDao.getInstance(matchedInstanceId).get)//Re-retrieve instance bc reference was invalidated by 'setStateFor'
+        fireStateChangedEvent(instanceDao.getInstance(matchedInstanceId).get) //Re-retrieve instance bc reference was invalidated by 'setStateFor'
       }
-      log.info(s"Applied matching result $matchingSuccess to instance with id $matchedInstanceId.")
+      log.debug(s"Applied matching result $matchingSuccess to instance with id $matchedInstanceId.")
 
       //Update link state
-      if(!matchingSuccess){
+      if (!matchingSuccess) {
         val link = InstanceLink(callerId, matchedInstanceId, LinkState.Failed)
         instanceDao.updateLink(link) match {
           case Success(_) =>
@@ -240,7 +256,7 @@ class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, con
   }
 
   def handleDeploy(componentType: ComponentType, name: Option[String]): Try[Long] = {
-    log.info(s"Deploying container of type $componentType")
+    log.debug(s"Deploying container of type $componentType")
     val instance = Instance(None,
       "",
       -1L,
@@ -258,20 +274,21 @@ class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, con
         implicit val timeout: Timeout = configuration.dockerOperationTimeout
 
         val future: Future[Any] = dockerActor ? create(componentType, id)
-        val deployResult = Await.result(future, timeout.duration).asInstanceOf[Try[(String, String, Int)]]
+        val deployResult = Await.result(future, timeout.duration).asInstanceOf[Try[(String, String, Int, String)]]
 
         deployResult match {
           case Failure(ex) =>
-            log.error(s"Failed to deploy container, docker host not reachable.")
+            log.warning(s"Failed to deploy container, docker host not reachable.")
             instanceDao.removeInstance(id)
             fireDockerOperationErrorEvent(None, s"Deploy failed with message: ${ex.getMessage}")
             Failure(new RuntimeException(s"Failed to deploy container, docker host not reachable (${ex.getMessage})."))
-          case Success((dockerId, host, port)) =>
-            val normalizedHost = host.substring(1, host.length - 1)
-            log.info(s"Deployed new container with id $dockerId, host $normalizedHost and port $port.")
+          case Success((dockerId, host, port, traefikHost)) =>
+            log.info(s"Deployed new $componentType container with docker id: $dockerId, host: $host, port: $port and Traefik host: $traefikHost.")
+
+            val traefikConfig = TraefikConfiguration(traefikHost, configuration.traefikUri)
 
             val newInstance = Instance(Some(id),
-              normalizedHost,
+              host,
               port,
               name.getOrElse(s"Generic $componentType"),
               componentType,
@@ -279,27 +296,24 @@ class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, con
               InstanceState.Deploying,
               List.empty[String],
               List.empty[InstanceLink],
-              List.empty[InstanceLink]
+              List.empty[InstanceLink],
+              Some(traefikConfig)
             )
 
             instanceDao.updateInstance(newInstance) match {
               case Success(_) =>
-                log.info("Successfully registered.")
+                log.info("Instance successfully registered.")
                 fireInstanceAddedEvent(newInstance)
                 fireNumbersChangedEvent(newInstance.componentType)
                 Success(id)
               case Failure(x) =>
-                log.info(s"Failed to register. Exception: $x")
+                log.warning(s"Failed to register. Exception: $x")
                 Failure(x)
             }
         }
       case Failure(ex) =>
         Failure(ex)
     }
-
-
-
-
 
 
   }
@@ -416,11 +430,12 @@ class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, con
     } else {
       val instance = instanceDao.getInstance(id).get
       if (instance.instanceState == InstanceState.Running) {
-        log.info(s"Handling /pause for instance with id $id...")
-        implicit val timeout : Timeout = configuration.dockerOperationTimeout
+        log.debug(s"Handling /pause for instance with id $id...")
+        implicit val timeout: Timeout = configuration.dockerOperationTimeout
 
-        (dockerActor ? pause(instance.dockerId.get)).map{
-          _ => log.info(s"Instance $id paused.")
+        (dockerActor ? pause(instance.dockerId.get)).map {
+          _ =>
+            log.info(s"Instance $id paused.")
             instanceDao.setStateFor(instance.id.get, InstanceState.Paused)
             fireStateChangedEvent(instanceDao.getInstance(id).get)
         }.recover {
@@ -451,11 +466,12 @@ class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, con
     } else {
       val instance = instanceDao.getInstance(id).get
       if (instance.instanceState == InstanceState.Paused) {
-        log.info(s"Handling /resume for instance with id $id...")
-        implicit val timeout : Timeout = configuration.dockerOperationTimeout
+        log.debug(s"Handling /resume for instance with id $id...")
+        implicit val timeout: Timeout = configuration.dockerOperationTimeout
 
-        (dockerActor ? unpause(instance.dockerId.get)).map{
-          _ => log.info(s"Instance $id resumed.")
+        (dockerActor ? unpause(instance.dockerId.get)).map {
+          _ =>
+            log.info(s"Instance $id resumed.")
             instanceDao.setStateFor(instance.id.get, InstanceState.Running)
             fireStateChangedEvent(instanceDao.getInstance(id).get)
         }.recover {
@@ -484,36 +500,36 @@ class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, con
     } else if (!isInstanceDockerContainer(id)) {
       val instance = instanceDao.getInstance(id).get
 
-      if(instance.componentType == ComponentType.ElasticSearch || instance.componentType == ComponentType.DelphiManagement){
+      if (instance.componentType == ComponentType.ElasticSearch || instance.componentType == ComponentType.DelphiManagement) {
         log.warning(s"Cannot stop instance of type ${instance.componentType}.")
         OperationResult.InvalidTypeForOperation
       } else {
-        log.info(s"Calling /stop on non-docker instance $instance..")
-        RestClient.executePost(RestClient.getUri(instance) + "/stop").map{
+        log.debug(s"Calling /stop on non-docker instance $instance..")
+        RestClient.executePost(RestClient.getUri(instance) + "/stop").map {
           response =>
             log.info(s"Request to /stop returned $response")
-            if (response.status == StatusCodes.OK){
+            if (response.status == StatusCodes.OK) {
               log.info(s"Instance with id $id has been shut down successfully.")
             } else {
               log.warning(s"Failed to shut down instance with id $id. Status code was: ${response.status}")
             }
-        }.recover{
+        }.recover {
           case ex: Exception =>
             log.warning(s"Failed to shut down instance with id $id. Message is: ${ex.getMessage}")
         }
         handleDeregister(id)
         OperationResult.Ok
       }
-    } else {
-      log.info(s"Handling /stop for instance with id $id...")
+    } else if (instanceDao.getInstance(id).get.instanceState != InstanceState.Paused) {
+      log.debug(s"Handling /stop for instance with id $id...")
 
       val instance = instanceDao.getInstance(id).get
 
-      log.info("Stopping container...")
       implicit val timeout: Timeout = configuration.dockerOperationTimeout
 
-      (dockerActor ? stop(instance.dockerId.get)).map{
-        _ => log.info(s"Instance $id stopped.")
+      (dockerActor ? stop(instance.dockerId.get)).map {
+        _ =>
+          log.info(s"Docker Instance $id stopped.")
           instanceDao.setStateFor(instance.id.get, InstanceState.Stopped)
           fireStateChangedEvent(instanceDao.getInstance(instance.id.get).get)
       }.recover {
@@ -531,6 +547,9 @@ class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, con
       }
 
       OperationResult.Ok
+    } else {
+      log.warning(s"Cannot stop paused docker container for instance with id $id")
+      OperationResult.InvalidStateForOperation
     }
   }
 
@@ -548,13 +567,12 @@ class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, con
     } else if (!isInstanceDockerContainer(id)) {
       OperationResult.NoDockerContainer
     } else {
-      log.info(s"Handling /start for instance with id $id...")
+      log.debug(s"Handling /start for instance with id $id...")
       val instance = instanceDao.getInstance(id).get
       if (instance.instanceState == InstanceState.Stopped) {
-        log.info("Starting container...")
         implicit val timeout: Timeout = configuration.dockerOperationTimeout
 
-        (dockerActor ? start(instance.dockerId.get)).map{
+        (dockerActor ? start(instance.dockerId.get)).map {
           _ => log.info(s"Instance $id started.")
         }.recover {
           case ex: Exception =>
@@ -582,20 +600,18 @@ class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, con
     } else if (!isInstanceDockerContainer(id)) {
       OperationResult.NoDockerContainer
     } else {
-      log.info(s"Handling /delete for instance with id $id...")
+      log.debug(s"Handling /delete for instance with id $id...")
       val instance = instanceDao.getInstance(id).get
 
       //It is not safe to delete instances when other running instances depend on it!
       val usedBy = instance.linksTo.find(link => link.linkState == LinkState.Assigned)
       val notSafeToDelete = usedBy.isDefined && instanceDao.getInstance(usedBy.get.idFrom).get.instanceState == InstanceState.Running
-      if(notSafeToDelete){
+      if (notSafeToDelete) {
         OperationResult.BlockingDependency
       } else if (instance.instanceState != InstanceState.Running) {
-        log.info("Deleting container...")
-
         implicit val timeout: Timeout = configuration.dockerOperationTimeout
 
-        (dockerActor ? delete(instance.dockerId.get)).map{
+        (dockerActor ? delete(instance.dockerId.get)).map {
           _ => log.info(s"Container for instance $id deleted.")
         }.recover {
           case ex: Exception =>
@@ -619,11 +635,12 @@ class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, con
 
   /**
     * Retrieves links from the instance with the specified id.
+    *
     * @param id Id of the specified instance
     * @return Success(listOfLinks) if id is present, Failure otherwise
     */
-  def handleGetLinksFrom(id: Long) : Try[List[InstanceLink]] = {
-    if(!instanceDao.hasInstance(id)){
+  def handleGetLinksFrom(id: Long): Try[List[InstanceLink]] = {
+    if (!instanceDao.hasInstance(id)) {
       Failure(new RuntimeException(s"Cannot get links from $id, that id is unknown."))
     } else {
       Success(instanceDao.getLinksFrom(id))
@@ -632,11 +649,12 @@ class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, con
 
   /**
     * Retrieves links to the instance with the specified id.
+    *
     * @param id Id of the specified instance
     * @return Success(listOfLinks) if id is present, Failure otherwise
     */
-  def handleGetLinksTo(id: Long) : Try[List[InstanceLink]] = {
-    if(!instanceDao.hasInstance(id)){
+  def handleGetLinksTo(id: Long): Try[List[InstanceLink]] = {
+    if (!instanceDao.hasInstance(id)) {
       Failure(new RuntimeException(s"Cannot get links to $id, that id is unknown."))
     } else {
       Success(instanceDao.getLinksTo(id))
@@ -645,20 +663,22 @@ class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, con
 
   /**
     * Retrieves the current instance network, containing all instances and instance links.
+    *
     * @return InstanceNetwork
     */
-  def handleGetNetwork() : List[Instance] = {
+  def handleGetNetwork(): List[Instance] = {
     instanceDao.allInstances()
   }
 
   /**
     * Add label to instance with specified id
-    * @param id Instance id
+    *
+    * @param id    Instance id
     * @param label Label to add
     * @return OperationResult
     */
-  def handleAddLabel(id: Long, label: String) : OperationResult.Value = {
-    if(!instanceDao.hasInstance(id)){
+  def handleAddLabel(id: Long, label: String): OperationResult.Value = {
+    if (!instanceDao.hasInstance(id)) {
       OperationResult.IdUnknown
     } else {
       instanceDao.addLabelFor(id, label) match {
@@ -671,26 +691,63 @@ class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, con
   /**
     *
     * Returns a source streaming the container logs of the instance with the specified id
+    *
     * @param id Id of the instance
     * @return Tuple of OperationResult and Option[Source[...] ]
     */
-  def handleGetLogs(id: Long) : (OperationResult.Value, Option[Source[String, NotUsed]]) = {
-    if(!instanceDao.hasInstance(id)){
+  def handleGetLogs(id: Long, stdErrSelected: Boolean): (OperationResult.Value, Option[String]) = {
+    if (!instanceDao.hasInstance(id)) {
       (OperationResult.IdUnknown, None)
-    } else if(!isInstanceDockerContainer(id)){
+    } else if (!isInstanceDockerContainer(id)) {
       (OperationResult.NoDockerContainer, None)
     } else {
       val instance = instanceDao.getInstance(id).get
 
-      val f : Future[(OperationResult.Value, Option[Source[String, NotUsed]])]= (dockerActor ? logs(instance.dockerId.get))(configuration.dockerOperationTimeout).map{
-        source: Any =>
-          (OperationResult.Ok, Option(source.asInstanceOf[Source[String, NotUsed]]))
-      }.recover{
+      val f: Future[(OperationResult.Value, Option[String])] = (dockerActor ? logs(instance.dockerId.get, stdErrSelected, stream = false)) (configuration.dockerOperationTimeout).map {
+        logVal: Any =>
+          val logResult = logVal.asInstanceOf[Try[String]]
+          logResult match {
+            case Success(logContent) =>
+              (OperationResult.Ok, Some(logContent))
+            case Failure(ex) =>
+              log.warning(s"Failed to get logs from actor, exception: ${ex.getMessage}")
+              (OperationResult.InternalError, None)
+          }
+
+      }.recover {
         case ex: Exception =>
           fireDockerOperationErrorEvent(Some(instance), errorMessage = s"Failed to get logs with message: ${ex.getMessage}")
           (OperationResult.InternalError, None)
       }
-      Await.result(f, Duration.Inf)
+      Await.result(f, configuration.dockerOperationTimeout.duration)
+    }
+  }
+
+  def handleStreamLogs(id: Long, stdErrSelected: Boolean): (OperationResult.Value, Option[Publisher[Message]]) = {
+    if (!instanceDao.hasInstance(id)) {
+      (OperationResult.IdUnknown, None)
+    } else if (!isInstanceDockerContainer(id)) {
+      (OperationResult.NoDockerContainer, None)
+    } else {
+      val instance = instanceDao.getInstance(id).get
+
+      val f: Future[(OperationResult.Value, Option[Publisher[Message]])] = (dockerActor ? logs(instance.dockerId.get, stdErrSelected, stream = true)) (configuration.dockerOperationTimeout).map {
+        publisherVal: Any =>
+          val publisherResult = publisherVal.asInstanceOf[Try[Publisher[Message]]]
+          publisherResult match {
+            case Success(publisher) =>
+              (OperationResult.Ok, Some(publisher))
+            case Failure(ex) =>
+              log.warning(s"Failed to stream logs from actor, exception: ${ex.getMessage}")
+              (OperationResult.InternalError, None)
+          }
+
+      }.recover {
+        case ex: Exception =>
+          fireDockerOperationErrorEvent(Some(instance), errorMessage = s"Failed to stream logs with message: ${ex.getMessage}")
+          (OperationResult.InternalError, None)
+      }
+      Await.result(f, configuration.dockerOperationTimeout.duration)
     }
   }
 
@@ -699,26 +756,27 @@ class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, con
     * be selected regardless of its state. If multiple links are present, the assigned link will be returned. If none of
     * the links is assigned, matching will fail. If the component types stored in the links do not match the required
     * component type, matching will fail.
-    * @param callerId Id of the calling instance
+    *
+    * @param callerId      Id of the calling instance
     * @param componentType ComponentType to look for
     * @return Try[Instance], Success if matching was successful, Failure otherwise
     */
-  private def tryLinkMatching(callerId: Long, componentType: ComponentType) : Try[Instance] = {
-    log.info(s"Matching first try: Analyzing links for $callerId...")
+  private def tryLinkMatching(callerId: Long, componentType: ComponentType): Try[Instance] = {
+    log.debug(s"Matching first try: Analyzing links for $callerId...")
 
     val links = instanceDao.getLinksFrom(callerId).filter(link => link.linkState == LinkState.Assigned)
 
     links.size match {
       case 0 =>
-        log.info(s"Matching first try failed: No links present.")
+        log.debug(s"Matching first try failed: No links present.")
         Failure(new RuntimeException("No links for instance."))
       case 1 =>
         val instanceAssigned = instanceDao.getInstance(links.head.idTo)
 
-        if(instanceAssigned.isDefined && instanceAssigned.get.componentType == componentType){
+        if (instanceAssigned.isDefined && instanceAssigned.get.componentType == componentType) {
           log.info(s"Finished matching first try: Successfully matched based on 1 link found. Target is ${instanceAssigned.get}.")
           Success(instanceAssigned.get)
-        } else if(instanceAssigned.isDefined && instanceAssigned.get.componentType != componentType){
+        } else if (instanceAssigned.isDefined && instanceAssigned.get.componentType != componentType) {
           log.error(s"Matching first try failed: There was one link present, but the target type ${instanceAssigned.get.componentType} did not match expected type $componentType")
           val link = InstanceLink(links.head.idFrom, links.head.idTo, LinkState.Outdated)
           instanceDao.updateLink(link)
@@ -737,10 +795,10 @@ class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, con
           case Some(instanceLink) =>
             val instanceAssigned = instanceDao.getInstance(instanceLink.idTo)
 
-            if(instanceAssigned.isDefined && instanceAssigned.get.componentType == componentType){
+            if (instanceAssigned.isDefined && instanceAssigned.get.componentType == componentType) {
               log.info(s"Finished matching first try: Successfully matched based on one assigned link found out of $x total links. Target is ${instanceAssigned.get}.")
               Success(instanceAssigned.get)
-            } else if(instanceAssigned.isDefined && instanceAssigned.get.componentType != componentType){
+            } else if (instanceAssigned.isDefined && instanceAssigned.get.componentType != componentType) {
               log.error(s"Matching first try failed: There was one assigned link present, but the target type ${instanceAssigned.get.componentType} did not match expected type $componentType")
               val link = InstanceLink(links.head.idFrom, links.head.idTo, LinkState.Outdated)
               instanceDao.updateLink(link)
@@ -764,44 +822,45 @@ class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, con
   /**
     * Tries to match caller to instance of the specified type based on which instance has the most labels in common with
     * the caller. Will fail if no such instance is found.
-    * @param callerId Id of the calling instance
+    *
+    * @param callerId      Id of the calling instance
     * @param componentType ComponentType to match to
     * @return Success(Instance) if successful, Failure otherwise.
     */
-  private def tryLabelMatching(callerId: Long, componentType: ComponentType) : Try[Instance] = {
-    log.info(s"Matching second try: Analyzing labels for $callerId...")
+  private def tryLabelMatching(callerId: Long, componentType: ComponentType): Try[Instance] = {
+    log.debug(s"Matching second try: Analyzing labels for $callerId...")
 
     val possibleMatches = instanceDao.getInstancesOfType(componentType)
 
     possibleMatches.size match {
       case 0 =>
-        log.warning(s"Matching second try failed: There are no instances of type $componentType present.")
+        log.debug(s"Matching second try failed: There are no instances of type $componentType present.")
         Failure(new RuntimeException(s"Type $componentType not present."))
       case _ =>
         val labels = instanceDao.getInstance(callerId).get.labels
 
         val intersectionList = possibleMatches
-            .filter(instance => instance.labels.intersect(labels).nonEmpty)
-            .sortBy(instance => instance.labels.intersect(labels).size)
-            .reverse
+          .filter(instance => instance.labels.intersect(labels).nonEmpty)
+          .sortBy(instance => instance.labels.intersect(labels).size)
+          .reverse
 
-        if(intersectionList.nonEmpty){
+        if (intersectionList.nonEmpty) {
           val result = intersectionList.head
           val noOfSharedLabels = result.labels.intersect(labels).size
           log.info(s"Finished matching second try: Successfully matched to  $result based on $noOfSharedLabels shared labels.")
           Success(result)
         } else {
-          log.warning(s"Matching second try failed: There are no instance with shared labels to $labels.")
+          log.debug(s"Matching second try failed: There are no instance with shared labels to $labels.")
           Failure(new RuntimeException(s"No instance with shared labels."))
         }
     }
   }
 
-  private def tryDefaultMatching(componentType: ComponentType) : Try[Instance] = {
-    log.info(s"Matching fallback: Searching for instances of type $componentType ...")
+  private def tryDefaultMatching(componentType: ComponentType): Try[Instance] = {
+    log.debug(s"Matching fallback: Searching for instances of type $componentType ...")
     getNumberOfInstances(componentType) match {
       case 0 =>
-        log.error(s"Matching failed: Cannot match to any instance of type $componentType, no such instance present.")
+        log.warning(s"Matching failed: Cannot match to any instance of type $componentType, no such instance present.")
         Failure(new RuntimeException(s"Cannot match to any instance of type $componentType, no instance present."))
       case 1 =>
         val instance: Instance = instanceDao.getInstancesOfType(componentType).head
@@ -844,17 +903,17 @@ class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, con
     * Handles a call to /command. container id and command must be present,
     * Will run the command into the container with provide parameters
     *
-    * @param id container id the command will run on
-    * @param command the command to run
-    * @param attachStdin attaches to stdin of the command
+    * @param id           container id the command will run on
+    * @param command      the command to run
+    * @param attachStdin  attaches to stdin of the command
     * @param attachStdout attaches to stdout of the command
     * @param attachStderr attaches to stderr of the command
-    * @param detachKeys  Override the key sequence for detaching a container.
-    *                    Format is a single character [a-Z] or ctrl-<@value> where <v@alue> is one of: a-z, @, [, , or _
-    * @param privileged  runs the process with extended privileges
-    * @param tty  allocate a pseudo-TTY
-    * @param user A string value specifying the user, and optionally, group to run the process inside the container,
-    *             Format is one of: "user", "user:group", "uid", or "uid:gid".
+    * @param detachKeys   Override the key sequence for detaching a container.
+    *                     Format is a single character [a-Z] or ctrl-<@value> where <v@alue> is one of: a-z, @, [, , or _
+    * @param privileged   runs the process with extended privileges
+    * @param tty          allocate a pseudo-TTY
+    * @param user         A string value specifying the user, and optionally, group to run the process inside the container,
+    *                     Format is one of: "user", "user:group", "uid", or "uid:gid".
     * @return
     */
   def handleCommand(id: Long, command: String, attachStdin: Option[Boolean],
@@ -871,9 +930,9 @@ class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, con
     } else {
       val instance = instanceDao.getInstance(id).get
       log.info(s"Handling /command for instance with id $id...")
-      implicit val timeout : Timeout = configuration.dockerOperationTimeout
+      implicit val timeout: Timeout = configuration.dockerOperationTimeout
 
-      (dockerActor ? runCommand(instance.dockerId.get, command, attachStdin, attachStdout, attachStderr, detachKeys, privileged, tty, user)).map{
+      (dockerActor ? runCommand(instance.dockerId.get, command, attachStdin, attachStdout, attachStderr, detachKeys, privileged, tty, user)).map {
         _ => log.info(s"Command '$command' ran successfully in container with id $id.")
       }.recover {
         case ex: Exception =>
@@ -883,6 +942,24 @@ class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, con
 
       OperationResult.Ok
 
+    }
+  }
+
+  /**
+    * Add user to user database
+    *
+    * @param user
+    * @return
+    */
+  def handleAddUser(user: DelphiUser): Try[Long] = {
+
+    val noIdUser = DelphiUser(id = None, userName = user.userName, secret = user.secret, userType = user.userType)
+
+    authDao.addUser(noIdUser) match {
+      case Success(id) =>
+        log.info(s"Successfully handled create user request")
+        Success(id)
+      case Failure(x) => Failure(x)
     }
   }
 
@@ -931,7 +1008,7 @@ class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, con
   private def fireDockerOperationErrorEvent(affectedInstance: Option[Instance], errorMessage: String): Unit = {
     val event = RegistryEventFactory.createDockerOperationErrorEvent(affectedInstance, errorMessage)
     eventActor ! event
-    if(affectedInstance.isDefined){
+    if (affectedInstance.isDefined) {
       instanceDao.addEventFor(affectedInstance.get.id.get, event)
     }
   }
@@ -979,11 +1056,11 @@ class RequestHandler(configuration: Configuration, instanceDao: InstanceDAO, con
 
   }
 
-  private def assignmentAllowed(instanceType: ComponentType) : Boolean = {
+  private def assignmentAllowed(instanceType: ComponentType): Boolean = {
     instanceType == ComponentType.Crawler || instanceType == ComponentType.WebApi || instanceType == ComponentType.WebApp
   }
 
-  private def compatibleTypes(instanceType: ComponentType, dependencyType: ComponentType) : Boolean = {
+  private def compatibleTypes(instanceType: ComponentType, dependencyType: ComponentType): Boolean = {
     instanceType match {
       case ComponentType.Crawler => dependencyType == ComponentType.ElasticSearch
       case ComponentType.WebApi => dependencyType == ComponentType.ElasticSearch

@@ -19,6 +19,7 @@ libraryDependencies += "org.scalatest" %% "scalatest" % "3.0.4" % "test"
 libraryDependencies += "org.parboiled" %% "parboiled" % "2.1.4"
 libraryDependencies += "com.typesafe.akka" %% "akka-http-testkit" % "10.1.5"
 
+libraryDependencies += "com.pauldijou" %% "jwt-core" % "1.0.0"
 
 lazy val registry = (project in file(".")).
   enablePlugins(JavaAppPackaging).
