@@ -31,7 +31,7 @@ class DynamicAuthDAO (configuration : Configuration) extends AuthDAO with AppLog
 
   }
 
-  override def addUser(delphiUser : DelphiUser) : Try[Long] = {
+  override def addUser(delphiUser : DelphiUser) : Try[String] = {
     if(hasUserWithUsername(delphiUser.userName)){
       Failure(new RuntimeException(s"username ${delphiUser.userName} is already exist."))
     } else{
@@ -40,9 +40,20 @@ class DynamicAuthDAO (configuration : Configuration) extends AuthDAO with AppLog
       users.add(newUser)
 
       log.info(s"Added user ${newUser.userName} with id ${newUser.id.get} to database.")
-      Success(id)
+      Success(newUser.userName)
     }
 
+  }
+
+  override def removeUser(username: String): Try[Unit] = {
+    if(hasUserWithUsername(username)){
+      users.remove(users.find(i => i.userName == username).get)
+      Success(log.info(s"Successfully removed user with username $username."))
+    } else {
+      val msg = s"Cannot remove user with id $username, that id is not present."
+      log.warning(msg)
+      Failure(new RuntimeException(msg))
+    }
   }
 
   override def hasUserWithUsername(username: String) : Boolean = {

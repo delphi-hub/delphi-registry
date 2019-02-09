@@ -27,7 +27,7 @@ class DatabaseAuthDAO (configuration : Configuration) extends AuthDAO with AppLo
   implicit val ec : ExecutionContext = system.dispatcher
 
   private val users : TableQuery[Users] = TableQuery[Users]
-  private val dbAuth = Database.forURL(configuration.authDatabaseHost + configuration.authDatabaseName, driver = configuration.authDatabaseDriver, user = configuration.authDatabaseUsername, password = configuration.authDatabasePassword)
+  private var dbAuth = Database.forURL(configuration.authDatabaseHost + configuration.authDatabaseName, driver = configuration.authDatabaseDriver, user = configuration.authDatabaseUsername, password = configuration.authDatabasePassword)
 
   override def getUserWithUsername(userName: String): Option[DelphiUser] =
   {
@@ -39,7 +39,7 @@ class DatabaseAuthDAO (configuration : Configuration) extends AuthDAO with AppLo
     }
   }
 
-  override def addUser(delphiUser : DelphiUser) : Try[Long] = {
+  override def addUser(delphiUser : DelphiUser) : Try[String] = {
     if(hasUserWithUsername(delphiUser.userName)){
       Failure(new RuntimeException(s"username ${delphiUser.userName} is already exist."))
     } else {
@@ -52,9 +52,20 @@ class DatabaseAuthDAO (configuration : Configuration) extends AuthDAO with AppLo
       val userId = Await.result(addFuture, Duration.Inf)
 
       log.info(s"Added user ${delphiUser.userName} with id $userId to database.")
-      Success(userId)
+      Success(userName)
     }
 
+  }
+
+  override def removeUser(username: String) : Try[Unit] = {
+    if(hasUserWithUsername(username)) {
+      removeUserWithUsername(username)
+      Success(log.info(s"Successfully removed user with username $username."))
+    }else{
+      val msg = s"Cannot remove user with username $username, that username is not present."
+      log.warning(msg)
+      Failure(new RuntimeException(msg))
+    }
   }
 
   override def hasUserWithUsername(username: String) : Boolean = {
@@ -110,5 +121,16 @@ class DatabaseAuthDAO (configuration : Configuration) extends AuthDAO with AppLo
 
   private def hashString(secret: String): String = {
     MessageDigest.getInstance("SHA-256").digest(secret.getBytes(StandardCharsets.UTF_8)).map("%02x".format(_)).mkString("")
+  }
+
+  private def removeUserWithUsername(username: String): Unit ={
+    val q = users.filter(_.userName === username)
+    val action = q.delete
+    dbAuth.run(action)
+  }
+
+  def setDatabaseConfiguration(databaseHost: String = "", databaseName: String = "", databaseDriver: String = "", databaseUsername: String = "", databasePassword: String = ""): Unit ={
+    dbAuth = Database.forURL(databaseHost + databaseName, driver = databaseDriver, user = databaseUsername, password = databasePassword)
+    initialize()
   }
 }

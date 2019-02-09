@@ -10,7 +10,14 @@ trait AuthDAO {
     * Add user
     * @return
     */
-  def addUser(delphiUser : DelphiUser) : Try[Long]
+  def addUser(delphiUser : DelphiUser) : Try[String]
+
+  /**
+    * Remove user with username
+    * @param username
+    * @return
+    */
+  def removeUser(username: String) : Try[Unit]
 
   /**
     * Initializes the DAO
