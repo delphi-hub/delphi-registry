@@ -262,11 +262,11 @@ class Server(handler: RequestHandler) extends HttpApp
 
         if (compType != null) {
           complete {
-            handler.getAllInstancesOfType(compType)
+            handler.getAllInstancesOfType(Some(compType))
           }
         } else if (compTypeStr == noValue) {
           complete {
-            handler.getAllInstancesType().toList
+            handler.getAllInstancesOfType(None).toList
           }
         }
         else {
@@ -296,11 +296,11 @@ class Server(handler: RequestHandler) extends HttpApp
 
         if (compType != null) {
           complete {
-            handler.getNumberOfInstances(compType).toString()
+            handler.getNumberOfInstances(Some(compType)).toString()
           }
         } else if (compTypeStr == noValue) {
           complete {
-            handler.getAllInstancesCount().toString()
+            handler.getNumberOfInstances(None).toString()
           }
         }
         else {
@@ -341,7 +341,7 @@ class Server(handler: RequestHandler) extends HttpApp
     *
     * @return Server route that either maps to 200 OK response containing the instance, or the resp. error codes.
     */
-  def matchingInstance(id: Long): server.Route = parameters('ComponentType.as[String]) { (compTypeString) =>
+  def matchingInstance(id: Long): server.Route = parameters('ComponentType.as[String]) { compTypeString =>
     authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.Component)) { token =>
       get {
         log.debug(s"GET instance/$id/matchingInstance?ComponentType=$compTypeString has been called")
@@ -982,6 +982,7 @@ class Server(handler: RequestHandler) extends HttpApp
     }
   }
 
+  // scalastyle:off cyclomatic.complexity
   /**
     * Called to run a command in a  docker container. The Id an Command is the required parameter there are other optional parameter can be passed
     * a query with required parameter Command and Id (so the resulting call is /command?Id=42&Command=ls).
@@ -1005,7 +1006,7 @@ class Server(handler: RequestHandler) extends HttpApp
 
         Try(json.fields("Command").toString.replace("\"", "")) match {
           case Success(command) =>
-            handler.handleCommand(id, command, None, None, None, None, privileged, None, user) match {
+            handler.handleCommand(id, command, privileged, user) match {
               case handler.OperationResult.IdUnknown =>
                 log.warning(s"Cannot run command $command to $id, id not found.")
                 complete {
@@ -1034,6 +1035,7 @@ class Server(handler: RequestHandler) extends HttpApp
       }
     }
   }
+  // scalastyle:on cyclomatic.complexity
 
   def retrieveLogs(id: Long): server.Route = parameters('StdErr.as[Boolean].?) { stdErrOption =>
     authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>

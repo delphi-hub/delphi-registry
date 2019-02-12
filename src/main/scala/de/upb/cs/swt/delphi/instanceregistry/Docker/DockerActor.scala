@@ -134,17 +134,9 @@ class DockerActor(connection: DockerConnection) extends Actor with ActorLogging 
           sender ! Status.Failure(ex)
       }
 
-    case RunCommandMessage(containerId, command, attachStdin, attachStdout, attachStderr, detachKeys, privileged, tty, user) =>
+    case RunCommandMessage(containerId, command, privileged, user) =>
       log.debug(s"running command in docker container..")
-      val createCommand = Try(Await.result(container.commandCreate(containerId,
-        command,
-        attachStdin,
-        attachStdout,
-        attachStderr,
-        detachKeys,
-        privileged,
-        tty,
-        user), Duration.Inf))
+      val createCommand = Try(Await.result(container.commandCreate(containerId, command, privileged, user), Duration.Inf))
 
       createCommand match {
         case Failure(ex) => sender ! Failure(ex)
@@ -201,16 +193,6 @@ object DockerActor {
 
   case class LogsMessage(containerId: String, stdErrSelected: Boolean, stream: Boolean)
 
-  case class RunCommandMessage(
-                         containerId: String,
-                         command: String,
-                         attachStdin: Option[Boolean],
-                         attachStdout: Option[Boolean],
-                         attachStderr: Option[Boolean],
-                         detachKeys: Option[String],
-                         privileged: Option[Boolean],
-                         tty: Option[Boolean],
-                         user: Option[String]
-                       )
+  case class RunCommandMessage(containerId: String, command: String, privileged: Option[Boolean], user: Option[String])
 
 }

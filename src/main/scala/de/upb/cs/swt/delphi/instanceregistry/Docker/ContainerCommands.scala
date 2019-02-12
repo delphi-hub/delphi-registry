@@ -276,19 +276,9 @@ class ContainerCommands(connection: DockerConnection) extends JsonSupport with C
     Success(streamPublisher)
   }
 
-  def commandCreate(
-            containerId: String,
-            cmd: String,
-            attachStdin: Option[Boolean],
-            attachStdout: Option[Boolean],
-            attachStderr: Option[Boolean],
-            detachKeys: Option[String],
-            privileged: Option[Boolean],
-            tty: Option[Boolean],
-            user: Option[String]
-          )(implicit ec: ExecutionContext): Future[CreateContainerResponse] =  {
-
-    val content = commandJsonRequest(cmd, attachStdin, attachStdout, attachStderr, detachKeys, privileged, tty, user)
+  def commandCreate(containerId: String, cmd: String, privileged: Option[Boolean], user: Option[String])
+                   (implicit ec: ExecutionContext): Future[CreateContainerResponse] = {
+    val content = commandJsonRequest(cmd, privileged, user)
 
     val request = Post(buildUri(containersPath / containerId / "exec"), HttpEntity(`application/json`, content))
 
@@ -297,6 +287,7 @@ class ContainerCommands(connection: DockerConnection) extends JsonSupport with C
 
       response.status match {
         case StatusCodes.Created =>
+
           Unmarshal(response).to[CreateContainerResponse]
         case StatusCodes.NotFound =>
           throw ContainerNotFoundException(containerId)

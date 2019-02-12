@@ -36,6 +36,7 @@ trait EventJsonSupport extends SprayJsonSupport with DefaultJsonProtocol with In
       */
     def write(eventType : EventType) = JsString(eventType.toString)
 
+    //scalastyle:off cyclomatic.complexity
     /**
       * Custom read method for deserialization of an EventType
       * @param value JsValue to deserialize (must be a JsString)
@@ -55,6 +56,7 @@ trait EventJsonSupport extends SprayJsonSupport with DefaultJsonProtocol with In
       }
       case y => throw DeserializationException(s"Unexpected type $y during deserialization event type.")
     }
+    //scalastyle:on cyclomatic.complexity
   }
 
   //Custom JSON format for an RegistryEventPayload

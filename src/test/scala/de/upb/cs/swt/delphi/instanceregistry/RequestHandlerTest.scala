@@ -288,9 +288,9 @@ class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach 
   }
 
   it must "not add two default ES instances on initializing" in {
-    assert(handler.getNumberOfInstances(ComponentType.ElasticSearch) == 1)
+    assert(handler.getNumberOfInstances(Some(ComponentType.ElasticSearch)) == 1)
     handler.initialize()
-    assert(handler.getNumberOfInstances(ComponentType.ElasticSearch) == 1)
+    assert(handler.getNumberOfInstances(Some(ComponentType.ElasticSearch)) == 1)
   }
 
   it must "validate preconditions before adding a label" in {
