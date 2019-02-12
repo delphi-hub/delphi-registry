@@ -210,8 +210,8 @@ class Server(handler: RequestHandler) extends HttpApp
   }
 
   /**
-    * Removes an instance. The id of the instance that is calling deregister must be passed as an query argument named
-    * 'Id' (so the call is /deregister?Id=42). This endpoint is intended for instances that are not running inside
+    * Removes an instance. The id of the instance that is calling deregister must be passed as an path argument named
+    * 'Id' (so the call is /instances/42/deregister). This endpoint is intended for instances that are not running inside
     * a docker container, as the respective instance will be permanently deleted from the registry.
     *
     * @return Server route that either maps to a 200 OK response if successful, or to the respective error codes.
@@ -279,7 +279,7 @@ class Server(handler: RequestHandler) extends HttpApp
 
   /**
     * Returns the number of instances for the specified ComponentType. The ComponentType must be passed as an query
-    * argument named 'ComponentType' (so the call is /numberOfInstances?ComponentType=Crawler).
+    * argument named 'ComponentType' (so the call is /instances/count?ComponentType=Crawler).
     *
     * @return Server route that either maps to a 200 OK response containing the number of instance, or the resp. error codes.
     */
@@ -312,8 +312,7 @@ class Server(handler: RequestHandler) extends HttpApp
   }
 
   /**
-    * Returns an instance with the specified id. Id is passed as query argument named 'Id' (so the resulting call is
-    * /instance?Id=42)
+    * Returns an instance with the specified id. Id is passed as path argument  (so the resulting call is /instances/42)
     *
     * @return Server route that either maps to 200 OK and the respective instance as entity, or 404.
     */
@@ -337,14 +336,14 @@ class Server(handler: RequestHandler) extends HttpApp
 
   /**
     * Returns an instance of the specified ComponentType that can be used to resolve dependencies. The ComponentType must
-    * be passed as an query argument named 'ComponentType' (so the call is /matchingInstance?ComponentType=Crawler).
+    * be passed as an query argument named 'ComponentType' (so the call is /instances/42/matchingInstance?ComponentType=ElasticSearch).
     *
     * @return Server route that either maps to 200 OK response containing the instance, or the resp. error codes.
     */
   def matchingInstance(id: Long): server.Route = parameters('ComponentType.as[String]) { compTypeString =>
     authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.Component)) { token =>
       get {
-        log.debug(s"GET instance/$id/matchingInstance?ComponentType=$compTypeString has been called")
+        log.debug(s"GET instances/$id/matchingInstance?ComponentType=$compTypeString has been called")
 
         val compType: ComponentType = ComponentType.values.find(v => v.toString == compTypeString).orNull
         log.debug(s"Looking for instance of type $compType ...")
@@ -385,8 +384,9 @@ class Server(handler: RequestHandler) extends HttpApp
   }
 
   /**
-    * Applies a matching result to the instance with the specified id. The matching result and id are passed as query
-    * parameters named 'Id' and 'MatchingSuccessful' (so the call is /matchingResult?Id=42&MatchingSuccessful=True).
+    * Applies a matching result to the instance with the specified id. The id of the affected instance is specified in the path.
+    * The matching result and the id of the instance sending the result are passed in the body of the request,
+    * named 'SenderId' and 'MatchingSuccessful' (so the call is /instances/42/matchingResult).
     *
     * @return Server route that either maps to 200 OK or to the respective error codes
     */
@@ -428,14 +428,14 @@ class Server(handler: RequestHandler) extends HttpApp
 
   /**
     * Returns a list of registry events that are associated to the instance with the specified id. The id is passed as
-    * query argument named 'Id' (so the resulting call is /eventList?Id=42).
+    * path argument (so the resulting call is /instances/42/eventList).
     *
     * @return Server route mapping to either 200 OK and the list of event, or the resp. error codes.
     */
   def eventList(id: Long): server.Route = {
     authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.User)) { token =>
       get {
-        log.debug(s"GET instances/$id//eventList has been called")
+        log.debug(s"GET instances/$id/eventList has been called")
 
         handler.getEventList(id) match {
           case Success(list) => complete {
@@ -468,8 +468,8 @@ class Server(handler: RequestHandler) extends HttpApp
 
   /**
     * Deploys a new container of the specified type. Also adds the resulting instance to the database. The mandatory
-    * parameter 'ComponentType' is passed as a query argument. The optional parameter 'InstanceName' may also be passed as
-    * query argument (so the resulting call may be /deploy?ComponentType=Crawler&InstanceName=MyCrawler).
+    * parameter 'ComponentType' is passed in the body of the request, as well as the optional parameter 'InstanceName'
+    * (so the resulting call is /instances/deploy).
     *
     * @return Server route that either maps to 202 ACCEPTED and the generated id of the instance, or the resp. error codes.
     */
@@ -517,8 +517,8 @@ class Server(handler: RequestHandler) extends HttpApp
   }
 
   /**
-    * Called to report that the instance with the specified id was started successfully. The Id is passed as query
-    * parameter named 'Id' (so the resulting call is /reportStart?Id=42)
+    * Called to report that the instance with the specified id was started successfully. The Id is passed as path
+    * parameter (so the resulting call is /instances/42/reportStart)
     *
     * @return Server route that either maps to 200 OK or the respective error codes
     */
@@ -550,8 +550,8 @@ class Server(handler: RequestHandler) extends HttpApp
   }
 
   /**
-    * Called to report that the instance with the specified id was stopped successfully. The Id is passed as query
-    * parameter named 'Id' (so the resulting call is /reportStop?Id=42)
+    * Called to report that the instance with the specified id was stopped successfully. The Id is passed as path parameter
+    * (so the resulting call is /instances/42/reportStop)
     *
     * @return Server route that either maps to 200 OK or the respective error codes
     */
@@ -583,8 +583,8 @@ class Server(handler: RequestHandler) extends HttpApp
   }
 
   /**
-    * Called to report that the instance with the specified id encountered a failure. The Id is passed as query
-    * parameter named 'Id' (so the resulting call is /reportFailure?Id=42)
+    * Called to report that the instance with the specified id encountered a failure. The Id is passed as path parameter
+    * (so the resulting call is /instances/42/reportFailure)
     *
     * @return Server route that either maps to 200 OK or the respective error codes
     */
@@ -620,7 +620,7 @@ class Server(handler: RequestHandler) extends HttpApp
 
   /**
     * Called to pause the instance with the specified id. The associated docker container is paused. The Id is passed
-    * as a query argument named 'Id' (so the resulting call is /pause?Id=42).
+    * as a path parameter (so the resulting call is /instances/42/pause).
     *
     * @return Server route that either maps to 202 ACCEPTED or the expected error codes.
     */
@@ -659,7 +659,7 @@ class Server(handler: RequestHandler) extends HttpApp
 
   /**
     * Called to resume the instance with the specified id. The associated docker container is resumed. The Id is passed
-    * as a query argument named 'Id' (so the resulting call is /resume?Id=42).
+    * as a path parameter (so the resulting call is /instances/42/resume).
     *
     * @return Server route that either maps to 202 ACCEPTED or the expected error codes.
     */
@@ -698,7 +698,7 @@ class Server(handler: RequestHandler) extends HttpApp
 
   /**
     * Called to stop the instance with the specified id. The associated docker container is stopped. The Id is passed
-    * as a query argument named 'Id' (so the resulting call is /stop?Id=42).
+    * as a path parameter (so the resulting call is /instances/42/stop).
     *
     * @return Server route that either maps to 202 ACCEPTED or the expected error codes.
     */
@@ -737,7 +737,7 @@ class Server(handler: RequestHandler) extends HttpApp
 
   /**
     * Called to start the instance with the specified id. The associated docker container is started. The Id is passed
-    * as a query argument named 'Id' (so the resulting call is /start?Id=42).
+    * as a path parameter (so the resulting call is /instances/42/start).
     *
     * @return Server route that either maps to 202 ACCEPTED or the expected error codes.
     */
@@ -776,7 +776,7 @@ class Server(handler: RequestHandler) extends HttpApp
 
   /**
     * Called to delete the instance with the specified id as well as the associated docker container. The Id is passed
-    * as a query argument named 'Id' (so the resulting call is /delete?Id=42).
+    * as a path parameter (so the resulting call is /instances/42/delete).
     *
     * @return Server route that either maps to 202 ACCEPTED or the respective error codes.
     */
@@ -818,9 +818,10 @@ class Server(handler: RequestHandler) extends HttpApp
   }
 
   /**
-    * Called to assign a new instance dependency to the instance with the specified id. Both the ids of the instance and
-    * the specified dependency are passed as query arguments named 'Id' and 'assignedInstanceId' resp. (so the resulting
-    * call is /assignInstance?Id=42&assignedInstanceId=43). Will update the dependency in DB and than restart the container.
+    * Called to assign a new instance dependency to the instance with the specified id. The id of the instance which's dependency is
+    * going to be updated is passed as path parameter. The Id of the newly assigned dependency is passed in the body of the request
+    * and named "AssignedInstanceId". The resulting call is /instances/42/assignInstance. Will update dependency and restart container.
+
     *
     * @return Server route that either maps to 202 ACCEPTED or the respective error codes
     */
@@ -870,8 +871,8 @@ class Server(handler: RequestHandler) extends HttpApp
   }
 
   /**
-    * Called to get a list of links from the instance with the specified id. The id is passed as query argument named
-    * 'Id' (so the resulting call is /linksFrom?Id=42).
+    * Called to get a list of links from the instance with the specified id. The id is passed as path parameter
+    * (so the resulting call is /instances/42/linksFrom).
     *
     * @return Server route that either maps to 200 OK (and the list of links as content), or the respective error code.
     */
@@ -896,8 +897,8 @@ class Server(handler: RequestHandler) extends HttpApp
   }
 
   /**
-    * Called to get a list of links to the instance with the specified id. The id is passed as query argument named
-    * 'Id' (so the resulting call is /linksTo?Id=42).
+    * Called to get a list of links to the instance with the specified id. The id is passed as path parameter
+    * (so the resulting call is /instances/42/linksTo).
     *
     * @return Server route that either maps to 200 OK (and the list of links as content), or the respective error code.
     */
@@ -940,8 +941,8 @@ class Server(handler: RequestHandler) extends HttpApp
   }
 
   /**
-    * Called to add a generic label to the instance with the specified id. The Id and label are passed as query arguments
-    * named 'Id' and 'Label', resp. (so the resulting call is /addLabel?Id=42&Label=private)
+    * Called to add a generic label to the instance with the specified id. The id of the instance is passed as path parameter,
+    * the label is part of the request's body and named "Label". The resulting call is /instances/42/label.
     *
     * @return Server route that either maps to 200 OK or the respective error codes.
     */
@@ -981,8 +982,9 @@ class Server(handler: RequestHandler) extends HttpApp
 
   // scalastyle:off cyclomatic.complexity
   /**
-    * Called to run a command in a  docker container. The Id an Command is the required parameter there are other optional parameter can be passed
-    * a query with required parameter Command and Id (so the resulting call is /command?Id=42&Command=ls).
+    * Called to run a command in a  docker container. The Id is passed as path parameter,
+    * The required parameter "Command" and optional "Privileged" and "User" are part of the request's body.
+    * (so the resulting call is /instances/42/command).
     *
     * @return Server route that either maps to 200 Ok or the respective error codes.
     */
