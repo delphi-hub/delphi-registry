@@ -1,3 +1,18 @@
+// Copyright (C) 2018 The Delphi Team.
+// See the LICENCE file distributed with this work for additional
+// information regarding copyright ownership.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+
+// http://www.apache.org/licenses/LICENSE-2.0
+
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 package de.upb.cs.swt.delphi.instanceregistry.daos
 
 
@@ -27,7 +42,10 @@ class DatabaseAuthDAO (configuration : Configuration) extends AuthDAO with AppLo
   implicit val ec : ExecutionContext = system.dispatcher
 
   private val users : TableQuery[Users] = TableQuery[Users]
-  private val dbAuth = Database.forURL(configuration.authDatabaseHost + configuration.authDatabaseName, driver = configuration.authDatabaseDriver, user = configuration.authDatabaseUsername, password = configuration.authDatabasePassword)
+  private val dbAuth = Database.forURL(configuration.authDatabaseHost + configuration.authDatabaseName,
+    driver = configuration.authDatabaseDriver,
+    user = configuration.authDatabaseUsername,
+    password = configuration.authDatabasePassword)
 
   override def getUserWithUsername(userName: String): Option[DelphiUser] =
   {
@@ -97,15 +115,11 @@ class DatabaseAuthDAO (configuration : Configuration) extends AuthDAO with AppLo
 
   private def dbTest(): Boolean = {
     try {
-      dbAuth.createSession.conn.isValid(5)
+      val dbTimeoutSeconds = 5
+      dbAuth.createSession.conn.isValid(dbTimeoutSeconds)
     } catch {
       case e: Throwable => throw e
     }
-  }
-
-  private def removeAllUsers(): Unit = {
-    val action = users.delete
-    dbAuth.run(action)
   }
 
   private def hashString(secret: String): String = {

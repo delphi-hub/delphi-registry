@@ -1,3 +1,18 @@
+// Copyright (C) 2018 The Delphi Team.
+// See the LICENCE file distributed with this work for additional
+// information regarding copyright ownership.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+
+// http://www.apache.org/licenses/LICENSE-2.0
+
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 package de.upb.cs.swt.delphi.instanceregistry.connection
 
 import akka.actor.ActorSystem
@@ -43,10 +58,12 @@ class Server(handler: RequestHandler) extends HttpApp
     }
   }
 
+  // scalastyle:off method.length
+
   //Routes that map http endpoints to methods in this object
   def apiRoutes: server.Route =
 
-  /** **************BASIC OPERATIONS ****************/
+  /****************BASIC OPERATIONS ****************/
     pathPrefix("instances") {
       pathEnd {
         fetchInstancesOfType()
@@ -149,7 +166,7 @@ class Server(handler: RequestHandler) extends HttpApp
       configurationInfo()
     }
 
-
+  //scalastyle:on method.length
 
   /**
     * Registers a new instance at the registry. This endpoint is intended for instances that are not running inside
@@ -571,7 +588,7 @@ class Server(handler: RequestHandler) extends HttpApp
     *
     * @return Server route that either maps to 200 OK or the respective error codes
     */
-  def reportFailure(id: Long): server.Route = parameters('ErrorLog.as[String].?) { (errorLog) =>
+  def reportFailure(id: Long): server.Route = parameters('ErrorLog.as[String].?) { errorLog =>
     authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.Component)) { token =>
       post {
         if (errorLog.isEmpty) {
@@ -1107,10 +1124,10 @@ class Server(handler: RequestHandler) extends HttpApp
       Flow[Message]
         .map {
           case TextMessage.Strict(msg: String) => msg
-          case _ => println("Ignored non-text message.")
+          case _ => log.info("Ignored non-text message.")
         }
         .via(
-          Flow.fromSinkAndSource(Sink.foreach(println), Source.fromPublisher(handler.eventPublisher)
+          Flow.fromSinkAndSource(Sink.foreach( _ => log.debug(_)), Source.fromPublisher(handler.eventPublisher)
             .map(event => event.toJson(eventFormat).toString))
         )
         .map { msg: String => TextMessage.Strict(msg + "\n") }

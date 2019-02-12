@@ -1,3 +1,18 @@
+// Copyright (C) 2018 The Delphi Team.
+// See the LICENCE file distributed with this work for additional
+// information regarding copyright ownership.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+
+// http://www.apache.org/licenses/LICENSE-2.0
+
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 package de.upb.cs.swt.delphi.instanceregistry
 
 import java.io.File
@@ -11,8 +26,6 @@ import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnu
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.LinkEnums.LinkState
 import org.scalatest.{BeforeAndAfterEach, FlatSpec, Matchers}
 
-import scala.concurrent.ExecutionContext
-
 class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach {
 
   implicit val system : ActorSystem = ActorSystem("test_system")
@@ -23,7 +36,11 @@ class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach 
   val authDAO: AuthDAO = new DynamicAuthDAO(configuration)
   val handler: RequestHandler = new RequestHandler(configuration, authDAO, dao, DockerConnection.fromEnvironment(configuration))
 
-  private def buildInstance(id: Long, componentType: ComponentType = ComponentType.ElasticSearch, dockerId: Option[String] = None, state: InstanceState.Value = InstanceState.Stopped, labels: List[String] = List.empty[String]): Instance = {
+  private def buildInstance(id: Long,
+                            componentType: ComponentType = ComponentType.ElasticSearch,
+                            dockerId: Option[String] = None,
+                            state: InstanceState.Value = InstanceState.Stopped,
+                            labels: List[String] = List.empty[String]): Instance = {
     Instance(Some(id), "https://localhost", 12345, "TestInstance", componentType, dockerId, state, labels, List.empty[InstanceLink], List.empty[InstanceLink])
   }
 
@@ -365,7 +382,16 @@ class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach 
 
   it must "match to instance with most consecutive positive matching results in fallback matching" in {
     val esInstance = handler.handleRegister(buildInstance(2))
-    val crawlerId = handler.handleRegister(Instance(Some(2), "foo", 42, "bar", ComponentType.Crawler, None, InstanceState.Running, List.empty[String], List.empty[InstanceLink], List.empty[InstanceLink]))
+    val crawlerId = handler.handleRegister(Instance(Some(2),
+      "foo",
+      42,
+      "bar",
+      ComponentType.Crawler,
+      None,
+      InstanceState.Running,
+      List.empty[String],
+      List.empty[InstanceLink],
+      List.empty[InstanceLink]))
 
     assert(esInstance.isSuccess)
     assert(esInstance.get == 1)

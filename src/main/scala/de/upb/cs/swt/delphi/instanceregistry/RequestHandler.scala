@@ -1,3 +1,18 @@
+// Copyright (C) 2018 The Delphi Team.
+// See the LICENCE file distributed with this work for additional
+// information regarding copyright ownership.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+
+// http://www.apache.org/licenses/LICENSE-2.0
+
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 package de.upb.cs.swt.delphi.instanceregistry
 
 import akka.actor._
@@ -30,7 +45,7 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
 
   val authProvider: AuthProvider = new AuthProvider(authDao)
 
-  val (eventActor, eventPublisher) = Source.actorRef[RegistryEvent](10, OverflowStrategy.dropNew)
+  val (eventActor, eventPublisher) = Source.actorRef[RegistryEvent](bufferSize = 10, OverflowStrategy.dropNew)
     .toMat(Sink.asPublisher(fanout = true))(Keep.both)
     .run()
   val dockerActor: ActorRef = system.actorOf(DockerActor.props(connection))
@@ -948,8 +963,8 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
   /**
     * Add user to user database
     *
-    * @param user
-    * @return
+    * @param user The user to add
+    * @return Id assigned to that user
     */
   def handleAddUser(user: DelphiUser): Try[Long] = {
 

@@ -1,27 +1,39 @@
+// Copyright (C) 2018 The Delphi Team.
+// See the LICENCE file distributed with this work for additional
+// information regarding copyright ownership.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+
+// http://www.apache.org/licenses/LICENSE-2.0
+
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 package de.upb.cs.swt.delphi.instanceregistry.Docker
 
 
 import java.nio.ByteOrder
 
-import akka.{Done, NotUsed}
+import akka.NotUsed
 import akka.actor.{ActorSystem, PoisonPill}
 import akka.http.scaladsl.client.RequestBuilding._
 import akka.http.scaladsl.model.MediaTypes.`application/json`
 import akka.http.scaladsl.model.Uri.{Path, Query}
-import akka.http.scaladsl.model.{HttpEntity, HttpResponse, StatusCodes}
+import akka.http.scaladsl.model.{HttpEntity, StatusCodes}
 import akka.http.scaladsl.unmarshalling.Unmarshal
 import akka.stream.scaladsl.{Flow, Framing, Keep, Sink, Source}
 import de.upb.cs.swt.delphi.instanceregistry.{AppLogging, Registry}
 import spray.json._
 import PostDataFormatting.commandJsonRequest
-import akka.http.scaladsl.Http
-import akka.http.scaladsl.model.ws.{Message, TextMessage, WebSocketRequest}
+import akka.http.scaladsl.model.ws.{Message, TextMessage}
 import akka.stream.OverflowStrategy
 import akka.util.ByteString
 import org.reactivestreams.Publisher
-
-import scala.collection.mutable
-import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
 
@@ -30,11 +42,9 @@ class ContainerCommands(connection: DockerConnection) extends JsonSupport with C
   import connection._
 
   implicit val system: ActorSystem = Registry.system
-  protected val containersPath = Path / "containers"
+  protected val containersPath: Path = Path / "containers"
 
-  def list(
-            all: Boolean
-          )(implicit ec: ExecutionContext) = {
+  def list(all: Boolean)(implicit ec: ExecutionContext): Future[Seq[ContainerStatus]] = {
     val request = Get(buildUri(containersPath / "json", Query("all" -> all.toString)))
     connection.sendRequest(request).flatMap { response =>
       response.status match {
@@ -126,7 +136,7 @@ class ContainerCommands(connection: DockerConnection) extends JsonSupport with C
         case StatusCodes.NoContent =>
           Future.successful(containerId)
         case StatusCodes.NotFound =>
-          throw new ContainerNotFoundException(containerId)
+          throw ContainerNotFoundException(containerId)
         case _ =>
           unknownResponseFuture(response)
       }
@@ -142,9 +152,9 @@ class ContainerCommands(connection: DockerConnection) extends JsonSupport with C
         case StatusCodes.NoContent =>
           Future.successful(containerId)
         case StatusCodes.NotModified =>
-          throw new ContainerAlreadyStoppedException(containerId)
+          throw ContainerAlreadyStoppedException(containerId)
         case StatusCodes.NotFound =>
-          throw new ContainerNotFoundException(containerId)
+          throw ContainerNotFoundException(containerId)
         case _ =>
           unknownResponseFuture(response)
       }
@@ -289,24 +299,21 @@ class ContainerCommands(connection: DockerConnection) extends JsonSupport with C
         case StatusCodes.Created =>
           Unmarshal(response).to[CreateContainerResponse]
         case StatusCodes.NotFound =>
-          throw new ContainerNotFoundException(containerId)
+          throw ContainerNotFoundException(containerId)
         case _ =>
           unknownResponseFuture(response)
       }
     }
   }
 
-  def commandRun(
-                     containerId: String,
-                     commandId: String
-                   )(implicit ec: ExecutionContext): Future[String]  =  {
+  def commandRun(containerId: String, commandId: String)(implicit ec: ExecutionContext): Future[String]  =  {
     val request = Post(buildUri(containersPath / "exec" / commandId / "start"))
     connection.sendRequest(request).flatMap { response =>
       response.status match {
         case StatusCodes.OK =>
           Future.successful(commandId)
         case StatusCodes.NotFound =>
-          throw new ContainerNotFoundException(containerId)
+          throw ContainerNotFoundException(containerId)
         case _ =>
           unknownResponseFuture(response)
       }
