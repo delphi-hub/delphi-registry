@@ -216,7 +216,7 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
 
           implicit val timeout: Timeout = configuration.dockerOperationTimeout
 
-          (dockerActor ? restart(instance.dockerId.get)).map {
+          (dockerActor ? RestartMessage(instance.dockerId.get)).map {
             _ =>
               log.info(s"Instance $instanceId restarted.")
               instanceDao.setStateFor(instance.id.get, InstanceState.Stopped) //Set to stopped, will report start automatically
@@ -288,7 +288,7 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
       case Success(id) =>
         implicit val timeout: Timeout = configuration.dockerOperationTimeout
 
-        val future: Future[Any] = dockerActor ? create(componentType, id)
+        val future: Future[Any] = dockerActor ? DeployMessage(componentType, id)
         val deployResult = Await.result(future, timeout.duration).asInstanceOf[Try[(String, String, Int, String)]]
 
         deployResult match {
@@ -448,7 +448,7 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
         log.debug(s"Handling /pause for instance with id $id...")
         implicit val timeout: Timeout = configuration.dockerOperationTimeout
 
-        (dockerActor ? pause(instance.dockerId.get)).map {
+        (dockerActor ? PauseMessage(instance.dockerId.get)).map {
           _ =>
             log.info(s"Instance $id paused.")
             instanceDao.setStateFor(instance.id.get, InstanceState.Paused)
@@ -484,7 +484,7 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
         log.debug(s"Handling /resume for instance with id $id...")
         implicit val timeout: Timeout = configuration.dockerOperationTimeout
 
-        (dockerActor ? unpause(instance.dockerId.get)).map {
+        (dockerActor ? UnpauseMessage(instance.dockerId.get)).map {
           _ =>
             log.info(s"Instance $id resumed.")
             instanceDao.setStateFor(instance.id.get, InstanceState.Running)
@@ -542,7 +542,7 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
 
       implicit val timeout: Timeout = configuration.dockerOperationTimeout
 
-      (dockerActor ? stop(instance.dockerId.get)).map {
+      (dockerActor ? StopMessage(instance.dockerId.get)).map {
         _ =>
           log.info(s"Docker Instance $id stopped.")
           instanceDao.setStateFor(instance.id.get, InstanceState.Stopped)
@@ -587,7 +587,7 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
       if (instance.instanceState == InstanceState.Stopped) {
         implicit val timeout: Timeout = configuration.dockerOperationTimeout
 
-        (dockerActor ? start(instance.dockerId.get)).map {
+        (dockerActor ? StartMessage(instance.dockerId.get)).map {
           _ => log.info(s"Instance $id started.")
         }.recover {
           case ex: Exception =>
@@ -626,7 +626,7 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
       } else if (instance.instanceState != InstanceState.Running) {
         implicit val timeout: Timeout = configuration.dockerOperationTimeout
 
-        (dockerActor ? delete(instance.dockerId.get)).map {
+        (dockerActor ? DeleteMessage(instance.dockerId.get)).map {
           _ => log.info(s"Container for instance $id deleted.")
         }.recover {
           case ex: Exception =>
@@ -718,7 +718,7 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
     } else {
       val instance = instanceDao.getInstance(id).get
 
-      val f: Future[(OperationResult.Value, Option[String])] = (dockerActor ? logs(instance.dockerId.get, stdErrSelected, stream = false)) (configuration.dockerOperationTimeout).map {
+      val f: Future[(OperationResult.Value, Option[String])] = (dockerActor ? LogsMessage(instance.dockerId.get, stdErrSelected, stream = false)) (configuration.dockerOperationTimeout).map {
         logVal: Any =>
           val logResult = logVal.asInstanceOf[Try[String]]
           logResult match {
@@ -746,7 +746,7 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
     } else {
       val instance = instanceDao.getInstance(id).get
 
-      val f: Future[(OperationResult.Value, Option[Publisher[Message]])] = (dockerActor ? logs(instance.dockerId.get, stdErrSelected, stream = true)) (configuration.dockerOperationTimeout).map {
+      val f: Future[(OperationResult.Value, Option[Publisher[Message]])] = (dockerActor ? LogsMessage(instance.dockerId.get, stdErrSelected, stream = true)) (configuration.dockerOperationTimeout).map {
         publisherVal: Any =>
           val publisherResult = publisherVal.asInstanceOf[Try[Publisher[Message]]]
           publisherResult match {
@@ -947,7 +947,7 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
       log.info(s"Handling /command for instance with id $id...")
       implicit val timeout: Timeout = configuration.dockerOperationTimeout
 
-      (dockerActor ? runCommand(instance.dockerId.get, command, attachStdin, attachStdout, attachStderr, detachKeys, privileged, tty, user)).map {
+      (dockerActor ? RunCommandMessage(instance.dockerId.get, command, attachStdin, attachStdout, attachStderr, detachKeys, privileged, tty, user)).map {
         _ => log.info(s"Command '$command' ran successfully in container with id $id.")
       }.recover {
         case ex: Exception =>

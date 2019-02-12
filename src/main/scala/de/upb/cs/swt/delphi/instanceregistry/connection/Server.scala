@@ -1127,7 +1127,7 @@ class Server(handler: RequestHandler) extends HttpApp
           case _ => log.info("Ignored non-text message.")
         }
         .via(
-          Flow.fromSinkAndSource(Sink.foreach( _ => log.debug(_)), Source.fromPublisher(handler.eventPublisher)
+          Flow.fromSinkAndSource(Sink.foreach(x => log.debug(x.toString)), Source.fromPublisher(handler.eventPublisher)
             .map(event => event.toJson(eventFormat).toString))
         )
         .map { msg: String => TextMessage.Strict(msg + "\n") }
@@ -1149,11 +1149,8 @@ class Server(handler: RequestHandler) extends HttpApp
         log.info(s"Requested with Delphi-Authorization token $token")
         if(handler.authProvider.isValidDelphiToken(token)){
           log.info(s"valid delphi authorization token")
-          authenticateBasic(realm = "secure", handler.authProvider.authenticateBasicJWT) {
-            case userName =>
+          authenticateBasic(realm = "secure", handler.authProvider.authenticateBasicJWT) { userName =>
               complete(handler.authProvider.generateJwt(userName))
-            case _ =>
-              complete{HttpResponse(StatusCodes.InternalServerError, entity = s"Internal server error, unknown operation result")}
           }
         } else {
           complete{HttpResponse(StatusCodes.Unauthorized, entity = s"Not valid Delphi-authorization")}
