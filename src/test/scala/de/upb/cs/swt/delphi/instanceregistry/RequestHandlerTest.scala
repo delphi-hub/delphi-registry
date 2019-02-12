@@ -143,8 +143,8 @@ class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach 
     assert(handler.handleReportStart(-1) == handler.OperationResult.IdUnknown)
     assert(handler.handleReportStart(id) == handler.OperationResult.NoDockerContainer)
 
-    assert(handler.handleReportFailure(-1L, None) == handler.OperationResult.IdUnknown)
-    assert(handler.handleReportFailure(id, None) == handler.OperationResult.NoDockerContainer)
+    assert(handler.handleReportFailure(-1L) == handler.OperationResult.IdUnknown)
+    assert(handler.handleReportFailure(id) == handler.OperationResult.NoDockerContainer)
 
     assert(handler.handleReportStop(-1) == handler.OperationResult.IdUnknown)
     assert(handler.handleReportStop(id) == handler.OperationResult.NoDockerContainer)
@@ -189,9 +189,9 @@ class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach 
 
     val (id1, id2) = (register1.get, register2.get)
 
-    assert(handler.handleReportFailure(id1, None) == handler.OperationResult.Ok)
+    assert(handler.handleReportFailure(id1) == handler.OperationResult.Ok)
     assert(handler.getInstance(id1).get.instanceState == InstanceState.Failed)
-    assert(handler.handleReportFailure(id2, None) == handler.OperationResult.Ok)
+    assert(handler.handleReportFailure(id2) == handler.OperationResult.Ok)
     assert(handler.getInstance(id2).get.instanceState == InstanceState.Failed)
   }
 

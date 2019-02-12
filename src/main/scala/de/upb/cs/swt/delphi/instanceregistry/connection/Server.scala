@@ -588,16 +588,13 @@ class Server(handler: RequestHandler) extends HttpApp
     *
     * @return Server route that either maps to 200 OK or the respective error codes
     */
-  def reportFailure(id: Long): server.Route = parameters('ErrorLog.as[String].?) { errorLog =>
+  def reportFailure(id: Long): server.Route =  {
     authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.Component)) { token =>
       post {
-        if (errorLog.isEmpty) {
-          log.debug(s"POST /instances/$id/reportFailure has been called")
-        } else {
-          log.debug(s"POST /instances/$id/reportFailure&ErrorLog=${errorLog.get} has been called")
-        }
 
-        handler.handleReportFailure(id, errorLog) match {
+        log.debug(s"POST /instances/$id/reportFailure has been called")
+
+        handler.handleReportFailure(id) match {
           case handler.OperationResult.IdUnknown =>
             log.warning(s"Cannot report failure for id $id, that id was not found.")
             complete {

@@ -405,13 +405,13 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
     * @param id Id of the instance that reported failure
     * @return OperationResult indicating either success or the reason for failure (which precondition was not met)
     */
-  def handleReportFailure(id: Long, errorLog: Option[String]): OperationResult.Value = {
+  def handleReportFailure(id: Long): OperationResult.Value = {
     if (!instanceDao.hasInstance(id)) {
       OperationResult.IdUnknown
     } else if (!isInstanceDockerContainer(id)) {
       OperationResult.NoDockerContainer
     } else {
-      val instance = instanceDao.getInstance(id).get //TODO:Handle errorLog
+      val instance = instanceDao.getInstance(id).get
       instance.instanceState match {
         case InstanceState.Failed =>
           log.warning(s"Instance with id $id reported failure but state already was 'Failed'.")
