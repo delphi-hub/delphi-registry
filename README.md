@@ -133,6 +133,8 @@ There are two ways of running the registry application. You can either run the a
 ### Run the registry directly
 If you want to execute the registry directly on your local machine, simply go to the root folder of the repository and execute ```sbt run```. The application will stream all logging output to the terminal. You can terminate any time by pressing *RETURN*.
 ### Run the registry in Docker
+Before creating an Docker image from the registry, make sure that all the network settings in the configuration file are set correctly in regards to the Docker networking infrastructure. Especially the settings ```dockerUri``` and ```uriInLocalNetwork``` are important. On Linux Docker Containers can connect to their host using the default Docker network gateway (```172.17.0.2```), on OSX the host has a defined DNS name (```host.docker.internal```).
+
 For Windows users, to build a docker image containing the registry, go to the root folder of the repository and execute ```sbt docker:publishLocal```. This will build the application, create a docker image named ```delphi-registry:1.0.0-SNAPSHOT```, and register the image at your local docker registry.<br />
 For Linux users, the installation script mentioned in **Requirements** section will create docker image for registry named ```delphi-registry:1.0.0-SNAPSHOT```, and registers the image at your local docker registry.
 
