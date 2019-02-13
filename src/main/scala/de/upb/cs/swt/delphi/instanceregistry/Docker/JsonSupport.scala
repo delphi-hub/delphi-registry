@@ -22,7 +22,7 @@ import spray.json.{DefaultJsonProtocol, JsString, JsValue, JsonFormat}
 
 trait JsonSupport extends SprayJsonSupport with DefaultJsonProtocol {
 
-  implicit val ContainerStatusFormat: JsonFormat[CommandType] = new JsonFormat[ContainerStatusEnums.CommandType] {
+  implicit val containerStatusFormat: JsonFormat[CommandType] = new JsonFormat[ContainerStatusEnums.CommandType] {
 
     def write(compType: ContainerStatusEnums.CommandType) = JsString(compType.toString)
 
@@ -41,7 +41,7 @@ trait JsonSupport extends SprayJsonSupport with DefaultJsonProtocol {
     }
   }
 
-  implicit val ContainerResponseFormat: JsonFormat[ContainerResponseEnums.CommandType] = new JsonFormat[ContainerResponseEnums.CommandType] {
+  implicit val containerResponseFormat: JsonFormat[ContainerResponseEnums.CommandType] = new JsonFormat[ContainerResponseEnums.CommandType] {
 
     def write(compType: ContainerResponseEnums.CommandType) = JsString(compType.toString)
 
@@ -55,7 +55,7 @@ trait JsonSupport extends SprayJsonSupport with DefaultJsonProtocol {
     }
   }
 
-  implicit val ContainerConfigFormat: JsonFormat[ContainerConfigEnums.CommandType] = new JsonFormat[ContainerConfigEnums.CommandType] {
+  implicit val containerConfigFormat: JsonFormat[ContainerConfigEnums.CommandType] = new JsonFormat[ContainerConfigEnums.CommandType] {
 
     def write(compType: ContainerConfigEnums.CommandType) = JsString(compType.toString)
 
@@ -71,7 +71,7 @@ trait JsonSupport extends SprayJsonSupport with DefaultJsonProtocol {
     }
   }
 
-  implicit val NetworksFormat: JsonFormat[NetworksEnums.CommandType] = new JsonFormat[NetworksEnums.CommandType] {
+  implicit val networksFormat: JsonFormat[NetworksEnums.CommandType] = new JsonFormat[NetworksEnums.CommandType] {
 
     def write(compType: NetworksEnums.CommandType) = JsString(compType.toString)
 
@@ -83,18 +83,18 @@ trait JsonSupport extends SprayJsonSupport with DefaultJsonProtocol {
       case y => throw new RuntimeException(s"Unexpected type $y while deserializing")
     }
   }
-  implicit val StatusFormat: JsonFormat[ContainerStatus] = jsonFormat6(ContainerStatus)
-  implicit val ExposedPortConfigFormat :JsonFormat[EmptyExposedPortConfig] = jsonFormat0(EmptyExposedPortConfig)
-  implicit val EndpointsConfigFormat :JsonFormat[EmptyEndpointConfig] = jsonFormat0(EmptyEndpointConfig)
-  implicit val NetworkConfigFormat :JsonFormat[NetworkConfig] = jsonFormat1(NetworkConfig)
-  implicit val NetworkFormat :JsonFormat[Networks] = jsonFormat1(Networks)
+  implicit val statusFormat: JsonFormat[ContainerStatus] = jsonFormat6(ContainerStatus)
+  implicit val exposedPortConfigFormat :JsonFormat[EmptyExposedPortConfig] = jsonFormat0(EmptyExposedPortConfig)
+  implicit val endpointsConfigFormat :JsonFormat[EmptyEndpointConfig] = jsonFormat0(EmptyEndpointConfig)
+  implicit val networkConfigFormat :JsonFormat[NetworkConfig] = jsonFormat1(NetworkConfig)
+  implicit val networkFormat :JsonFormat[Networks] = jsonFormat1(Networks)
 
   //For some reason you cannot type below variables explicitly, it will result in syntax errors when marshalling..
 
   //noinspection TypeAnnotation
-  implicit val ResponseFormat = jsonFormat2(CreateContainerResponse)
+  implicit val responseFormat = jsonFormat2(CreateContainerResponse)
   //noinspection TypeAnnotation
-  implicit val ConfigFormat  = jsonFormat7(ContainerConfig)
+  implicit val configFormat  = jsonFormat7(ContainerConfig)
 }
 
 

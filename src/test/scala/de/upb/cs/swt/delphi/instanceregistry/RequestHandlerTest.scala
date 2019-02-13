@@ -183,7 +183,7 @@ class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach 
   it must "change the state on reportFailure" in {
     val register1 = dao.addInstance(buildInstance(id = 42, dockerId  = Some("RandomDockerId"), state = InstanceState.Stopped))
     val register2 = dao.addInstance(buildInstance(id = 43, dockerId = Some("RandomDockerId2"), state = InstanceState.Running))
-    
+
     assert(register1.isSuccess)
     assert(register2.isSuccess)
 
@@ -239,15 +239,6 @@ class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach 
   it must "validate preconditions on handleStop" in {
     assert(handler.handleStop(Int.MaxValue) == handler.OperationResult.IdUnknown)
   }
-
-  //Below test is not applicable anymore, state change is managed in futures!
-  /*it must "change the state of the instance on handleStop" in {
-    val register1 = dao.addInstance(Instance(Some(1), "http://localhost", 8083, "MyCrawler", ComponentType.Crawler, Some("RandomDockerId"), InstanceState.Running))
-    assert(register1.isSuccess)
-
-    assert(handler.handleStop(1) == handler.OperationResult.Ok)
-    assert(handler.getInstance(1).get.instanceState == InstanceState.Stopped)
-  }*/
 
   it must "validate preconditions on handleStart" in {
     val register1 = dao.addInstance(buildInstance(1))
