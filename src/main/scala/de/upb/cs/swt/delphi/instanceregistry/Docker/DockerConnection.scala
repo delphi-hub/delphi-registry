@@ -5,14 +5,14 @@ import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.Uri.{Path, Query}
 import akka.http.scaladsl.model.{HttpRequest, HttpResponse, Uri}
 import akka.stream.Materializer
-import de.upb.cs.swt.delphi.instanceregistry.Configuration
+import de.upb.cs.swt.delphi.instanceregistry.{Configuration, Registry}
 
 import scala.concurrent.Future
 
 object DockerConnection {
 
 
-  def fromEnvironment(configuration: Configuration) (implicit system: ActorSystem, mat: Materializer): DockerConnection = {
+  def fromEnvironment(configuration: Configuration): DockerConnection = {
     DockerHttpConnection(configuration.dockerUri)
   }
 }
@@ -33,10 +33,11 @@ trait DockerConnection {
 
 }
 
-case class DockerHttpConnection(
-                                 baseUri: Uri,
-                               )(implicit val system: ActorSystem, val materializer: Materializer)
+case class DockerHttpConnection(baseUri: Uri)
   extends DockerConnection {
+  override def system: ActorSystem = Registry.system
+  override implicit def materializer: Materializer = Registry.materializer
+
   override def sendRequest(request: HttpRequest): Future[HttpResponse] = {
     Http(system).singleRequest(request)
   }
