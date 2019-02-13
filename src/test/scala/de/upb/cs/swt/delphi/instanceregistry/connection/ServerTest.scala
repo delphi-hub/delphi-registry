@@ -63,7 +63,7 @@ class ServerTest
 
 
   /**
-    * Before all tests: Initialize handler and wait for server binding to be ready.
+    * Before all tests: Initialize handler and wait for server binding to be ready
     */
   override def beforeAll(): Unit = {
     requestHandler.initialize()
