@@ -1,3 +1,18 @@
+// Copyright (C) 2018 The Delphi Team.
+// See the LICENCE file distributed with this work for additional
+// information regarding copyright ownership.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 package de.upb.cs.swt.delphi.instanceregistry.Docker
 
 import akka.actor.{Actor, ActorLogging, ActorSystem, Props, Status}
@@ -22,9 +37,10 @@ class DockerActor(connection: DockerConnection) extends Actor with ActorLogging 
 
   log.info(s"DockerActor started")
 
+  // scalastyle:off method.length cyclomatic.complexity
   def receive: PartialFunction[Any, Unit] = {
 
-    case start(containerId) =>
+    case StartMessage(containerId) =>
       log.debug(s"Docker Container started")
       Try(Await.result(container.start(containerId), Duration.Inf)) match {
         case Success(_) =>
@@ -33,7 +49,7 @@ class DockerActor(connection: DockerConnection) extends Actor with ActorLogging 
           sender ! Status.Failure(ex)
       }
 
-    case create(componentType, instanceId, containerName) =>
+    case DeployMessage(componentType, instanceId, containerName) =>
 
       val instancePort = componentType match {
         case ComponentType.Crawler => Registry.configuration.defaultCrawlerPort
@@ -71,7 +87,7 @@ class DockerActor(connection: DockerConnection) extends Actor with ActorLogging 
           sender ! Success(containerResult.Id, containerInfo.IPAddress, instancePort, traefikHostUrl)
       }
 
-    case stop(containerId) =>
+    case StopMessage(containerId) =>
       log.debug(s"Stopping docker container..")
 
       Try(Await.result(container.stop(containerId), Duration.Inf)) match {
@@ -82,7 +98,7 @@ class DockerActor(connection: DockerConnection) extends Actor with ActorLogging 
       }
 
 
-    case delete(containerId) =>
+    case DeleteMessage(containerId) =>
       log.debug(s"Deleting docker container..")
       Try(Await.result(container.remove(containerId, force = false, removeVolumes = false), Duration.Inf)) match {
         case Success(_) =>
@@ -91,7 +107,7 @@ class DockerActor(connection: DockerConnection) extends Actor with ActorLogging 
           sender ! Status.Failure(ex)
       }
 
-    case pause(containerId) =>
+    case PauseMessage(containerId) =>
       log.debug(s"Pausing docker container..")
       Try(Await.result(container.pause(containerId), Duration.Inf)) match {
         case Success(_) =>
@@ -100,7 +116,7 @@ class DockerActor(connection: DockerConnection) extends Actor with ActorLogging 
           sender ! Status.Failure(ex)
       }
 
-    case unpause(containerId) =>
+    case UnpauseMessage(containerId) =>
       log.debug(s"Unpausing docker container..")
       Try(Await.result(container.unpause(containerId), Duration.Inf)) match {
         case Success(_) =>
@@ -109,7 +125,7 @@ class DockerActor(connection: DockerConnection) extends Actor with ActorLogging 
           sender ! Status.Failure(ex)
       }
 
-    case restart(containerId) =>
+    case RestartMessage(containerId) =>
       log.debug(s"Restarting docker container..")
       Try(Await.result(container.restart(containerId), Duration.Inf)) match {
         case Success(_) =>
@@ -118,9 +134,10 @@ class DockerActor(connection: DockerConnection) extends Actor with ActorLogging 
           sender ! Status.Failure(ex)
       }
 
-    case runCommand(containerId, command, attachStdin, attachStdout, attachStderr, detachKeys, privileged, tty, user) =>
+    case RunCommandMessage(containerId, command, privileged, user) =>
       log.debug(s"running command in docker container..")
-      val createCommand = Try(Await.result(container.commandCreate(containerId, command, attachStdin, attachStdout, attachStderr, detachKeys, privileged, tty, user), Duration.Inf))
+      val createCommand = Try(Await.result(container.commandCreate(containerId, command, privileged, user), Duration.Inf))
+
       createCommand match {
         case Failure(ex) => sender ! Failure(ex)
         case Success(commandResult) =>
@@ -133,7 +150,7 @@ class DockerActor(connection: DockerConnection) extends Actor with ActorLogging 
           }
       }
 
-    case logs(containerId: String, stdErrSelected: Boolean, stream: Boolean) =>
+    case LogsMessage(containerId: String, stdErrSelected: Boolean, stream: Boolean) =>
 
       log.info(s"Fetching Container logs: stdErrSelected -> $stdErrSelected, stream -> $stream")
 
@@ -153,38 +170,29 @@ class DockerActor(connection: DockerConnection) extends Actor with ActorLogging 
 
     case x => log.warning("Received unknown message: [{}] ", x)
   }
+  //scalastyle:on method.length cyclomatic.complexity
 }
 
 object DockerActor {
 
-  def props(connection: DockerConnection) = Props(new DockerActor(connection: DockerConnection))
+  def props(connection: DockerConnection): Props = Props(new DockerActor(connection: DockerConnection))
 
-  case class start(containerId: String)
+  case class StartMessage(containerId: String)
 
-  case class create(componentType: ComponentType, instanceId: Long, containerName: Option[ContainerName] = None)
+  case class DeployMessage(componentType: ComponentType, instanceId: Long, containerName: Option[ContainerName] = None)
 
-  case class stop(containerId: String)
+  case class StopMessage(containerId: String)
 
-  case class delete(containerId: String)
+  case class DeleteMessage(containerId: String)
 
-  case class pause(containerId: String)
+  case class PauseMessage(containerId: String)
 
-  case class unpause(containerId: String)
+  case class UnpauseMessage(containerId: String)
 
-  case class restart(containerId: String)
+  case class RestartMessage(containerId: String)
 
-  case class logs(containerId: String, stdErrSelected: Boolean, stream: Boolean)
+  case class LogsMessage(containerId: String, stdErrSelected: Boolean, stream: Boolean)
 
-  case class runCommand(
-                         containerId: String,
-                         command: String,
-                         attachStdin: Option[Boolean],
-                         attachStdout: Option[Boolean],
-                         attachStderr: Option[Boolean],
-                         detachKeys: Option[String],
-                         privileged: Option[Boolean],
-                         tty: Option[Boolean],
-                         user: Option[String]
-                       )
+  case class RunCommandMessage(containerId: String, command: String, privileged: Option[Boolean], user: Option[String])
 
 }

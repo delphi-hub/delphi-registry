@@ -1,3 +1,18 @@
+// Copyright (C) 2018 The Delphi Team.
+// See the LICENCE file distributed with this work for additional
+// information regarding copyright ownership.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 package de.upb.cs.swt.delphi.instanceregistry
 
 import java.io.File
@@ -11,19 +26,18 @@ import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.InstanceEnu
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.LinkEnums.LinkState
 import org.scalatest.{BeforeAndAfterEach, FlatSpec, Matchers}
 
-import scala.concurrent.ExecutionContext
-
 class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach {
-
-  implicit val system : ActorSystem = ActorSystem("test_system")
-  implicit val materializer : ActorMaterializer = ActorMaterializer()
 
   val configuration: Configuration = new Configuration()
   val dao: InstanceDAO = new DynamicInstanceDAO(configuration)
   val authDAO: AuthDAO = new DynamicAuthDAO(configuration)
   val handler: RequestHandler = new RequestHandler(configuration, authDAO, dao, DockerConnection.fromEnvironment(configuration))
 
-  private def buildInstance(id: Long, componentType: ComponentType = ComponentType.ElasticSearch, dockerId: Option[String] = None, state: InstanceState.Value = InstanceState.Stopped, labels: List[String] = List.empty[String]): Instance = {
+  private def buildInstance(id: Long,
+                            componentType: ComponentType = ComponentType.ElasticSearch,
+                            dockerId: Option[String] = None,
+                            state: InstanceState.Value = InstanceState.Stopped,
+                            labels: List[String] = List.empty[String]): Instance = {
     Instance(Some(id), "https://localhost", 12345, "TestInstance", componentType, dockerId, state, labels, List.empty[InstanceLink], List.empty[InstanceLink])
   }
 
@@ -126,8 +140,8 @@ class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach 
     assert(handler.handleReportStart(-1) == handler.OperationResult.IdUnknown)
     assert(handler.handleReportStart(id) == handler.OperationResult.NoDockerContainer)
 
-    assert(handler.handleReportFailure(-1L, None) == handler.OperationResult.IdUnknown)
-    assert(handler.handleReportFailure(id, None) == handler.OperationResult.NoDockerContainer)
+    assert(handler.handleReportFailure(-1L) == handler.OperationResult.IdUnknown)
+    assert(handler.handleReportFailure(id) == handler.OperationResult.NoDockerContainer)
 
     assert(handler.handleReportStop(-1) == handler.OperationResult.IdUnknown)
     assert(handler.handleReportStop(id) == handler.OperationResult.NoDockerContainer)
@@ -166,15 +180,15 @@ class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach 
   it must "change the state on reportFailure" in {
     val register1 = dao.addInstance(buildInstance(id = 42, dockerId  = Some("RandomDockerId"), state = InstanceState.Stopped))
     val register2 = dao.addInstance(buildInstance(id = 43, dockerId = Some("RandomDockerId2"), state = InstanceState.Running))
-    
+
     assert(register1.isSuccess)
     assert(register2.isSuccess)
 
     val (id1, id2) = (register1.get, register2.get)
 
-    assert(handler.handleReportFailure(id1, None) == handler.OperationResult.Ok)
+    assert(handler.handleReportFailure(id1) == handler.OperationResult.Ok)
     assert(handler.getInstance(id1).get.instanceState == InstanceState.Failed)
-    assert(handler.handleReportFailure(id2, None) == handler.OperationResult.Ok)
+    assert(handler.handleReportFailure(id2) == handler.OperationResult.Ok)
     assert(handler.getInstance(id2).get.instanceState == InstanceState.Failed)
   }
 
@@ -223,15 +237,6 @@ class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach 
     assert(handler.handleStop(Int.MaxValue) == handler.OperationResult.IdUnknown)
   }
 
-  //Below test is not applicable anymore, state change is managed in futures!
-  /*it must "change the state of the instance on handleStop" in {
-    val register1 = dao.addInstance(Instance(Some(1), "http://localhost", 8083, "MyCrawler", ComponentType.Crawler, Some("RandomDockerId"), InstanceState.Running))
-    assert(register1.isSuccess)
-
-    assert(handler.handleStop(1) == handler.OperationResult.Ok)
-    assert(handler.getInstance(1).get.instanceState == InstanceState.Stopped)
-  }*/
-
   it must "validate preconditions on handleStart" in {
     val register1 = dao.addInstance(buildInstance(1))
     val register2 = dao.addInstance(buildInstance(id = 2, dockerId = Some("RandomDockerId"), state = InstanceState.Paused))
@@ -271,9 +276,9 @@ class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach 
   }
 
   it must "not add two default ES instances on initializing" in {
-    assert(handler.getNumberOfInstances(ComponentType.ElasticSearch) == 1)
+    assert(handler.getNumberOfInstances(Some(ComponentType.ElasticSearch)) == 1)
     handler.initialize()
-    assert(handler.getNumberOfInstances(ComponentType.ElasticSearch) == 1)
+    assert(handler.getNumberOfInstances(Some(ComponentType.ElasticSearch)) == 1)
   }
 
   it must "validate preconditions before adding a label" in {
@@ -365,7 +370,16 @@ class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach 
 
   it must "match to instance with most consecutive positive matching results in fallback matching" in {
     val esInstance = handler.handleRegister(buildInstance(2))
-    val crawlerId = handler.handleRegister(Instance(Some(2), "foo", 42, "bar", ComponentType.Crawler, None, InstanceState.Running, List.empty[String], List.empty[InstanceLink], List.empty[InstanceLink]))
+    val crawlerId = handler.handleRegister(Instance(Some(2),
+      "foo",
+      42,
+      "bar",
+      ComponentType.Crawler,
+      None,
+      InstanceState.Running,
+      List.empty[String],
+      List.empty[InstanceLink],
+      List.empty[InstanceLink]))
 
     assert(esInstance.isSuccess)
     assert(esInstance.get == 1)

@@ -74,8 +74,6 @@ class ServerTest
     */
   override def afterAll(): Unit = {
     requestHandler.shutdown()
-    Await.ready(Registry.system.terminate(), Duration.Inf)
-    Await.ready(system.terminate(), Duration.Inf)
   }
 
   "The Server" should {
@@ -97,13 +95,15 @@ class ServerTest
       }
 
       //Wrong JSON syntax
-      Post("/instances/register", HttpEntity(ContentTypes.`application/json`, invalidJsonInstance.stripMargin)) ~> addAuthorization("Component") ~> server.routes ~> check {
+      Post("/instances/register", HttpEntity(ContentTypes.`application/json`, invalidJsonInstance.stripMargin)) ~>
+        addAuthorization("Component") ~> server.routes ~> check {
         assert(status === StatusCodes.BAD_REQUEST)
         responseAs[String].toLowerCase should include("failed to parse json")
       }
 
       //Missing required JSON members
-      Post("/instances/register", HttpEntity(ContentTypes.`application/json`, validJsonInstanceMissingRequiredMember.stripMargin)) ~> addAuthorization("Component") ~> server.routes ~> check {
+      Post("/instances/register", HttpEntity(ContentTypes.`application/json`, validJsonInstanceMissingRequiredMember.stripMargin)) ~>
+        addAuthorization("Component") ~> server.routes ~> check {
         assert(status === StatusCodes.BAD_REQUEST)
         responseAs[String].toLowerCase should include("could not deserialize parameter instance")
       }
@@ -404,7 +404,8 @@ class ServerTest
       val id2 = assertValidRegister(ComponentType.WebApi)
 
 
-      Post(s"/instances/$id1/matchingResult", HttpEntity(ContentTypes.`application/json`, s"""{ "MatchingSuccessful": true, "SenderId" : $id2}""")) ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
+      Post(s"/instances/$id1/matchingResult", HttpEntity(ContentTypes.`application/json`, s"""{ "MatchingSuccessful": true, "SenderId" : $id2}""")) ~>
+        addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.OK)
         responseAs[String] shouldEqual "Matching result true processed."
       }
@@ -418,24 +419,28 @@ class ServerTest
     "not process matching result if method or parameters are invalid" in {
       //Wrong method
 
-      Get(s"/instances/0/matchingResult", HttpEntity(ContentTypes.`application/json`, s"""{ "MatchingSuccessful": true, "SenderId" : 0}""")) ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
+      Get(s"/instances/0/matchingResult", HttpEntity(ContentTypes.`application/json`, s"""{ "MatchingSuccessful": true, "SenderId" : 0}""")) ~>
+        addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.METHOD_NOT_ALLOWED)
         responseAs[String] shouldEqual "HTTP method not allowed, supported methods: POST"
       }
 
       //Invalid IDs - expect 404
-      Post(s"/instances/1/matchingResult", HttpEntity(ContentTypes.`application/json`, s"""{ "MatchingSuccessful": false, "SenderId" : 2}""")) ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
+      Post(s"/instances/1/matchingResult", HttpEntity(ContentTypes.`application/json`, s"""{ "MatchingSuccessful": false, "SenderId" : 2}""")) ~>
+        addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.NOT_FOUND)
       }
 
       //Wrong user type
-      Post(s"/instances/1/matchingResult", HttpEntity(ContentTypes.`application/json`, s"""{ "MatchingSuccessful": false, "SenderId" : 2}""")) ~> addAuthorization("User") ~> Route.seal(server.routes) ~> check {
+      Post(s"/instances/1/matchingResult", HttpEntity(ContentTypes.`application/json`, s"""{ "MatchingSuccessful": false, "SenderId" : 2}""")) ~>
+        addAuthorization("User") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.UNAUTHORIZED)
         responseAs[String] shouldEqual "The supplied authentication is invalid"
       }
 
       //No authorization
-      Post(s"/instances/1/matchingResult", HttpEntity(ContentTypes.`application/json`, s"""{ "MatchingSuccessful": false, "SenderId" : 2}""")) ~> Route.seal(server.routes) ~> check {
+      Post(s"/instances/1/matchingResult", HttpEntity(ContentTypes.`application/json`, s"""{ "MatchingSuccessful": false, "SenderId" : 2}""")) ~>
+        Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.UNAUTHORIZED)
         responseAs[String].toLowerCase should include("not supplied with the request")
       }
@@ -611,7 +616,8 @@ class ServerTest
 
     //Valid POST /instances/{id}/label
     "add a generic label to an instance is label and id are valid" in {
-      Post("/instances/0/label", HttpEntity(ContentTypes.`application/json`, """{ "Label": "Private"}""")) ~> addAuthorization("Admin") ~> server.routes ~> check {
+      Post("/instances/0/label", HttpEntity(ContentTypes.`application/json`, """{ "Label": "Private"}""")) ~> addAuthorization("Admin") ~>
+        server.routes ~> check {
         assert(status === StatusCodes.OK)
         responseAs[String] shouldEqual "Successfully added label"
       }
@@ -619,25 +625,29 @@ class ServerTest
     //Invalid POST /instances/{id}/label
     "fail to add label if id is invalid or label too long" in {
       //Unknown id - expect 404
-      Post("/instances/45/label", HttpEntity(ContentTypes.`application/json`, """{ "Label": "Private"}""")) ~> addAuthorization("Admin") ~> server.routes ~> check {
+      Post("/instances/45/label", HttpEntity(ContentTypes.`application/json`, """{ "Label": "Private"}""")) ~> addAuthorization("Admin") ~>
+        server.routes ~> check {
         assert(status === StatusCodes.NOT_FOUND)
         responseAs[String] shouldEqual "Cannot add label, id 45 not found."
       }
       //Label out of bounds - expect 400
       val tooLongLabel = "VeryVeryExtraLongLabelThatDoesNotWorkWhileAddingLabel"
       val jsonStr = tooLongLabel.toJson
-      Post("/instances/0/label", HttpEntity(ContentTypes.`application/json`, s"""{ "Label": $jsonStr}""")) ~> addAuthorization("Admin") ~> server.routes ~> check {
+      Post("/instances/0/label", HttpEntity(ContentTypes.`application/json`, s"""{ "Label": $jsonStr}""")) ~> addAuthorization("Admin") ~>
+        server.routes ~> check {
         assert(status === StatusCodes.BAD_REQUEST)
         responseAs[String].toLowerCase should include("exceeds character limit")
       }
       //Wrong user type
-      Post("/instances/0/label", HttpEntity(ContentTypes.`application/json`, """{ "Label": "Private"}""")) ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
+      Post("/instances/0/label", HttpEntity(ContentTypes.`application/json`, """{ "Label": "Private"}""")) ~> addAuthorization("Component") ~>
+        Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.UNAUTHORIZED)
         responseAs[String] shouldEqual "The supplied authentication is invalid"
       }
 
       //Wrong user type
-      Post("/instances/0/label", HttpEntity(ContentTypes.`application/json`, """{ "Label": "Private"}""")) ~> addAuthorization("User") ~> Route.seal(server.routes) ~> check {
+      Post("/instances/0/label", HttpEntity(ContentTypes.`application/json`, """{ "Label": "Private"}""")) ~> addAuthorization("User") ~>
+        Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.UNAUTHORIZED)
         responseAs[String] shouldEqual "The supplied authentication is invalid"
       }
@@ -652,13 +662,15 @@ class ServerTest
     /** Minimal tests for docker operations **/
 
     "fail to deploy if component type is invalid" in {
-      Post("/instances/deploy", HttpEntity(ContentTypes.`application/json`, """{"ComponentType": "Car"}""")) ~> addAuthorization("Admin") ~> server.routes ~> check {
+      Post("/instances/deploy", HttpEntity(ContentTypes.`application/json`, """{"ComponentType": "Car"}""")) ~> addAuthorization("Admin") ~>
+        server.routes ~> check {
         status shouldEqual StatusCodes.BAD_REQUEST
         responseAs[String].toLowerCase should include("could not deserialize")
       }
 
       //Wrong user type
-      Post("/instances/deploy", HttpEntity(ContentTypes.`application/json`, """{"ComponentType": "Crawler"}""")) ~> addAuthorization("User") ~> server.routes ~> check {
+      Post("/instances/deploy", HttpEntity(ContentTypes.`application/json`, """{"ComponentType": "Crawler"}""")) ~> addAuthorization("User") ~>
+        server.routes ~> check {
         rejection.isInstanceOf[AuthenticationFailedRejection] shouldBe true
       }
 
@@ -702,7 +714,8 @@ class ServerTest
         responseAs[String].toLowerCase should include("not found")
       }
 
-      Post("/instances/42/assignInstance", HttpEntity(ContentTypes.`application/json`, """{ "AssignedInstanceId": 43}""")) ~> addAuthorization("Admin") ~> server.routes ~> check {
+      Post("/instances/42/assignInstance", HttpEntity(ContentTypes.`application/json`, """{ "AssignedInstanceId": 43}""")) ~>
+        addAuthorization("Admin") ~> server.routes ~> check {
         status shouldEqual StatusCodes.NOT_FOUND
         responseAs[String].toLowerCase should include("not found")
       }
@@ -765,7 +778,7 @@ class ServerTest
 
     "Requests" should {
       "throttle when limit reached" in {
-        for (i <- 1 to configuration.maxIndividualIpReq) {
+        for (_ <- 1 to configuration.maxIndividualIpReq) {
           Get(s"/instances/0/linksTo") ~> server.routes ~> check {}
         }
 
@@ -812,8 +825,8 @@ class ServerTest
       .issuedNow
       .expiresIn(5)
       .startsNow
-      .+("user_id", "Server Unit Test")
-      .+("user_type", userType)
+      . + ("user_id", "Server Unit Test")
+      . + ("user_type", userType)
 
     Jwt.encode(claim, configuration.jwtSecretKey, JwtAlgorithm.HS256)
   }
