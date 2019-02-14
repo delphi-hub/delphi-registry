@@ -1,3 +1,18 @@
+// Copyright (C) 2018 The Delphi Team.
+// See the LICENCE file distributed with this work for additional
+// information regarding copyright ownership.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 package de.upb.cs.swt.delphi.instanceregistry.daos
 
 import java.nio.charset.StandardCharsets
@@ -5,6 +20,7 @@ import java.security.MessageDigest
 
 import de.upb.cs.swt.delphi.instanceregistry.Configuration
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.DelphiUser
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.DelphiUserEnums.DelphiUserType
 import org.scalatest.{BeforeAndAfterEach, FlatSpec, Matchers}
 
 class DynamicAuthDAOTest extends FlatSpec with Matchers with BeforeAndAfterEach{
@@ -12,10 +28,23 @@ class DynamicAuthDAOTest extends FlatSpec with Matchers with BeforeAndAfterEach{
   val dao : DynamicAuthDAO = new DynamicAuthDAO(new Configuration())
 
   "The Auth Dao" must "be able to add a user with different username" in {
-    val username = dao.addUser(buildUser(id = 1, userName = "test1"))
+    val username = dao.addUser(buildUser(id = 0, userName = "test1"))
     assert(username.isSuccess)
     assert(dao.hasUserWithUsername("test1"))
-    assert(dao.addUser(buildUser(id = 2, userName = "test1")).isFailure)
+    assert(dao.addUser(buildUser(id = 1, userName = "test1")).isFailure)
+  }
+
+  it must "return user with correct id" in {
+    val user = dao.getUserWithId(0)
+    assert(user.isDefined)
+    assert(user.get.id.isDefined)
+    assert(user.get.id.get == 0)
+  }
+
+  it must "return all user" in {
+    val idOption = dao.addUser(buildUser(id = 1, userName = "test2"))
+    assert(idOption.isSuccess)
+    assert(dao.getAlllUser().size == 2)
   }
 
   it must "return user with correct username" in {
@@ -27,13 +56,15 @@ class DynamicAuthDAOTest extends FlatSpec with Matchers with BeforeAndAfterEach{
   }
 
   it must "be able to delete user with particular username" in {
-    assert(dao.hasUserWithUsername("test1"))
-    assert(dao.removeUser("test1").isSuccess)
+    dao.addUser(DelphiUser(Some(2), "test2", "test2", DelphiUserType.User))
+    assert(dao.hasUserWithUsername("test2"))
+    val user = dao.getUserWithUsername("test2")
+    assert(dao.removeUser(user.get.id.get).isSuccess)
   }
 
   private def buildUser(id : Int, userName : String = "") : DelphiUser = {
-    val userType = if(id == 1) "Admin" else "User"
-    val name = if(userName == "") "user"+id else userName
+    val userType = if(id === 1) DelphiUserType.Admin else DelphiUserType.User
+    val name = if(userName == "") "user" + id else userName
     DelphiUser(Some(id), name , hashString("123456"), userType)
   }
 
