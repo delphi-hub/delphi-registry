@@ -28,9 +28,6 @@ import org.scalatest.{BeforeAndAfterEach, FlatSpec, Matchers}
 
 class RequestHandlerTest extends FlatSpec with Matchers with BeforeAndAfterEach {
 
-  implicit val system : ActorSystem = ActorSystem("test_system")
-  implicit val materializer : ActorMaterializer = ActorMaterializer()
-
   val configuration: Configuration = new Configuration()
   val dao: InstanceDAO = new DynamicInstanceDAO(configuration)
   val authDAO: AuthDAO = new DynamicAuthDAO(configuration)

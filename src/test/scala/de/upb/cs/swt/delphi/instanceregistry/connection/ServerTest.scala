@@ -74,8 +74,6 @@ class ServerTest
     */
   override def afterAll(): Unit = {
     requestHandler.shutdown()
-    Await.ready(Registry.system.terminate(), Duration.Inf)
-    Await.ready(system.terminate(), Duration.Inf)
   }
 
   "The Server" should {
