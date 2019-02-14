@@ -150,6 +150,9 @@ class Server(handler: RequestHandler) extends HttpApp
         }
     } ~
     pathPrefix("users") {
+      pathEnd {
+        allUsers()
+      } ~
       path("add") {
         entity(as[String]) {
           jsonString => addUser(jsonString)
@@ -157,6 +160,14 @@ class Server(handler: RequestHandler) extends HttpApp
       } ~
       path("authenticate") {
         authenticate()
+      } ~
+      pathPrefix(LongNumber) { Id =>
+        pathEnd {
+          retrieveUser(Id)
+        } ~
+        path("remove") {
+          removeUser(Id)
+        }
       }
     } ~
     path("events") {
@@ -1143,6 +1154,10 @@ class Server(handler: RequestHandler) extends HttpApp
     }
   }
 
+  /**
+    * Authenticate a user with Basic Authorization header and Delphi-Authorization header.
+    * @return
+    */
   def authenticate() : server.Route = {
     post
     {
@@ -1161,28 +1176,111 @@ class Server(handler: RequestHandler) extends HttpApp
     }
   }
 
+  /**
+    * Registers a new user at the registry.
+    *
+    * @param UserString
+    * @return
+    */
   def addUser(UserString: String): server.Route = Route.seal{
 
     authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
 
       post {
         log.debug(s"POST /users/add has been called, parameter is: $UserString")
-
         try {
-          val paramInstance: DelphiUser = UserString.parseJson.convertTo[DelphiUser](AuthDelphiUserFormat)
+          val paramInstance: DelphiUser = UserString.parseJson.convertTo[DelphiUser](authDelphiUserFormat)
           handler.handleAddUser(paramInstance) match {
-            case Success(id) =>
+            case Success(username) =>
               complete {
-                id.toString
+                username
               }
             case Failure(ex) =>
-              log.error(ex, "Failed to handle registration of instance.")
+              log.error(ex, "Failed to handle create user request.")
               complete(HttpResponse(StatusCodes.BadRequest, entity = "Username already taken."))
           }
         } catch {
           case dx: DeserializationException =>
             log.error(dx, "Deserialization exception")
-            complete(HttpResponse(StatusCodes.BadRequest, entity = s"Could not deserialize parameter instance with message ${dx.getMessage}."))
+            complete(HttpResponse(StatusCodes.BadRequest, entity = s"Could not deserialize parameter delphi user with message ${dx.getMessage}."))
+          case px: ParsingException =>
+            log.error(px, "Failed to parse JSON while registering")
+            complete(HttpResponse(StatusCodes.BadRequest, entity = s"Failed to parse JSON entity with message ${px.getMessage}"))
+          case x: Exception =>
+            log.error(x, "Uncaught exception while deserializing.")
+            complete(HttpResponse(StatusCodes.InternalServerError, entity = "An internal server error occurred."))
+        }
+      }
+    }
+  }
+
+  /**
+    * Return the list of all user (so the resulting call is
+    * * /users)
+    *
+    * @return
+    */
+  def allUsers(): server.Route = Route.seal{
+    authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
+      get {
+        complete {
+          handler.getAllUsers().toList
+        }
+      }
+    }
+  }
+
+  /**
+    * Returns an user with the specified id. Id is passed as query argument named 'Id' (so the resulting call is
+    * /users/42)
+    *
+    * @param id
+    * @return
+    */
+  def retrieveUser(id: Long): server.Route = Route.seal{
+    authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
+      get {
+        log.debug(s"GET /users/$id has been called")
+
+        val user = handler.getUser(id)
+
+        if (user.isDefined) {
+          complete(user.get.toJson(authDelphiUserFormat))
+        } else {
+          complete {
+            HttpResponse(StatusCodes.NotFound, entity = s"User id was not found on the server.")
+          }
+        }
+      }
+    }
+  }
+
+  /**
+    * Remove an user with the specified id. Id is passed as query argument named 'Id' (so the resulting call is
+    * /users/remove/42)
+    *
+    * @param id
+    * @return
+    */
+  def removeUser(id: Long): server.Route = Route.seal{
+
+    authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
+
+      get {
+        log.debug(s"POST /users/remove/$id has been called")
+        try {
+
+          handler.handleRemoveUser(id) match {
+            case Success(_) =>
+              complete(HttpResponse(StatusCodes.Accepted, entity = "user successfully removed."))
+            case Failure(ex) =>
+              log.error(ex, "Failed to handle remove user.")
+              complete(HttpResponse(StatusCodes.BadRequest, entity = "User id does not exist."))
+          }
+        } catch {
+          case dx: DeserializationException =>
+            log.error(dx, "Deserialization exception")
+            complete(HttpResponse(StatusCodes.BadRequest, entity = s"Could not deserialize parameter delphi user with message ${dx.getMessage}."))
           case px: ParsingException =>
             log.error(px, "Failed to parse JSON while registering")
             complete(HttpResponse(StatusCodes.BadRequest, entity = s"Failed to parse JSON entity with message ${px.getMessage}"))

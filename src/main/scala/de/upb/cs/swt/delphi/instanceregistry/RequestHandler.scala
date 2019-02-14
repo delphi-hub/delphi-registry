@@ -956,6 +956,21 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
     }
   }
 
+  def isInstanceIdPresent(id: Long): Boolean = {
+    instanceDao.hasInstance(id)
+  }
+
+  def getInstance(id: Long): Option[Instance] = {
+    instanceDao.getInstance(id)
+  }
+
+  def instanceHasState(id: Long, state: InstanceState): Boolean = {
+    instanceDao.getInstance(id) match {
+      case Some(instance) => instance.instanceState == state
+      case None => false
+    }
+  }
+
   /**
     * Add user to user database
     *
@@ -974,20 +989,39 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
     }
   }
 
+  /**
+    * Remove a user with id
+    *
+    * @param id
+    * @return
+    */
+  def handleRemoveUser(id: Long): Try[Long] = {
 
-  def isInstanceIdPresent(id: Long): Boolean = {
-    instanceDao.hasInstance(id)
-  }
-
-  def getInstance(id: Long): Option[Instance] = {
-    instanceDao.getInstance(id)
-  }
-
-  def instanceHasState(id: Long, state: InstanceState): Boolean = {
-    instanceDao.getInstance(id) match {
-      case Some(instance) => instance.instanceState == state
-      case None => false
+    authDao.removeUser(id) match {
+      case Success(_) =>
+        log.info(s"Successfully handled remove user request")
+        Success(id)
+      case Failure(x) => Failure(x)
     }
+  }
+
+  /**
+    * Get a user with id
+    *
+    * @param id
+    * @return
+    */
+  def getUser(id: Long): Option[DelphiUser] = {
+    authDao.getUserWithId(id)
+  }
+
+  /**
+    * Get all user
+    *
+    * @return
+    */
+  def getAllUsers(): List[DelphiUser] = {
+    authDao.getAlllUser()
   }
 
   def isInstanceDockerContainer(id: Long): Boolean = {
