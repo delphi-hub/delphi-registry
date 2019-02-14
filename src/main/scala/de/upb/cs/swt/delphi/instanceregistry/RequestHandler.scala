@@ -962,14 +962,14 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
     * @param user The user to add
     * @return Id assigned to that user
     */
-  def handleAddUser(user: DelphiUser): Try[Long] = {
+  def handleAddUser(user: DelphiUser): Try[String] = {
 
     val noIdUser = DelphiUser(id = None, userName = user.userName, secret = user.secret, userType = user.userType)
 
     authDao.addUser(noIdUser) match {
-      case Success(id) =>
+      case Success(username) =>
         log.info(s"Successfully handled create user request")
-        Success(id)
+        Success(username)
       case Failure(x) => Failure(x)
     }
   }
