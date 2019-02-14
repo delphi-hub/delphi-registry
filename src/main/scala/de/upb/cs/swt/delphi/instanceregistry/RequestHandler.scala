@@ -1,3 +1,18 @@
+// Copyright (C) 2018 The Delphi Team.
+// See the LICENCE file distributed with this work for additional
+// information regarding copyright ownership.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 package de.upb.cs.swt.delphi.instanceregistry
 
 import akka.actor._
@@ -30,7 +45,7 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
 
   val authProvider: AuthProvider = new AuthProvider(authDao)
 
-  val (eventActor, eventPublisher) = Source.actorRef[RegistryEvent](10, OverflowStrategy.dropNew)
+  val (eventActor, eventPublisher) = Source.actorRef[RegistryEvent](bufferSize = 10, OverflowStrategy.dropNew)
     .toMat(Sink.asPublisher(fanout = true))(Keep.both)
     .run()
   val dockerActor: ActorRef = system.actorOf(DockerActor.props(connection))
@@ -106,20 +121,21 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
     }
   }
 
-  def getAllInstancesOfType(compType: ComponentType): List[Instance] = {
-    instanceDao.getInstancesOfType(compType)
+  def getAllInstancesOfType(compType: Option[ComponentType]): List[Instance] = {
+    if(compType.isDefined){
+      instanceDao.getInstancesOfType(compType.get)
+    } else {
+      instanceDao.allInstances()
+    }
   }
 
-  def getNumberOfInstances(compType: ComponentType): Int = {
-    instanceDao.allInstances().count(i => i.componentType == compType)
-  }
+  def getNumberOfInstances(compType: Option[ComponentType]): Int = {
+    if(compType.isDefined){
+      instanceDao.allInstances().count(i => i.componentType == compType.get)
+    } else {
+      instanceDao.allInstances().length
+    }
 
-  def getAllInstancesCount(): Int = {
-    instanceDao.allInstances().length
-  }
-
-  def getAllInstancesType(): List[Instance] = {
-    instanceDao.allInstances()
   }
 
   def getEventList(id: Long): Try[List[RegistryEvent]] = {
@@ -201,7 +217,7 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
 
           implicit val timeout: Timeout = configuration.dockerOperationTimeout
 
-          (dockerActor ? restart(instance.dockerId.get)).map {
+          (dockerActor ? RestartMessage(instance.dockerId.get)).map {
             _ =>
               log.info(s"Instance $instanceId restarted.")
               instanceDao.setStateFor(instance.id.get, InstanceState.Stopped) //Set to stopped, will report start automatically
@@ -255,6 +271,7 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
     }
   }
 
+  // scalastyle:off method.length
   def handleDeploy(componentType: ComponentType, name: Option[String]): Try[Long] = {
     log.debug(s"Deploying container of type $componentType")
     val instance = Instance(None,
@@ -273,7 +290,7 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
       case Success(id) =>
         implicit val timeout: Timeout = configuration.dockerOperationTimeout
 
-        val future: Future[Any] = dockerActor ? create(componentType, id)
+        val future: Future[Any] = dockerActor ? DeployMessage(componentType, id)
         val deployResult = Await.result(future, timeout.duration).asInstanceOf[Try[(String, String, Int, String)]]
 
         deployResult match {
@@ -314,9 +331,8 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
       case Failure(ex) =>
         Failure(ex)
     }
-
-
   }
+  // scalastyle:on method.length
 
   /** *
     * Handles a call to /reportStart. Needs the instance with the specified id to be present and running inside a docker
@@ -389,13 +405,13 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
     * @param id Id of the instance that reported failure
     * @return OperationResult indicating either success or the reason for failure (which precondition was not met)
     */
-  def handleReportFailure(id: Long, errorLog: Option[String]): OperationResult.Value = {
+  def handleReportFailure(id: Long): OperationResult.Value = {
     if (!instanceDao.hasInstance(id)) {
       OperationResult.IdUnknown
     } else if (!isInstanceDockerContainer(id)) {
       OperationResult.NoDockerContainer
     } else {
-      val instance = instanceDao.getInstance(id).get //TODO:Handle errorLog
+      val instance = instanceDao.getInstance(id).get
       instance.instanceState match {
         case InstanceState.Failed =>
           log.warning(s"Instance with id $id reported failure but state already was 'Failed'.")
@@ -433,7 +449,7 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
         log.debug(s"Handling /pause for instance with id $id...")
         implicit val timeout: Timeout = configuration.dockerOperationTimeout
 
-        (dockerActor ? pause(instance.dockerId.get)).map {
+        (dockerActor ? PauseMessage(instance.dockerId.get)).map {
           _ =>
             log.info(s"Instance $id paused.")
             instanceDao.setStateFor(instance.id.get, InstanceState.Paused)
@@ -469,7 +485,7 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
         log.debug(s"Handling /resume for instance with id $id...")
         implicit val timeout: Timeout = configuration.dockerOperationTimeout
 
-        (dockerActor ? unpause(instance.dockerId.get)).map {
+        (dockerActor ? UnpauseMessage(instance.dockerId.get)).map {
           _ =>
             log.info(s"Instance $id resumed.")
             instanceDao.setStateFor(instance.id.get, InstanceState.Running)
@@ -487,6 +503,7 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
     }
   }
 
+  // scalastyle:off method.length cyclomatic.complexity
   /** *
     * Handles a call to /stop. Needs the instance with the specified id to be present and deployed inside a
     * docker container. Will try to gracefully shutdown instance, stop the container and set state accordingly.
@@ -527,7 +544,7 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
 
       implicit val timeout: Timeout = configuration.dockerOperationTimeout
 
-      (dockerActor ? stop(instance.dockerId.get)).map {
+      (dockerActor ? StopMessage(instance.dockerId.get)).map {
         _ =>
           log.info(s"Docker Instance $id stopped.")
           instanceDao.setStateFor(instance.id.get, InstanceState.Stopped)
@@ -552,6 +569,7 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
       OperationResult.InvalidStateForOperation
     }
   }
+  // scalastyle:on method.length cyclomatic.complexity
 
   /** *
     * Handles a call to /start. Needs the instance with the specified id to be present, deployed inside a docker container,
@@ -572,7 +590,7 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
       if (instance.instanceState == InstanceState.Stopped) {
         implicit val timeout: Timeout = configuration.dockerOperationTimeout
 
-        (dockerActor ? start(instance.dockerId.get)).map {
+        (dockerActor ? StartMessage(instance.dockerId.get)).map {
           _ => log.info(s"Instance $id started.")
         }.recover {
           case ex: Exception =>
@@ -611,7 +629,7 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
       } else if (instance.instanceState != InstanceState.Running) {
         implicit val timeout: Timeout = configuration.dockerOperationTimeout
 
-        (dockerActor ? delete(instance.dockerId.get)).map {
+        (dockerActor ? DeleteMessage(instance.dockerId.get)).map {
           _ => log.info(s"Container for instance $id deleted.")
         }.recover {
           case ex: Exception =>
@@ -703,7 +721,8 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
     } else {
       val instance = instanceDao.getInstance(id).get
 
-      val f: Future[(OperationResult.Value, Option[String])] = (dockerActor ? logs(instance.dockerId.get, stdErrSelected, stream = false)) (configuration.dockerOperationTimeout).map {
+      val f: Future[(OperationResult.Value, Option[String])] =
+        (dockerActor ? LogsMessage(instance.dockerId.get, stdErrSelected, stream = false)) (configuration.dockerOperationTimeout).map {
         logVal: Any =>
           val logResult = logVal.asInstanceOf[Try[String]]
           logResult match {
@@ -731,7 +750,8 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
     } else {
       val instance = instanceDao.getInstance(id).get
 
-      val f: Future[(OperationResult.Value, Option[Publisher[Message]])] = (dockerActor ? logs(instance.dockerId.get, stdErrSelected, stream = true)) (configuration.dockerOperationTimeout).map {
+      val f: Future[(OperationResult.Value, Option[Publisher[Message]])] =
+        (dockerActor ? LogsMessage(instance.dockerId.get, stdErrSelected, stream = true)) (configuration.dockerOperationTimeout).map {
         publisherVal: Any =>
           val publisherResult = publisherVal.asInstanceOf[Try[Publisher[Message]]]
           publisherResult match {
@@ -751,6 +771,7 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
     }
   }
 
+  // scalastyle:off method.length cyclomatic.complexity
   /**
     * Tries to match caller to specified component type based on links stored in the dao. If one link is present, it will
     * be selected regardless of its state. If multiple links are present, the assigned link will be returned. If none of
@@ -777,7 +798,7 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
           log.info(s"Finished matching first try: Successfully matched based on 1 link found. Target is ${instanceAssigned.get}.")
           Success(instanceAssigned.get)
         } else if (instanceAssigned.isDefined && instanceAssigned.get.componentType != componentType) {
-          log.error(s"Matching first try failed: There was one link present, but the target type ${instanceAssigned.get.componentType} did not match expected type $componentType")
+          log.error(s"Matching first try failed: One link found, but type ${instanceAssigned.get.componentType} did not match expected type $componentType")
           val link = InstanceLink(links.head.idFrom, links.head.idTo, LinkState.Outdated)
           instanceDao.updateLink(link)
           fireLinkStateChangedEvent(link)
@@ -796,10 +817,10 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
             val instanceAssigned = instanceDao.getInstance(instanceLink.idTo)
 
             if (instanceAssigned.isDefined && instanceAssigned.get.componentType == componentType) {
-              log.info(s"Finished matching first try: Successfully matched based on one assigned link found out of $x total links. Target is ${instanceAssigned.get}.")
+              log.info(s"Finished matching first try: Matched based on one assigned link found out of $x total links. Target is ${instanceAssigned.get}.")
               Success(instanceAssigned.get)
             } else if (instanceAssigned.isDefined && instanceAssigned.get.componentType != componentType) {
-              log.error(s"Matching first try failed: There was one assigned link present, but the target type ${instanceAssigned.get.componentType} did not match expected type $componentType")
+              log.error(s"Matching first try failed: One link found, but type ${instanceAssigned.get.componentType} did not match expected type $componentType")
               val link = InstanceLink(links.head.idFrom, links.head.idTo, LinkState.Outdated)
               instanceDao.updateLink(link)
               fireLinkStateChangedEvent(link)
@@ -818,6 +839,7 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
         }
     }
   }
+  // scalastyle:on method.length cyclomatic.complexity
 
   /**
     * Tries to match caller to instance of the specified type based on which instance has the most labels in common with
@@ -858,7 +880,7 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
 
   private def tryDefaultMatching(componentType: ComponentType): Try[Instance] = {
     log.debug(s"Matching fallback: Searching for instances of type $componentType ...")
-    getNumberOfInstances(componentType) match {
+    getNumberOfInstances(Some(componentType)) match {
       case 0 =>
         log.warning(s"Matching failed: Cannot match to any instance of type $componentType, no such instance present.")
         Failure(new RuntimeException(s"Cannot match to any instance of type $componentType, no instance present."))
@@ -878,22 +900,22 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
 
             //Match to instance with maximum number of consecutive positive matching results
             var maxConsecutivePositiveResults = 0
-            var instanceToMatch: Instance = null
+            var instanceToMatch: Option[Instance] = None
 
             for (instance <- instanceDao.getInstancesOfType(componentType)) {
               if (countConsecutivePositiveMatchingResults(instance.id.get) > maxConsecutivePositiveResults) {
                 maxConsecutivePositiveResults = countConsecutivePositiveMatchingResults(instance.id.get)
-                instanceToMatch = instance
+                instanceToMatch = Some(instance)
               }
             }
 
-            if (instanceToMatch != null) {
-              log.info(s"Finished fallback matching: Matching to instance with id ${instanceToMatch.id}, as it has $maxConsecutivePositiveResults positive results in a row.")
-              Success(instanceToMatch)
+            if (instanceToMatch.isDefined) {
+              log.info(s"Finished fallback matching: Matching to id ${instanceToMatch.get.id},it has $maxConsecutivePositiveResults positive results in a row.")
+              Success(instanceToMatch.get)
             } else {
-              instanceToMatch = instanceDao.getInstancesOfType(componentType).head
-              log.info(s"Finished fallback matching: No difference in available instances found, matching to $instanceToMatch")
-              Success(instanceToMatch)
+              instanceToMatch = Some(instanceDao.getInstancesOfType(componentType).head)
+              log.info(s"Finished fallback matching: No difference in available instances found, matching to ${instanceToMatch.get}")
+              Success(instanceToMatch.get)
             }
         }
     }
@@ -905,24 +927,13 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
     *
     * @param id           container id the command will run on
     * @param command      the command to run
-    * @param attachStdin  attaches to stdin of the command
-    * @param attachStdout attaches to stdout of the command
-    * @param attachStderr attaches to stderr of the command
-    * @param detachKeys   Override the key sequence for detaching a container.
     *                     Format is a single character [a-Z] or ctrl-<@value> where <v@alue> is one of: a-z, @, [, , or _
     * @param privileged   runs the process with extended privileges
-    * @param tty          allocate a pseudo-TTY
     * @param user         A string value specifying the user, and optionally, group to run the process inside the container,
     *                     Format is one of: "user", "user:group", "uid", or "uid:gid".
     * @return
     */
-  def handleCommand(id: Long, command: String, attachStdin: Option[Boolean],
-                    attachStdout: Option[Boolean],
-                    attachStderr: Option[Boolean],
-                    detachKeys: Option[String],
-                    privileged: Option[Boolean],
-                    tty: Option[Boolean],
-                    user: Option[String]): OperationResult.Value = {
+  def handleCommand(id: Long, command: String, privileged: Option[Boolean], user: Option[String]): OperationResult.Value = {
     if (!instanceDao.hasInstance(id)) {
       OperationResult.IdUnknown
     } else if (!isInstanceDockerContainer(id)) {
@@ -932,7 +943,7 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
       log.info(s"Handling /command for instance with id $id...")
       implicit val timeout: Timeout = configuration.dockerOperationTimeout
 
-      (dockerActor ? runCommand(instance.dockerId.get, command, attachStdin, attachStdout, attachStderr, detachKeys, privileged, tty, user)).map {
+      (dockerActor ? RunCommandMessage(instance.dockerId.get, command, privileged, user)).map {
         _ => log.info(s"Command '$command' ran successfully in container with id $id.")
       }.recover {
         case ex: Exception =>
@@ -948,8 +959,8 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
   /**
     * Add user to user database
     *
-    * @param user
-    * @return
+    * @param user The user to add
+    * @return Id assigned to that user
     */
   def handleAddUser(user: DelphiUser): Try[Long] = {
 
@@ -1041,16 +1052,11 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
     if (!instanceDao.hasInstance(id) || instanceDao.getMatchingResultsFor(id).get.isEmpty) {
       0
     } else {
-      val matchingResults = instanceDao.getMatchingResultsFor(id).get
+      val matchingResults = instanceDao.getMatchingResultsFor(id).get.reverse
       var count = 0
 
-      for (index <- matchingResults.size to 1) {
-        if (matchingResults(index - 1)) {
-          count += 1
-        } else {
-          return count
-        }
-      }
+      matchingResults.takeWhile(result => result).foreach(_ => count = count + 1)
+
       count
     }
 

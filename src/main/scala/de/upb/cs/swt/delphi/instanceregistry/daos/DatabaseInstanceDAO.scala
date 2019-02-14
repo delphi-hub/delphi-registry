@@ -1,3 +1,18 @@
+// Copyright (C) 2018 The Delphi Team.
+// See the LICENCE file distributed with this work for additional
+// information regarding copyright ownership.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 package de.upb.cs.swt.delphi.instanceregistry.daos
 
 import akka.actor.ActorSystem
@@ -31,7 +46,11 @@ class DatabaseInstanceDAO (configuration : Configuration) extends InstanceDAO wi
   implicit val materializer : ActorMaterializer = ActorMaterializer()
   implicit val ec : ExecutionContext = system.dispatcher
 
-  private var db = Database.forURL(configuration.instanceDatabaseHost + configuration.instanceDatabaseName, driver = configuration.instanceDatabaseDriver, user = configuration.instanceDatabaseUsername, password = configuration.instanceDatabasePassword)
+  private var db = Database.forURL(configuration.instanceDatabaseHost + configuration.instanceDatabaseName,
+    driver = configuration.instanceDatabaseDriver,
+    user = configuration.instanceDatabaseUsername,
+    password = configuration.instanceDatabasePassword)
+
   override def addInstance(instance : Instance) : Try[Long] = {
 
     val id = 0L //Will be set by DB
@@ -44,7 +63,8 @@ class DatabaseInstanceDAO (configuration : Configuration) extends InstanceDAO wi
     val labels = getListAsString(instance.labels)
     val traefikHost = instance.traefikConfiguration.map(conf => conf.hostName)
 
-    val addFuture: Future[Long] = db.run((instances returning instances.map(_.id)) += (id, host, port, name, componentType, dockerId, instanceState, labels, traefikHost))
+    val addFuture: Future[Long] =
+      db.run((instances returning instances.map(_.id)) += (id, host, port, name, componentType, dockerId, instanceState, labels, traefikHost))
     val instanceId = Await.result(addFuture, Duration.Inf)
 
     log.info(s"Added instance ${instance.name} with id $instanceId to database.")
@@ -167,7 +187,7 @@ class DatabaseInstanceDAO (configuration : Configuration) extends InstanceDAO wi
 
 
       log.info("Initializing sql instance DAO...")
-      clearData()
+      removeAll()
       log.info("Successfully initialized.")
     } else {
       log.error("Not found any database with the provided settings.")
@@ -184,7 +204,7 @@ class DatabaseInstanceDAO (configuration : Configuration) extends InstanceDAO wi
 
   override def shutdown(): Unit = {
     log.info("Shutting down dynamic instance DAO...")
-    clearData()
+    removeAll()
     log.info("Shutdown complete.")
   }
 
@@ -225,7 +245,7 @@ class DatabaseInstanceDAO (configuration : Configuration) extends InstanceDAO wi
           val query = for { single <- instances if single.id === instance.id } yield single.labels
           val updateAction = query.update(getListAsString(labels))
 
-          println(Await.result(db.run(updateAction), Duration.Inf).toString)
+          Await.result(db.run(updateAction), Duration.Inf).toString
           Success()
         }
       }
@@ -239,7 +259,8 @@ class DatabaseInstanceDAO (configuration : Configuration) extends InstanceDAO wi
     val payload = event.payload.toJson(registryEventPayloadFormat).toString
 
     if(hasInstance(id)){
-      val addEvent: Future[Long] = db.run(instanceEvents.map(c => (c.eventType, c.payload)) returning instanceEvents.map(_.id)  += (event.eventType.toString, payload))
+      val addEvent: Future[Long] =
+        db.run(instanceEvents.map(c => (c.eventType, c.payload)) returning instanceEvents.map(_.id)  += (event.eventType.toString, payload))
       val eventId = Await.result(addEvent, Duration.Inf)
       db.run(eventMaps.map(c => (c.instanceId, c.eventId)) += (id, eventId))
 
@@ -330,14 +351,6 @@ class DatabaseInstanceDAO (configuration : Configuration) extends InstanceDAO wi
 
   private def dataToObjectInstanceLinks(eventType: Long, payload: Long, state: String): InstanceLink = {
     InstanceLink.apply(eventType, payload, getLinkStateFromString(state))
-  }
-
-
-  private[daos] def clearData() : Unit = {
-    removeAllInstances()
-    removeAllInstanceMatchingResults()
-    removeAllInstanceEvents()
-    removeAllInstanceLinks()
   }
 
   private def getComponentTypeFromString(componentType: String): ComponentType ={
@@ -485,13 +498,18 @@ class DatabaseInstanceDAO (configuration : Configuration) extends InstanceDAO wi
 
   def dbTest(): Boolean = {
     try {
-      db.createSession.conn.isValid(5)
+      val timeoutDBSeconds = 5
+      db.createSession.conn.isValid(timeoutDBSeconds)
     } catch {
       case e: Throwable => throw e
     }
   }
 
-  def setDatabaseConfiguration(databaseHost: String = "", databaseName: String = "", databaseDriver: String = "", databaseUsername: String = "", databasePassword: String = "") ={
+  def setDatabaseConfiguration(databaseHost: String = "",
+                               databaseName: String = "",
+                               databaseDriver: String = "",
+                               databaseUsername: String = "",
+                               databasePassword: String = ""): Unit = {
     db = Database.forURL(databaseHost + databaseName, driver = databaseDriver, user = databaseUsername, password = databasePassword)
     initialize()
   }

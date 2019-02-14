@@ -657,13 +657,6 @@ paths:
           required: true
           type: integer
           format: int64
-        - in: body
-          name: ErrorLog
-          description: An optional string explaining the failure
-          required: false
-          schema:
-            type: string
-            example: Something went wrong..
       responses:
         '200':
           description: Report successfully processed.
