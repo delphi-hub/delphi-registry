@@ -82,7 +82,7 @@ class DynamicAuthDAO (configuration : Configuration) extends AuthDAO with AppLog
     }
   }
 
-  override def getAlllUser(): List[DelphiUser] = {
+  override def getAllUser(): List[DelphiUser] = {
     List() ++ users
   }
 

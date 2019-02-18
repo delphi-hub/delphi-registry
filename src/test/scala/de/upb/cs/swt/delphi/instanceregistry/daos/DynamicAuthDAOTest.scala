@@ -44,7 +44,7 @@ class DynamicAuthDAOTest extends FlatSpec with Matchers with BeforeAndAfterEach{
   it must "return all user" in {
     val idOption = dao.addUser(buildUser(id = 1, userName = "test2"))
     assert(idOption.isSuccess)
-    assert(dao.getAlllUser().size == 2)
+    assert(dao.getAllUser().size == 2)
   }
 
   it must "return user with correct username" in {

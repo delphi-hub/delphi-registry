@@ -215,7 +215,7 @@ class ServerTest
 
     "successfully remove user when everything is valid" in {
       authDao.addUser(DelphiUser(None, "user3" , "user3", DelphiUserType.User))
-      Get("/users/3/remove") ~> addAuthorization("Admin") ~> Route.seal(server.routes) ~> check {
+      Post("/users/3/remove") ~> addAuthorization("Admin") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.ACCEPTED)
       }
     }
@@ -223,24 +223,24 @@ class ServerTest
     "not remove user if request is invalid" in {
       authDao.addUser(DelphiUser(None, "user4" , "user4", DelphiUserType.User))
       //Required type of user authorization needed to create user
-      Get("/users/4/remove") ~> addAuthorization("User") ~> Route.seal(server.routes) ~> check {
+      Post("/users/4/remove") ~> addAuthorization("User") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.UNAUTHORIZED)
       }
 
       //should use valid request method
-      Post("/users/4/remove") ~> addAuthorization("Admin") ~> Route.seal(server.routes) ~> check {
+      Get("/users/4/remove") ~> addAuthorization("Admin") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.METHOD_NOT_ALLOWED)
-        responseAs[String] shouldEqual "HTTP method not allowed, supported methods: GET"
+        responseAs[String] shouldEqual "HTTP method not allowed, supported methods: POST"
       }
 
       //user should be valid
-      Get("/users/5/remove", HttpEntity(ContentTypes.`application/json`, invalidTypedJsonDelphiUser.stripMargin)) ~>
+      Post("/users/5/remove", HttpEntity(ContentTypes.`application/json`, invalidTypedJsonDelphiUser.stripMargin)) ~>
         addAuthorization("Admin") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.BAD_REQUEST)
       }
 
       //request with expired token
-      Get("/users/4/remove") ~> addHeader("Authorization", "Bearer " + timeExpiredUserToken) ~> Route.seal(server.routes) ~> check {
+      Post("/users/4/remove") ~> addHeader("Authorization", "Bearer " + timeExpiredUserToken) ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.UNAUTHORIZED)
       }
     }
@@ -1011,10 +1011,6 @@ class ServerTest
       . + ("user_type", userType)
 
     Jwt.encode(claim, configuration.jwtSecretKey, JwtAlgorithm.HS256)
-  }
-
-  private def hashString(secret: String): String = {
-    MessageDigest.getInstance("SHA-256").digest(secret.getBytes(StandardCharsets.UTF_8)).map("%02x".format(_)).mkString("")
   }
 
   private def addAuthorization(userType: String): HttpRequest => HttpRequest = addHeader(Authorization.oauth2(generateValidTestToken(userType)))

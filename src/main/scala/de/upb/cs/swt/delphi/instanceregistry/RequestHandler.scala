@@ -1021,7 +1021,7 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
     * @return
     */
   def getAllUsers(): List[DelphiUser] = {
-    authDao.getAlllUser()
+    authDao.getAllUser()
   }
 
   def isInstanceDockerContainer(id: Long): Boolean = {

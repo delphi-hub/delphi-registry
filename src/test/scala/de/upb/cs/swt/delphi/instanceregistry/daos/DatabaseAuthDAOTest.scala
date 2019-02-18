@@ -46,7 +46,7 @@ class DatabaseAuthDAOTest extends FlatSpec with Matchers with BeforeAndAfterEach
   it must "return all user" in {
     val idOption = dao.addUser(buildUser(id = 2, userName = "test2"))
     assert(idOption.isSuccess)
-    assert(dao.getAlllUser().size == 2)
+    assert(dao.getAllUser().size == 2)
   }
 
   it must "return user with correct username" in {
@@ -63,7 +63,7 @@ class DatabaseAuthDAOTest extends FlatSpec with Matchers with BeforeAndAfterEach
 
   private def buildUser(id : Int, userName : String = "") : DelphiUser = {
     val userType = if(id == 1) DelphiUserType.Admin else DelphiUserType.User
-    val name = if(userName == "") "user"+id else userName
+    val name = if(userName == "") "user" + id else userName
     DelphiUser(Some(id), name , hashString("123456"), userType)
   }
 

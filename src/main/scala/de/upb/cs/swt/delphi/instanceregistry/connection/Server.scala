@@ -1266,7 +1266,7 @@ class Server(handler: RequestHandler) extends HttpApp
 
     authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
 
-      get {
+      post {
         log.debug(s"POST /users/remove/$id has been called")
         try {
 

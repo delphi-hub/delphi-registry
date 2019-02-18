@@ -57,7 +57,7 @@ trait AuthDAO {
     * Get all user
     * @return
     */
-  def getAlllUser() : List[DelphiUser]
+  def getAllUser() : List[DelphiUser]
 
   /**
     * Checks whether the DAO holds an user with the specified username.

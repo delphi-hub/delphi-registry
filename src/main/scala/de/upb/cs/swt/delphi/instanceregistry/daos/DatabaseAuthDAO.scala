@@ -97,7 +97,7 @@ class DatabaseAuthDAO (configuration : Configuration) extends AuthDAO with AppLo
     }
   }
 
-  override def getAlllUser(): List[DelphiUser] = {
+  override def getAllUser(): List[DelphiUser] = {
     var listUser = List[DelphiUser]()
     val hasData = Await.result(dbAuth.run(users.exists.result), Duration.Inf)
     if(hasData){
@@ -167,11 +167,6 @@ class DatabaseAuthDAO (configuration : Configuration) extends AuthDAO with AppLo
     }
   }
 
-  private def removeAllUsers(): Unit = {
-    val action = users.delete
-    dbAuth.run(action)
-  }
-
   private def dataToObjectUser(options : Option[(Long, String, String, String)]): DelphiUser ={
     val optionValue = options.get
     DelphiUser(Some(optionValue._1), optionValue._2, optionValue._3, getUserTypeFromString(optionValue._4))
@@ -195,8 +190,16 @@ class DatabaseAuthDAO (configuration : Configuration) extends AuthDAO with AppLo
     dbAuth.run(action)
   }
 
-  def setDatabaseConfiguration(databaseHost: String = "", databaseName: String = "", databaseDriver: String = "", databaseUsername: String = "", databasePassword: String = ""): Unit ={
-    dbAuth = Database.forURL(databaseHost + databaseName, driver = databaseDriver, user = databaseUsername, password = databasePassword)
+  def setDatabaseConfiguration(databaseHost: String = "",
+                               databaseName: String = "",
+                               databaseDriver: String = "",
+                               databaseUsername: String = "",
+                               databasePassword: String = ""): Unit =
+  {
+    dbAuth = Database.forURL(databaseHost + databaseName,
+                             driver = databaseDriver,
+                             user = databaseUsername,
+                             password = databasePassword)
     initialize()
   }
 }
