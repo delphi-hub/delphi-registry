@@ -59,7 +59,7 @@ class DatabaseAuthDAO (configuration : Configuration) extends AuthDAO with AppLo
     }
   }
 
-  override def addUser(delphiUser : DelphiUser) : Try[String] = {
+  override def addUser(delphiUser : DelphiUser) : Try[Long] = {
     if(hasUserWithUsername(delphiUser.userName)){
       Failure(new RuntimeException(s"username ${delphiUser.userName} is already exist."))
     } else {
@@ -72,7 +72,7 @@ class DatabaseAuthDAO (configuration : Configuration) extends AuthDAO with AppLo
       val userId = Await.result(addFuture, Duration.Inf)
 
       log.info(s"Added user ${delphiUser.userName} with id $userId to database.")
-      Success(userName)
+      Success(userId)
     }
 
   }

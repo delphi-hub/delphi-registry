@@ -47,7 +47,7 @@ class DynamicAuthDAO (configuration : Configuration) extends AuthDAO with AppLog
 
   }
 
-  override def addUser(delphiUser : DelphiUser) : Try[String] = {
+  override def addUser(delphiUser : DelphiUser) : Try[Long] = {
     if(hasUserWithUsername(delphiUser.userName)){
       Failure(new RuntimeException(s"username ${delphiUser.userName} is already exist."))
     } else{
@@ -56,7 +56,7 @@ class DynamicAuthDAO (configuration : Configuration) extends AuthDAO with AppLog
       users.add(newUser)
 
       log.info(s"Added user ${newUser.userName} with id ${newUser.id.get} to database.")
-      Success(newUser.userName)
+      Success(id)
     }
 
   }

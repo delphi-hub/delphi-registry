@@ -1191,9 +1191,9 @@ class Server(handler: RequestHandler) extends HttpApp
         try {
           val paramInstance: DelphiUser = UserString.parseJson.convertTo[DelphiUser](authDelphiUserFormat)
           handler.handleAddUser(paramInstance) match {
-            case Success(username) =>
+            case Success(userId) =>
               complete {
-                username
+                userId.toString
               }
             case Failure(ex) =>
               log.error(ex, "Failed to handle create user request.")
