@@ -1179,7 +1179,7 @@ class Server(handler: RequestHandler) extends HttpApp
   /**
     * Registers a new user at the registry.
     *
-    * @param UserString
+    * @param UserString Json object describing the user
     * @return
     */
   def addUser(UserString: String): server.Route = Route.seal{
@@ -1234,7 +1234,7 @@ class Server(handler: RequestHandler) extends HttpApp
     * Returns an user with the specified id. Id is passed as query argument named 'Id' (so the resulting call is
     * /users/42)
     *
-    * @param id
+    * @param id id of the user to retrieve
     * @return
     */
   def retrieveUser(id: Long): server.Route = Route.seal{
@@ -1259,7 +1259,7 @@ class Server(handler: RequestHandler) extends HttpApp
     * Remove an user with the specified id. Id is passed as query argument named 'Id' (so the resulting call is
     * /users/remove/42)
     *
-    * @param id
+    * @param id id of the user to remove
     * @return
     */
   def removeUser(id: Long): server.Route = Route.seal{
