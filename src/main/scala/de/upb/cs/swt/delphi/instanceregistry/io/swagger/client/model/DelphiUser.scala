@@ -16,11 +16,50 @@
 package de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model
 
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
-import spray.json.{DefaultJsonProtocol, JsonFormat}
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.DelphiUserEnums.DelphiUserType
+import spray.json.{DefaultJsonProtocol, DeserializationException, JsString, JsValue, JsonFormat}
 
 trait UserJsonSupport extends SprayJsonSupport with DefaultJsonProtocol{
-  implicit val AuthDelphiUserFormat: JsonFormat[DelphiUser] = jsonFormat4(DelphiUser)
+
+  implicit val userTypeFormat : JsonFormat[DelphiUserType] = new JsonFormat[DelphiUserType] {
+
+    /**
+      * Custom write method for serializing an UserType
+      * @param userType
+      * @return
+      */
+    def write(userType : DelphiUserType) = JsString(userType.toString)
+
+    /**
+      * Custom read method for deserialization of an UserType
+      * @param value
+      * @return
+      */
+    def read(value: JsValue) : DelphiUserType = value match {
+      case JsString(s) => s match {
+        case "User" => DelphiUserType.User
+        case "Admin" => DelphiUserType.Admin
+        case x => throw DeserializationException(s"Unexpected string value $x for delphi user type.")
+      }
+      case y => throw DeserializationException(s"Unexpected type $y during deserialization delphi user type.")
+    }
+  }
+
+  implicit val authDelphiUserFormat: JsonFormat[DelphiUser] = jsonFormat4(DelphiUser)
 }
 
-final case class DelphiUser(id: Option[Long], userName: String, secret: String, userType: String)
+final case class DelphiUser(id: Option[Long], userName: String, secret: String, userType: DelphiUserType)
 
+object DelphiUserEnums {
+
+  //Type to use when working with component types
+  type DelphiUserType = DelphiUserType.Value
+
+  /**
+    * userType enumeration defining the valid types of delphi users
+    */
+  object DelphiUserType extends Enumeration {
+    val User  : Value = Value("User")
+    val Admin : Value = Value("Admin")
+  }
+}

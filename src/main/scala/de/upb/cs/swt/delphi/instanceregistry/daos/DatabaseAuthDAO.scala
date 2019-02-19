@@ -35,6 +35,8 @@ import scala.concurrent.duration.Duration
 import scala.util.Try
 import java.security.MessageDigest
 
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.DelphiUserEnums.DelphiUserType
+
 class DatabaseAuthDAO (configuration : Configuration) extends AuthDAO with AppLogging{
 
   implicit val system : ActorSystem = Registry.system
@@ -42,7 +44,7 @@ class DatabaseAuthDAO (configuration : Configuration) extends AuthDAO with AppLo
   implicit val ec : ExecutionContext = system.dispatcher
 
   private val users : TableQuery[Users] = TableQuery[Users]
-  private val dbAuth = Database.forURL(configuration.authDatabaseHost + configuration.authDatabaseName,
+  private var dbAuth = Database.forURL(configuration.authDatabaseHost + configuration.authDatabaseName,
     driver = configuration.authDatabaseDriver,
     user = configuration.authDatabaseUsername,
     password = configuration.authDatabasePassword)
@@ -57,26 +59,61 @@ class DatabaseAuthDAO (configuration : Configuration) extends AuthDAO with AppLo
     }
   }
 
-  override def addUser(delphiUser : DelphiUser) : Try[Long] = {
+  override def addUser(delphiUser : DelphiUser) : Try[String] = {
     if(hasUserWithUsername(delphiUser.userName)){
       Failure(new RuntimeException(s"username ${delphiUser.userName} is already exist."))
     } else {
       val id = 0L //Will be set by DB
       val userName = delphiUser.userName
       val secret = delphiUser.secret
-      val userType = delphiUser.userType
+      val userType = delphiUser.userType.toString
 
       val addFuture: Future[Long] = dbAuth.run((users returning users.map(_.id)) += (id, userName, hashString(secret), userType))
       val userId = Await.result(addFuture, Duration.Inf)
 
       log.info(s"Added user ${delphiUser.userName} with id $userId to database.")
-      Success(userId)
+      Success(userName)
     }
 
   }
 
+  override def removeUser(id: Long) : Try[Unit] = {
+    if(hasUserWithId(id)) {
+      removeUserWithId(id)
+      Success(log.info(s"Successfully removed user with id $id."))
+    }else{
+      val msg = s"Cannot remove user with id $id, that id is not present."
+      log.warning(msg)
+      Failure(new RuntimeException(msg))
+    }
+  }
+
+  override def getUserWithId(id: Long): Option[DelphiUser] = {
+    if(hasUserWithId(id)) {
+      val result = Await.result(dbAuth.run(users.filter(_.id === id).result.headOption), Duration.Inf)
+      Some(dataToObjectUser(result))
+    } else {
+      None
+    }
+  }
+
+  override def getAllUser(): List[DelphiUser] = {
+    var listUser = List[DelphiUser]()
+    val hasData = Await.result(dbAuth.run(users.exists.result), Duration.Inf)
+    if(hasData){
+      val resultAll = Await.result(dbAuth.run(users.result), Duration.Inf)
+      val listAll = List() ++ resultAll.map(_.value)
+      listUser = listAll.map(c => dataToObjectUser(Option(c)))
+    }
+    listUser
+  }
+
   override def hasUserWithUsername(username: String) : Boolean = {
     Await.result(dbAuth.run(users.filter(_.userName === username).exists.result), Duration.Inf)
+  }
+
+  override def hasUserWithId(id: Long): Boolean ={
+    Await.result(dbAuth.run(users.filter(_.id === id).exists.result), Duration.Inf)
   }
 
   override def initialize() : Unit = {
@@ -110,7 +147,15 @@ class DatabaseAuthDAO (configuration : Configuration) extends AuthDAO with AppLo
   }
 
   private def dataToObjectAuthenticate(id:Long, userName: String, secret: String, userType: String): DelphiUser = {
-    DelphiUser.apply(Option(id), userName, secret, userType)
+    DelphiUser.apply(Option(id), userName, secret, getDelphiUserTypeFromString(userType))
+  }
+
+  private def getDelphiUserTypeFromString(userType: String): DelphiUserType ={
+    val result = userType match {
+      case "User" => DelphiUserType.User
+      case "Admin" =>DelphiUserType.Admin
+    }
+    result
   }
 
   private def dbTest(): Boolean = {
@@ -122,7 +167,39 @@ class DatabaseAuthDAO (configuration : Configuration) extends AuthDAO with AppLo
     }
   }
 
+  private def dataToObjectUser(options : Option[(Long, String, String, String)]): DelphiUser ={
+    val optionValue = options.get
+    DelphiUser(Some(optionValue._1), optionValue._2, optionValue._3, getUserTypeFromString(optionValue._4))
+  }
+
+  private def getUserTypeFromString(userType: String): DelphiUserType ={
+    val result = userType match {
+      case "Admin" => DelphiUserType.Admin
+      case "User" => DelphiUserType.User
+    }
+    result
+  }
+
   private def hashString(secret: String): String = {
     MessageDigest.getInstance("SHA-256").digest(secret.getBytes(StandardCharsets.UTF_8)).map("%02x".format(_)).mkString("")
+  }
+
+  private def removeUserWithId(id: Long): Unit ={
+    val q = users.filter(_.id === id)
+    val action = q.delete
+    dbAuth.run(action)
+  }
+
+  def setDatabaseConfiguration(databaseHost: String = "",
+                               databaseName: String = "",
+                               databaseDriver: String = "",
+                               databaseUsername: String = "",
+                               databasePassword: String = ""): Unit =
+  {
+    dbAuth = Database.forURL(databaseHost + databaseName,
+                             driver = databaseDriver,
+                             user = databaseUsername,
+                             password = databasePassword)
+    initialize()
   }
 }

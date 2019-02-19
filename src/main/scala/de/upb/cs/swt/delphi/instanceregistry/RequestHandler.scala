@@ -956,25 +956,6 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
     }
   }
 
-  /**
-    * Add user to user database
-    *
-    * @param user The user to add
-    * @return Id assigned to that user
-    */
-  def handleAddUser(user: DelphiUser): Try[Long] = {
-
-    val noIdUser = DelphiUser(id = None, userName = user.userName, secret = user.secret, userType = user.userType)
-
-    authDao.addUser(noIdUser) match {
-      case Success(id) =>
-        log.info(s"Successfully handled create user request")
-        Success(id)
-      case Failure(x) => Failure(x)
-    }
-  }
-
-
   def isInstanceIdPresent(id: Long): Boolean = {
     instanceDao.hasInstance(id)
   }
@@ -988,6 +969,59 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
       case Some(instance) => instance.instanceState == state
       case None => false
     }
+  }
+
+  /**
+    * Add user to user database
+    *
+    * @param user The user to add
+    * @return Id assigned to that user
+    */
+  def handleAddUser(user: DelphiUser): Try[String] = {
+
+    val noIdUser = DelphiUser(id = None, userName = user.userName, secret = user.secret, userType = user.userType)
+
+    authDao.addUser(noIdUser) match {
+      case Success(username) =>
+        log.info(s"Successfully handled create user request")
+        Success(username)
+      case Failure(x) => Failure(x)
+    }
+  }
+
+  /**
+    * Remove a user with id
+    *
+    * @param id
+    * @return
+    */
+  def handleRemoveUser(id: Long): Try[Long] = {
+
+    authDao.removeUser(id) match {
+      case Success(_) =>
+        log.info(s"Successfully handled remove user request")
+        Success(id)
+      case Failure(x) => Failure(x)
+    }
+  }
+
+  /**
+    * Get a user with id
+    *
+    * @param id
+    * @return
+    */
+  def getUser(id: Long): Option[DelphiUser] = {
+    authDao.getUserWithId(id)
+  }
+
+  /**
+    * Get all user
+    *
+    * @return
+    */
+  def getAllUsers(): List[DelphiUser] = {
+    authDao.getAllUser()
   }
 
   def isInstanceDockerContainer(id: Long): Boolean = {

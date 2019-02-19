@@ -25,7 +25,14 @@ trait AuthDAO {
     * Add user
     * @return
     */
-  def addUser(delphiUser : DelphiUser) : Try[Long]
+  def addUser(delphiUser : DelphiUser) : Try[String]
+
+  /**
+    * Remove user with username
+    * @param id
+    * @return
+    */
+  def removeUser(id: Long) : Try[Unit]
 
   /**
     * Initializes the DAO
@@ -40,11 +47,31 @@ trait AuthDAO {
   def getUserWithUsername(userName: String) : Option[DelphiUser]
 
   /**
+    * Gets the user with the specified id from the DAO
+    * @param id
+    * @return
+    */
+  def getUserWithId(id: Long) : Option[DelphiUser]
+
+  /**
+    * Get all user
+    * @return
+    */
+  def getAllUser() : List[DelphiUser]
+
+  /**
     * Checks whether the DAO holds an user with the specified username.
     * @param userName Name to check
     * @return True if name is present, false otherwise
     */
   def hasUserWithUsername(userName: String) : Boolean
+
+  /**
+    * Checks whether the DAO holds an user with the specified id.
+    * @param id
+    * @return
+    */
+  def hasUserWithId(id: Long) : Boolean
 
   /**
     * Shuts the DAO down
