@@ -56,7 +56,7 @@ class DynamicAuthDAOTest extends FlatSpec with Matchers with BeforeAndAfterEach{
   }
 
   it must "be able to delete user with particular username" in {
-    dao.addUser(DelphiUser(Some(2), "test2", "test2", DelphiUserType.User))
+    dao.addUser(DelphiUser(Some(2), "test2", Some("test2"), DelphiUserType.User))
     assert(dao.hasUserWithUsername("test2"))
     val user = dao.getUserWithUsername("test2")
     assert(dao.removeUser(user.get.id.get).isSuccess)
@@ -65,7 +65,7 @@ class DynamicAuthDAOTest extends FlatSpec with Matchers with BeforeAndAfterEach{
   private def buildUser(id : Int, userName : String = "") : DelphiUser = {
     val userType = if(id === 1) DelphiUserType.Admin else DelphiUserType.User
     val name = if(userName == "") "user" + id else userName
-    DelphiUser(Some(id), name , hashString("123456"), userType)
+    DelphiUser(Some(id), name , Some(hashString("123456")), userType)
   }
 
   private def hashString(secret: String): String = {

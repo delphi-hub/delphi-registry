@@ -48,7 +48,7 @@ trait UserJsonSupport extends SprayJsonSupport with DefaultJsonProtocol{
   implicit val authDelphiUserFormat: JsonFormat[DelphiUser] = jsonFormat4(DelphiUser)
 }
 
-final case class DelphiUser(id: Option[Long], userName: String, secret: String, userType: DelphiUserType)
+final case class DelphiUser(id: Option[Long], userName: String, secret: Option[String], userType: DelphiUserType)
 
 object DelphiUserEnums {
 

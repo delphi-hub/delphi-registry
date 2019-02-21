@@ -25,7 +25,7 @@ trait AuthDAO {
     * Add user
     * @return
     */
-  def addUser(delphiUser : DelphiUser) : Try[String]
+  def addUser(delphiUser : DelphiUser) : Try[Long]
 
   /**
     * Remove user with username

@@ -1191,9 +1191,9 @@ class Server(handler: RequestHandler) extends HttpApp
         try {
           val paramInstance: DelphiUser = UserString.parseJson.convertTo[DelphiUser](authDelphiUserFormat)
           handler.handleAddUser(paramInstance) match {
-            case Success(username) =>
+            case Success(userId) =>
               complete {
-                username
+                userId.toString
               }
             case Failure(ex) =>
               log.error(ex, "Failed to handle create user request.")
@@ -1223,6 +1223,8 @@ class Server(handler: RequestHandler) extends HttpApp
   def allUsers(): server.Route = Route.seal{
     authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
       get {
+        log.info("kutta")
+        log.info(handler.getAllUsers().toString())
         complete {
           handler.getAllUsers().toList
         }

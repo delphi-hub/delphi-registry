@@ -53,13 +53,13 @@ class DatabaseAuthDAO (configuration : Configuration) extends AuthDAO with AppLo
   {
     if(hasUserWithUsername(userName)) {
       val result = Await.result(dbAuth.run(users.filter(_.userName === userName).result.headOption), Duration.Inf)
-      Some(dataToObjectAuthenticate(result.get._1, result.get._2, result.get._3, result.get._4))
+      Some(dataToObjectAuthenticateWithSecret(result.get._1, result.get._2, Some(result.get._3), result.get._4))
     } else {
       None
     }
   }
 
-  override def addUser(delphiUser : DelphiUser) : Try[String] = {
+  override def addUser(delphiUser : DelphiUser) : Try[Long] = {
     if(hasUserWithUsername(delphiUser.userName)){
       Failure(new RuntimeException(s"username ${delphiUser.userName} is already exist."))
     } else {
@@ -68,11 +68,11 @@ class DatabaseAuthDAO (configuration : Configuration) extends AuthDAO with AppLo
       val secret = delphiUser.secret
       val userType = delphiUser.userType.toString
 
-      val addFuture: Future[Long] = dbAuth.run((users returning users.map(_.id)) += (id, userName, hashString(secret), userType))
+      val addFuture: Future[Long] = dbAuth.run((users returning users.map(_.id)) += (id, userName, hashString(secret.get), userType))
       val userId = Await.result(addFuture, Duration.Inf)
 
       log.info(s"Added user ${delphiUser.userName} with id $userId to database.")
-      Success(userName)
+      Success(userId)
     }
 
   }
@@ -146,7 +146,7 @@ class DatabaseAuthDAO (configuration : Configuration) extends AuthDAO with AppLo
     log.info("Shutdown complete.")
   }
 
-  private def dataToObjectAuthenticate(id:Long, userName: String, secret: String, userType: String): DelphiUser = {
+  private def dataToObjectAuthenticateWithSecret(id:Long, userName: String, secret: Option[String], userType: String): DelphiUser = {
     DelphiUser.apply(Option(id), userName, secret, getDelphiUserTypeFromString(userType))
   }
 
@@ -169,7 +169,7 @@ class DatabaseAuthDAO (configuration : Configuration) extends AuthDAO with AppLo
 
   private def dataToObjectUser(options : Option[(Long, String, String, String)]): DelphiUser ={
     val optionValue = options.get
-    DelphiUser(Some(optionValue._1), optionValue._2, optionValue._3, getUserTypeFromString(optionValue._4))
+    DelphiUser(Some(optionValue._1), optionValue._2, None, getUserTypeFromString(optionValue._4))
   }
 
   private def getUserTypeFromString(userType: String): DelphiUserType ={

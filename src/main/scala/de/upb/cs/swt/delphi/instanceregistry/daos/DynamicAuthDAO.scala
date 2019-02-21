@@ -40,23 +40,23 @@ class DynamicAuthDAO (configuration : Configuration) extends AuthDAO with AppLog
     if(hasUserWithUsername(userName)) {
       val query = users filter {i => i.userName == userName}
       val user  = query.iterator.next()
-      Some(dataToObjectAuthenticate(user.id.get, user.userName, user.secret, user.userType.toString))
+      Some(dataToObjectAuthenticateWithSecret(user.id.get, user.userName, user.secret.get, user.userType.toString))
     } else {
       None
     }
 
   }
 
-  override def addUser(delphiUser : DelphiUser) : Try[String] = {
+  override def addUser(delphiUser : DelphiUser) : Try[Long] = {
     if(hasUserWithUsername(delphiUser.userName)){
       Failure(new RuntimeException(s"username ${delphiUser.userName} is already exist."))
     } else{
       val id = nextId()
-      val newUser = DelphiUser(Some(id), delphiUser.userName, hashString(delphiUser.secret), delphiUser.userType)
+      val newUser = DelphiUser(Some(id), delphiUser.userName, Some(hashString(delphiUser.secret.get)), delphiUser.userType)
       users.add(newUser)
 
       log.info(s"Added user ${newUser.userName} with id ${newUser.id.get} to database.")
-      Success(newUser.userName)
+      Success(id)
     }
 
   }
@@ -76,14 +76,14 @@ class DynamicAuthDAO (configuration : Configuration) extends AuthDAO with AppLog
     if(hasUserWithId(id)) {
       val query = users filter {i => i.id.get == id}
       val result  = query.iterator.next()
-      Some(result)
+      Some(dataToObjectUser(result))
     } else {
       None
     }
   }
 
   override def getAllUser(): List[DelphiUser] = {
-    List() ++ users
+    List() ++ users map dataToObjectUser
   }
 
   override def hasUserWithUsername(username: String) : Boolean = {
@@ -109,10 +109,14 @@ class DynamicAuthDAO (configuration : Configuration) extends AuthDAO with AppLog
     log.info("Shutdown complete dynamic Auth DAO.")
   }
 
-  private def dataToObjectAuthenticate(id:Long, userName: String, secret: String, userType: String): DelphiUser = {
-    DelphiUser.apply(Option(id), userName, secret, getDelphiUserTypeFromString(userType))
+  private def dataToObjectUser(delphiUser : DelphiUser): DelphiUser ={
+
+    DelphiUser(delphiUser.id, delphiUser.userName, None, delphiUser.userType)
   }
 
+  private def dataToObjectAuthenticateWithSecret(id:Long, userName: String, secret: String, userType: String): DelphiUser = {
+    DelphiUser.apply(Option(id), userName, Some(secret), getDelphiUserTypeFromString(userType))
+  }
 
   private[daos] def clearData() : Unit = {
     users.clear()

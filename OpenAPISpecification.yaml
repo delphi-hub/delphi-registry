@@ -959,9 +959,6 @@ definitions:
       userName:
         type: string
         example: Ben
-      secret:
-        type: string
-        example: 0DE19F6FAAFB7CF372172CEA658800999A75DB9E79AF5F378F274E47DF810CEE
       userType:
         type: string
         enum:

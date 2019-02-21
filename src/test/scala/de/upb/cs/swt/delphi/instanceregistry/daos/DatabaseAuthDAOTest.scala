@@ -64,7 +64,7 @@ class DatabaseAuthDAOTest extends FlatSpec with Matchers with BeforeAndAfterEach
   private def buildUser(id : Int, userName : String = "") : DelphiUser = {
     val userType = if(id == 1) DelphiUserType.Admin else DelphiUserType.User
     val name = if(userName == "") "user" + id else userName
-    DelphiUser(Some(id), name , hashString("123456"), userType)
+    DelphiUser(Some(id), name , Some(hashString("123456")), userType)
   }
 
   private def hashString(secret: String): String = {
