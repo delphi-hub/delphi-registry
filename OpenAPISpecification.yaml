@@ -45,15 +45,33 @@ paths:
               TraefikProxyUri:
                 type: string
                 example: "172.0.2.1:80"
+  /users:
+    get:
+      tags:
+        - User Management
+      summary: Get all users
+      description: >-
+        This command retrieves a list of all users that are created at
+        the user. All users are being returned.
+      operationId: allUser
+      responses:
+        '200':
+          description: List of users
+          schema:
+            type: array
+            items:
+              $ref: '#/definitions/User'
+        '400':
+          description: Invalid value
   /users/authenticate:
     post:
       tags:
         - User Management
       summary: Authenticates a user and returns a valid JWT
-      description: >- 
-        This endpoints validates the username and password that must 
+      description: >-
+        This endpoints validates the username and password that must
         be supplied in the Authorization header (using HTTP Basic Authentication).
-        If valid, a JSON Web Token will be generated and returned, that may be used 
+        If valid, a JSON Web Token will be generated and returned, that may be used
         to authenticate the user for subsequent requests.
       operationId: authenticate
       parameters:
@@ -65,7 +83,7 @@ paths:
           required: true
         - in: header
           name: Authorization
-          description: >- 
+          description: >-
             HTTP Basic Authentication following the schema 'Basic <User:Password>
             where the concatination of username and password is Base64-Encoded.
           type: string
@@ -120,6 +138,53 @@ paths:
             example: 42
         '400':
           description: Bad request, name already exists
+
+  /users/{Id}:
+    post:
+      tags:
+        - User Management
+      summary: Get a user with id
+      description: >-
+        Get a particular user with its id. The user will be returned.
+      operationId: getUser
+      parameters:
+        - in: path
+          name: Id
+          description: Id of the user
+          required: true
+          type: integer
+          format: int64
+      responses:
+        '200':
+          description: Single user data
+          schema:
+            $ref: '#/definitions/User'
+        '404':
+          description: User id was not found on the server.
+
+  /users/{Id}/remove:
+    post:
+      tags:
+        - User Management
+      summary: Remove a user
+      description: >-
+        Remove a user with its id. If the operation is successful it
+        will return success message.
+      operationId: removeUser
+      parameters:
+        - name: Id
+          in: path
+          description: The ID of the user to be deleted.
+          required: true
+          type: integer
+          format: int64
+      responses:
+        '200':
+          description: user successfully removed
+        '400':
+          description: User id does not exist.
+        '500':
+          description: An internal server error occurred.
   /instances/register:
     post:
       tags:
@@ -157,7 +222,7 @@ paths:
       summary: Get all instances of the specified type
       description: >-
         This command retrieves a list of all instances that are registered at
-        the registry and that have the specified type. If no type is specified, 
+        the registry and that have the specified type. If no type is specified,
         all instances are being returned.
       operationId: instanceOfType
       parameters:
@@ -616,7 +681,7 @@ paths:
         This command informs the registry about an instance that was stopped
         manually, meaning not via calling /stop on the instance registry. This
         is only applicable to instances running inside a docker container, as
-        non-container instances would deregister themselves when stopped. 
+        non-container instances would deregister themselves when stopped.
       operationId: reportStop
       parameters:
         - name: Id
@@ -815,7 +880,7 @@ paths:
       description: >-
         This command assignes a new dependency to the instance with the
         specified id. Internally, this will stop the instance, assign the new
-        dependency and start the instance again. This is why this is only 
+        dependency and start the instance again. This is why this is only
         applicable to docker instances.
       operationId: assignInstance
       parameters:
@@ -926,6 +991,21 @@ definitions:
           - StateChangedEvent
       payload:
         type: object
+  User:
+    type: object
+    properties:
+      id:
+        type: integer
+        format: int64
+      userName:
+        type: string
+        example: MyUser
+      userType:
+        type: string
+        enum:
+          - Admin
+          - User
+          - Component
   Instance:
     type: object
     required:
