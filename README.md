@@ -45,7 +45,7 @@ On the *Registry Host*, execute the following steps:
     * Set ```jwtSecretKey``` to a secret password not known to anybody else
 4) Save your changes. Navigate to the root folder of the repository and execute the application by calling ```sbt run```
 
-You should now be able to connect to the registry component at ```http://<REGISTRY-HOST-IP-HERE>:8087```. You can verify your setup by calling ```curl <REGISTRY-HOST-IP-HERE>:8087/configuration```.
+The setup of the registry is now complete. You should now be able to connect to the registry component at ```http://<REGISTRY-HOST-IP-HERE>:8087```. You can verify your setup by calling ```curl <REGISTRY-HOST-IP-HERE>:8087/configuration```, which should lead to a ```401 Unauthorized``` response. To find out more about how to authorize yourself, please have look at the **Authorization** section of this document.
 
 ## Requirements
 In order to compile or execute the instance registry, you must have the latest version of the *Scala Build Tool* (SBT) installed. You can get it [here](https://www.scala-sbt.org/).
