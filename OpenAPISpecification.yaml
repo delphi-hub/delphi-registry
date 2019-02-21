@@ -31,7 +31,9 @@ paths:
       tags:
         - Meta
       summary: Retreives general configuration information
-      description: Retrieves an object containing the most important configuration values of the registry. This contains the docker and traefik URIs.
+      description: >-
+        Retrieves an object containing the most important configuration values
+        of the registry. This contains the docker and traefik URIs.
       operationId: configurationInfo
       responses:
         '200':
@@ -41,69 +43,52 @@ paths:
             properties:
               DockerHttpApi:
                 type: string
-                example: "172.0.2.1:9095"
+                example: '172.0.2.1:9095'
               TraefikProxyUri:
                 type: string
-                example: "172.0.2.1:80"
-  /users:
-    get:
-      tags:
-        - User Management
-      summary: Get all users
-      description: >-
-        This command retrieves a list of all users that are created at
-        the user. All users are being returned.
-      operationId: allUser
-      responses:
-        '200':
-          description: List of users
-          schema:
-            type: array
-            items:
-              $ref: '#/definitions/User'
-        '400':
-          description: Invalid value
+                example: '172.0.2.1:80'
   /users/authenticate:
     post:
       tags:
         - User Management
       summary: Authenticates a user and returns a valid JWT
       description: >-
-        This endpoints validates the username and password that must
-        be supplied in the Authorization header (using HTTP Basic Authentication).
-        If valid, a JSON Web Token will be generated and returned, that may be used
-        to authenticate the user for subsequent requests.
+        This endpoints validates the username and password that must  be
+        supplied in the Authorization header (using HTTP Basic Authentication).
+        If valid, a JSON Web Token will be generated and returned, that may be
+        used  to authenticate the user for subsequent requests.
       operationId: authenticate
       parameters:
         - in: header
           name: Delphi-Authorization
-          description: >-
-            Valid JWT that autenticates the calling entity.
+          description: Valid JWT that autenticates the calling entity.
           type: string
           required: true
         - in: header
           name: Authorization
           description: >-
-            HTTP Basic Authentication following the schema 'Basic <User:Password>
-            where the concatination of username and password is Base64-Encoded.
+            HTTP Basic Authentication following the schema 'Basic
+            <User:Password> where the concatination of username and password is
+            Base64-Encoded.
           type: string
           required: true
       responses:
         '200':
-          description: Supplied data is valid, a JWT is returned
+          description: 'Supplied data is valid, a JWT is returned'
           schema:
             type: string
-            example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c
+            example: >-
+              eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c
         '401':
-          description: Unauthorized, invalid username / password supplied.
+          description: 'Unauthorized, invalid username / password supplied.'
   /users/add:
     post:
       tags:
         - User Management
       summary: Adds a new users for the registry
       description: >-
-        Adds a new user that is passed in the requests entity. The id of the user
-        will be returned.
+        Adds a new user that is passed in the requests entity. The id of the
+        user will be returned.
       operationId: addUser
       parameters:
         - in: body
@@ -131,60 +116,70 @@ paths:
                   - Component
       responses:
         '200':
-          description: OK, user has been added, id is returned
+          description: 'OK, user has been added, id is returned'
           schema:
             type: integer
             format: int64
             example: 42
         '400':
-          description: Bad request, name already exists
-
-  /users/{Id}:
-    post:
+          description: 'Bad request, name already exists'
+  /users:
+    get:
       tags:
         - User Management
-      summary: Get a user with id
+      summary: Gets a list of all registered users
       description: >-
-        Get a particular user with its id. The user will be returned.
-      operationId: getUser
+        Returns a list of all users registered at the registry. Requires caller to have admin privileges.
+      operationId: allUsers
+      responses:
+        '200':
+          description: "OK, list of users is being returned"
+          schema:
+            type: array
+            items:
+              $ref: '#/definitions/User'
+  /users/{Id}:
+    get:
+      tags:
+        - User Management
+      summary: Gets the user with the specified id
+      description: >-
+        Returns the user with the specified id, if that id is present at the registry.
+      operationId: retrieveUser
       parameters:
         - in: path
           name: Id
-          description: Id of the user
           required: true
+          description: Id of the user to retrieve
           type: integer
           format: int64
       responses:
         '200':
-          description: Single user data
+          description: "OK, user is being returned"
           schema:
             $ref: '#/definitions/User'
         '404':
-          description: User id was not found on the server.
-
+          description: "Id not found"
   /users/{Id}/remove:
     post:
       tags:
         - User Management
-      summary: Remove a user
+      summary: Removes the user with the specified id
       description: >-
-        Remove a user with its id. If the operation is successful it
-        will return success message.
+        Removes the user with the specified id, if that id is present at the registry.
       operationId: removeUser
       parameters:
-        - name: Id
-          in: path
-          description: The ID of the user to be deleted.
+        - in: path
+          name: Id
           required: true
+          description: Id of the user to remove
           type: integer
           format: int64
       responses:
         '200':
-          description: user successfully removed
-        '400':
-          description: User id does not exist.
-        '500':
-          description: An internal server error occurred.
+          description: "OK, user has been removed"
+        '404':
+          description: "Id not found"
   /instances/register:
     post:
       tags:
@@ -222,7 +217,7 @@ paths:
       summary: Get all instances of the specified type
       description: >-
         This command retrieves a list of all instances that are registered at
-        the registry and that have the specified type. If no type is specified,
+        the registry and that have the specified type. If no type is specified, 
         all instances are being returned.
       operationId: instanceOfType
       parameters:
@@ -681,7 +676,7 @@ paths:
         This command informs the registry about an instance that was stopped
         manually, meaning not via calling /stop on the instance registry. This
         is only applicable to instances running inside a docker container, as
-        non-container instances would deregister themselves when stopped.
+        non-container instances would deregister themselves when stopped. 
       operationId: reportStop
       parameters:
         - name: Id
@@ -880,7 +875,7 @@ paths:
       description: >-
         This command assignes a new dependency to the instance with the
         specified id. Internally, this will stop the instance, assign the new
-        dependency and start the instance again. This is why this is only
+        dependency and start the instance again. This is why this is only 
         applicable to docker instances.
       operationId: assignInstance
       parameters:
@@ -951,6 +946,27 @@ paths:
         '500':
           description: 'Internal server error, unknown operation result DESCRIPTION'
 definitions:
+  User:
+    type: object
+    required:
+      - userName
+      - secret
+      - userType
+    properties:
+      id:
+        type: integer
+        format: int64
+      userName:
+        type: string
+        example: Ben
+      secret:
+        type: string
+        example: 0DE19F6FAAFB7CF372172CEA658800999A75DB9E79AF5F378F274E47DF810CEE
+      userType:
+        type: string
+        enum:
+          - User
+          - Admin
   InstanceLink:
     type: object
     required:
@@ -991,21 +1007,6 @@ definitions:
           - StateChangedEvent
       payload:
         type: object
-  User:
-    type: object
-    properties:
-      id:
-        type: integer
-        format: int64
-      userName:
-        type: string
-        example: MyUser
-      userType:
-        type: string
-        enum:
-          - Admin
-          - User
-          - Component
   Instance:
     type: object
     required:

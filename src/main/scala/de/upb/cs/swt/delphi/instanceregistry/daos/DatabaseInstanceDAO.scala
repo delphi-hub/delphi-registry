@@ -286,17 +286,18 @@ class DatabaseInstanceDAO (configuration : Configuration) extends InstanceDAO wi
   override def addLink(link: InstanceLink) : Try[Unit] = {
     if(hasInstance(link.idFrom) && hasInstance(link.idTo)){
 
+      //If new link is in state 'Assigned': Set any link that previously was assigned to 'outdated'
+      //IMPORTANT: Only works bc every component has exactly one dependency!
+      if(link.linkState == LinkState.Assigned){
+        for (prevLink <- getLinksFrom(link.idFrom, Some(LinkState.Assigned))){
+          updateLink(InstanceLink(prevLink.idFrom, prevLink.idTo, LinkState.Outdated))
+        }
+      }
+
       if(getLinksFrom(link.idFrom).exists(l => l.idTo == link.idTo)){
         //There already is a link between the two instances. Update it instead of adding a new one
         updateLink(link)
       } else {
-        //If new link is in state 'Assigned': Set any link that previously was assigned to 'outdated'
-        //IMPORTANT: Only works bc every component has exactly one dependency!
-        if(link.linkState == LinkState.Assigned){
-          for (prevLink <- getLinksFrom(link.idFrom, Some(LinkState.Assigned))){
-            updateLink(InstanceLink(prevLink.idFrom, prevLink.idTo, LinkState.Outdated))
-          }
-        }
         addLinkFromInstanceLink(link)
       }
       Success()
