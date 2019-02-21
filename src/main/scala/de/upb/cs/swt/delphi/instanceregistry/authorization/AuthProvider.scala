@@ -53,7 +53,7 @@ class AuthProvider(authDAO: AuthDAO) extends AppLogging {
   private def getSecretForUser(userName: String): Option[String] ={
     val user = authDAO.getUserWithUsername(userName)
     if(user.isDefined){
-      Some(user.get.secret)
+      Some(user.get.secret.get)
     } else {
       None
     }

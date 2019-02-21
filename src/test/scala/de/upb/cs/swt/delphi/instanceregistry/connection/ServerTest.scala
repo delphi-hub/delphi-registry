@@ -34,8 +34,6 @@ import pdi.jwt.{Jwt, JwtAlgorithm, JwtClaim}
 import spray.json._
 
 import scala.util.{Failure, Success, Try}
-import java.nio.charset.StandardCharsets
-import java.security.MessageDigest
 
 import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.DelphiUserEnums.DelphiUserType
 
@@ -65,7 +63,7 @@ class ServerTest
   private val invalidJsonInstance = validJsonInstance.replace(""""name":"ValidInstance",""", """"name":Invalid", """)
 
   private val validJsonDelphiUser = DelphiUser(id = None,
-                                              userName = "validUser" , secret = "validUser",
+                                              userName = "validUser" , secret = Some("validUser"),
                                               userType = DelphiUserType.Admin).toJson(authDelphiUserFormat
                                               ).toString
   private val invalidTypedJsonDelphiUser = validJsonDelphiUser.replace(""""userType":"User",""", """"userType":"Component",""")
@@ -81,8 +79,8 @@ class ServerTest
   override def beforeAll(): Unit = {
     requestHandler.initialize()
     authDao.initialize()
-    authDao.addUser(DelphiUser(None, "admin" , "admin", DelphiUserType.Admin))
-    authDao.addUser(DelphiUser(None, "user" , "user", DelphiUserType.User))
+    authDao.addUser(DelphiUser(None, "admin" , Some("admin"), DelphiUserType.Admin))
+    authDao.addUser(DelphiUser(None, "user" , Some("user"), DelphiUserType.User))
   }
 
   /**
@@ -214,14 +212,14 @@ class ServerTest
     }
 
     "successfully remove user when everything is valid" in {
-      authDao.addUser(DelphiUser(None, "user3" , "user3", DelphiUserType.User))
+      authDao.addUser(DelphiUser(None, "user3" , Some("user3"), DelphiUserType.User))
       Post("/users/3/remove") ~> addAuthorization("Admin") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.ACCEPTED)
       }
     }
 
     "not remove user if request is invalid" in {
-      authDao.addUser(DelphiUser(None, "user4" , "user4", DelphiUserType.User))
+      authDao.addUser(DelphiUser(None, "user4" , Some("user4"), DelphiUserType.User))
       //Required type of user authorization needed to create user
       Post("/users/4/remove") ~> addAuthorization("User") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.UNAUTHORIZED)
@@ -246,7 +244,7 @@ class ServerTest
     }
 
     "successfully get user if user exist" in {
-      authDao.addUser(DelphiUser(None, "user3" , "user3", DelphiUserType.User))
+      authDao.addUser(DelphiUser(None, "user3" , Some("user3"), DelphiUserType.User))
       Get("/users/1") ~> addAuthorization("Admin") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.OK)
       }
