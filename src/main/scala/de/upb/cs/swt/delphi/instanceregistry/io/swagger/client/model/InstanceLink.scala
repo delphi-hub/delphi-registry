@@ -42,9 +42,6 @@ trait InstanceLinkJsonSupport extends SprayJsonSupport with DefaultJsonProtocol 
 
 final case class InstanceLink(idFrom: Long, idTo:Long, linkState: LinkState)
 
-final case class InstanceLinkList(idFrom: List[InstanceLink], idTo:Long, linkState: LinkState)
-
-
 object LinkEnums {
   type LinkState = LinkState.Value
 

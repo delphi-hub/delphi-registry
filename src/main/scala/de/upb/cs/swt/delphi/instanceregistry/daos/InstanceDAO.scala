@@ -167,5 +167,4 @@ trait InstanceDAO {
     * @return Success if instance is present and label does not exceed character limit, false otherwise.
     */
   def addLabelFor(id: Long, label: String) : Try[Unit]
-
 }

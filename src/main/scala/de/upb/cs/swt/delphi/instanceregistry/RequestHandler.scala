@@ -256,17 +256,13 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
       }
       log.debug(s"Applied matching result $matchingSuccess to instance with id $matchedInstanceId.")
 
-      //santosh
-
       //Update link state
       if (!matchingSuccess) {
-
         val link = InstanceLink(callerId, matchedInstanceId, LinkState.Failed)
-
         instanceDao.updateLink(link) match {
           case Success(_) =>
             fireLinkStateChangedEvent(link)
-            handleMultipleList(matchedInstanceId)
+            handleLinksUpdate(matchedInstanceId)
             OperationResult.Ok
           case Failure(_) => OperationResult.InternalError //Should not happen
         }
@@ -278,17 +274,17 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
   }
 
 
-  def handleMultipleList(matchedInstanceId: Long) = {
+  def handleLinksUpdate(matchedInstanceId: Long): Unit = {
 
     val getlinkFrom = instanceDao.getLinksTo(matchedInstanceId)
     for (linklist <- getlinkFrom) {
       if (linklist.linkState != LinkState.Failed) {
-        log.info(s"value in new block is From: ${linklist.idFrom}, MI: $matchedInstanceId To: ${linklist.idTo}")
+        log.debug(s"value in new block is From: ${linklist.idFrom}, MI: $matchedInstanceId To: ${linklist.idTo}")
         val link = InstanceLink(linklist.idFrom, matchedInstanceId, LinkState.Failed)
         instanceDao.updateLink(link) match {
           case Success(_) =>
             fireLinkStateChangedEvent(link)
-          case Failure(ex) => log.warning(s"There was a failure while updating the link state ${ex.getMessage}") //Should not happen
+          case Failure(ex) => log.warning(s"There was a failure while updating the link state ${ex.getMessage}")
         }
       }
     }
