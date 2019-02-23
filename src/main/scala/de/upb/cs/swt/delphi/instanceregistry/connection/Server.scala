@@ -420,7 +420,7 @@ class Server(handler: RequestHandler) extends HttpApp
                 complete {
                   HttpResponse(StatusCodes.NotFound, entity = s"One of the ids $callerId and $affectedInstanceId was not found.")
                 }
-              case (handler.OperationResult.Ok) =>
+              case handler.OperationResult.Ok =>
                 complete {
                   s"Matching result $result processed."
                 }

@@ -237,7 +237,7 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
     }
   }
 
-  def handleMatchingResult(callerId: Long, matchedInstanceId: Long, matchingSuccess: Boolean) = {
+  def handleMatchingResult(callerId: Long, matchedInstanceId: Long, matchingSuccess: Boolean): OperationResult.Value = {
     if (!instanceDao.hasInstance(callerId) || !instanceDao.hasInstance(matchedInstanceId)) {
       OperationResult.IdUnknown
     } else {
@@ -261,33 +261,36 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
       //Update link state
       if (!matchingSuccess) {
 
-        val getVal = instanceDao.getLinksTo(matchedInstanceId)
+        val link = InstanceLink(callerId, matchedInstanceId, LinkState.Failed)
 
-        //  if (!getVal.isEmpty) {
+        instanceDao.updateLink(link) match {
+          case Success(_) =>
+            fireLinkStateChangedEvent(link)
+            handleMultipleList(matchedInstanceId)
+            OperationResult.Ok
+          case Failure(_) => OperationResult.InternalError //Should not happen
+        }
+      } else {
+        OperationResult.Ok
+      }
 
-        // for (a <- getVal.foreach(i => i.idFrom)) yield a
+    }
+  }
 
 
-        getVal.foreach { in =>
+  def handleMultipleList(matchedInstanceId: Long) = {
 
-          val link = InstanceLink(in.idFrom, matchedInstanceId, LinkState.Failed)
-
-
-          instanceDao.updateLink(link)
-
-          match {
-            case Success(_) =>
-              fireLinkStateChangedEvent(link)
-              OperationResult.Ok
-            case Failure(_) => (OperationResult.InternalError) //Should not happen
-          }
-
+    val getlinkFrom = instanceDao.getLinksTo(matchedInstanceId)
+    for (linklist <- getlinkFrom) {
+      if (linklist.linkState != LinkState.Failed) {
+        log.info(s"value in new block is From: ${linklist.idFrom}, MI: $matchedInstanceId To: ${linklist.idTo}")
+        val link = InstanceLink(linklist.idFrom, matchedInstanceId, LinkState.Failed)
+        instanceDao.updateLink(link) match {
+          case Success(_) =>
+            fireLinkStateChangedEvent(link)
+          case Failure(ex) => log.warning(s"There was a failure while updating the link state ${ex.getMessage}") //Should not happen
         }
       }
-      else {
-        (OperationResult.Ok)
-      }
-
     }
   }
 
@@ -1104,6 +1107,7 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
     instanceDao.addEventFor(link.idFrom, event)
     instanceDao.addEventFor(link.idTo, event)
   }
+
 
   private def countConsecutivePositiveMatchingResults(id: Long): Int = {
     if (!instanceDao.hasInstance(id) || instanceDao.getMatchingResultsFor(id).get.isEmpty) {
