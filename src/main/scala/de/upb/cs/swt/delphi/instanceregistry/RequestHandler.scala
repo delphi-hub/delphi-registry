@@ -242,8 +242,6 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
       OperationResult.IdUnknown
     } else {
       val matchedInstance = instanceDao.getInstance(matchedInstanceId).get
-
-      log.info(s"called id is $callerId and matched id is $matchedInstanceId")
       //Update list of matching results
       instanceDao.addMatchingResult(matchedInstanceId, matchingSuccess)
       //Update state of matchedInstance accordingly
@@ -279,7 +277,6 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
     val getlinkFrom = instanceDao.getLinksTo(matchedInstanceId)
     for (linklist <- getlinkFrom) {
       if (linklist.linkState != LinkState.Failed) {
-        log.debug(s"value in new block is From: ${linklist.idFrom}, MI: $matchedInstanceId To: ${linklist.idTo}")
         val link = InstanceLink(linklist.idFrom, matchedInstanceId, LinkState.Failed)
         instanceDao.updateLink(link) match {
           case Success(_) =>
