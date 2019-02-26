@@ -36,6 +36,8 @@ import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
 
+
+// scalastyle:off number.of.methods
 class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao: InstanceDAO, connection: DockerConnection) extends AppLogging {
 
 
@@ -256,35 +258,41 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
 
       //Update link state
       if (!matchingSuccess) {
-        val link = InstanceLink(callerId, matchedInstanceId, LinkState.Failed)
-        instanceDao.updateLink(link) match {
+
+        setActiveLinksToFailed(matchedInstanceId) match {
           case Success(_) =>
-            fireLinkStateChangedEvent(link)
-            handleLinksUpdate(matchedInstanceId)
             OperationResult.Ok
-          case Failure(_) => OperationResult.InternalError //Should not happen
+          case Failure(_) =>
+            // Message logged by method
+            OperationResult.InternalError
         }
       } else {
         OperationResult.Ok
       }
-
     }
   }
 
 
-  def handleLinksUpdate(matchedInstanceId: Long): Unit = {
+  def setActiveLinksToFailed(failedInstanceId: Long): Try[Unit] = {
 
-    val getlinkFrom = instanceDao.getLinksTo(matchedInstanceId)
-    for (linklist <- getlinkFrom) {
-      if (linklist.linkState != LinkState.Failed) {
-        val link = InstanceLink(linklist.idFrom, matchedInstanceId, LinkState.Failed)
-        instanceDao.updateLink(link) match {
+    val linksToFailedInstance = instanceDao.getLinksTo(failedInstanceId)
+    var errors = false
+
+    for (link <- linksToFailedInstance) {
+      //Do not update outdated links
+      if (link.linkState == LinkState.Assigned) {
+        val newLink = InstanceLink(link.idFrom, failedInstanceId, LinkState.Failed)
+        instanceDao.updateLink(newLink) match {
           case Success(_) =>
             fireLinkStateChangedEvent(link)
-          case Failure(ex) => log.warning(s"There was a failure while updating the link state ${ex.getMessage}")
+          case Failure(ex) =>
+            errors = true
+            log.warning(s"There was a failure while updating the link state ${ex.getMessage}")
         }
       }
     }
+
+    if(errors) Failure(new RuntimeException("Link updates unsuccessful")) else Success()
   }
 
   // scalastyle:off method.length
