@@ -1,3 +1,18 @@
+// Copyright (C) 2018 The Delphi Team.
+// See the LICENCE file distributed with this work for additional
+// information regarding copyright ownership.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 package de.upb.cs.swt.delphi.instanceregistry.authorization
 
 import java.nio.charset.StandardCharsets
@@ -6,7 +21,7 @@ import akka.actor.ActorSystem
 import akka.http.scaladsl.model.DateTime
 import akka.http.scaladsl.server.directives.Credentials
 import de.upb.cs.swt.delphi.instanceregistry.authorization.AccessTokenEnums.UserType
-import de.upb.cs.swt.delphi.instanceregistry.daos.{AuthDAO, DatabaseAuthDAO}
+import de.upb.cs.swt.delphi.instanceregistry.daos.AuthDAO
 import pdi.jwt.{Jwt, JwtAlgorithm, JwtClaim}
 import de.upb.cs.swt.delphi.instanceregistry.{AppLogging, Registry}
 import spray.json._
@@ -19,7 +34,7 @@ class AuthProvider(authDAO: AuthDAO) extends AppLogging {
 
   def authenticateBasicJWT(credentials: Credentials) : Option[String] = {
     credentials match {
-      case p @ Credentials.Provided(userName)  => {
+      case p @ Credentials.Provided(userName)  =>
         if (getSecretForUser(userName).isEmpty) {
           None
         } else if(p.verify(getSecretForUser(userName).get, hashString)){
@@ -27,7 +42,6 @@ class AuthProvider(authDAO: AuthDAO) extends AppLogging {
         } else {
           None
         }
-      }
       case _ => None
     }
   }
@@ -39,7 +53,7 @@ class AuthProvider(authDAO: AuthDAO) extends AppLogging {
   private def getSecretForUser(userName: String): Option[String] ={
     val user = authDAO.getUserWithUsername(userName)
     if(user.isDefined){
-      Some(user.get.secret)
+      Some(user.get.secret.get)
     } else {
       None
     }
@@ -49,7 +63,7 @@ class AuthProvider(authDAO: AuthDAO) extends AppLogging {
     Jwt.decodeRawAll(token, Registry.configuration.jwtSecretKey, Seq(JwtAlgorithm.HS256)) match {
       case Success((_, payload, _)) =>
         parseDelphiTokenPayload(payload) match {
-          case Success(user_type) =>
+          case Success(_) =>
             log.info(s"Successfully parsed Delphi Authorization token")
             true
           case Failure(ex) =>

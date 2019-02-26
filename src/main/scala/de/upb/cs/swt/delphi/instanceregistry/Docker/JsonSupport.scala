@@ -1,12 +1,28 @@
+// Copyright (C) 2018 The Delphi Team.
+// See the LICENCE file distributed with this work for additional
+// information regarding copyright ownership.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 package de.upb.cs.swt.delphi.instanceregistry.Docker
 
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
+import de.upb.cs.swt.delphi.instanceregistry.Docker.ContainerStatusEnums.CommandType
 import spray.json.{DefaultJsonProtocol, JsString, JsValue, JsonFormat}
 
 
 trait JsonSupport extends SprayJsonSupport with DefaultJsonProtocol {
 
-  implicit val ContainerStatusFormat = new JsonFormat[ContainerStatusEnums.CommandType] {
+  implicit val containerStatusFormat: JsonFormat[CommandType] = new JsonFormat[ContainerStatusEnums.CommandType] {
 
     def write(compType: ContainerStatusEnums.CommandType) = JsString(compType.toString)
 
@@ -25,7 +41,7 @@ trait JsonSupport extends SprayJsonSupport with DefaultJsonProtocol {
     }
   }
 
-  implicit val ContainerResponseFormat = new JsonFormat[ContainerResponseEnums.CommandType] {
+  implicit val containerResponseFormat: JsonFormat[ContainerResponseEnums.CommandType] = new JsonFormat[ContainerResponseEnums.CommandType] {
 
     def write(compType: ContainerResponseEnums.CommandType) = JsString(compType.toString)
 
@@ -39,7 +55,7 @@ trait JsonSupport extends SprayJsonSupport with DefaultJsonProtocol {
     }
   }
 
-  implicit val ContainerConfigFormat = new JsonFormat[ContainerConfigEnums.CommandType] {
+  implicit val containerConfigFormat: JsonFormat[ContainerConfigEnums.CommandType] = new JsonFormat[ContainerConfigEnums.CommandType] {
 
     def write(compType: ContainerConfigEnums.CommandType) = JsString(compType.toString)
 
@@ -55,7 +71,7 @@ trait JsonSupport extends SprayJsonSupport with DefaultJsonProtocol {
     }
   }
 
-  implicit val NetworksFormat = new JsonFormat[NetworksEnums.CommandType] {
+  implicit val networksFormat: JsonFormat[NetworksEnums.CommandType] = new JsonFormat[NetworksEnums.CommandType] {
 
     def write(compType: NetworksEnums.CommandType) = JsString(compType.toString)
 
@@ -67,13 +83,18 @@ trait JsonSupport extends SprayJsonSupport with DefaultJsonProtocol {
       case y => throw new RuntimeException(s"Unexpected type $y while deserializing")
     }
   }
-  implicit val StatusFormat = jsonFormat6(ContainerStatus)
-  implicit val ResponseFormat = jsonFormat2(CreateContainerResponse)
-  implicit val ExposedPortConfigFormat = jsonFormat0(EmptyExposedPortConfig)
-  implicit val EndpointsConfigFormat = jsonFormat0(EmptyEndpointConfig)
-  implicit val NetworkConfigFormat = jsonFormat1(NetworkConfig)
-  implicit val ConfigFormat = jsonFormat7(ContainerConfig)
-  implicit val NetworkFormat = jsonFormat1(Networks)
+  implicit val statusFormat: JsonFormat[ContainerStatus] = jsonFormat6(ContainerStatus)
+  implicit val exposedPortConfigFormat :JsonFormat[EmptyExposedPortConfig] = jsonFormat0(EmptyExposedPortConfig)
+  implicit val endpointsConfigFormat :JsonFormat[EmptyEndpointConfig] = jsonFormat0(EmptyEndpointConfig)
+  implicit val networkConfigFormat :JsonFormat[NetworkConfig] = jsonFormat1(NetworkConfig)
+  implicit val networkFormat :JsonFormat[Networks] = jsonFormat1(Networks)
+
+  //For some reason you cannot type below variables explicitly, it will result in syntax errors when marshalling..
+
+  //noinspection TypeAnnotation
+  implicit val responseFormat = jsonFormat2(CreateContainerResponse)
+  //noinspection TypeAnnotation
+  implicit val configFormat  = jsonFormat7(ContainerConfig)
 }
 
 
@@ -112,7 +133,7 @@ object ContainerConfigEnums {
     val Image: Value = Value("Image")
     val EntryPoint: Value = Value("Entrypoint")
     val Command: Value = Value("Cmd")
-    val EnvironmentVariables = Value("Env")
+    val EnvironmentVariables: Value = Value("Env")
   }
 
 }

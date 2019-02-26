@@ -31,7 +31,9 @@ paths:
       tags:
         - Meta
       summary: Retreives general configuration information
-      description: Retrieves an object containing the most important configuration values of the registry. This contains the docker and traefik URIs.
+      description: >-
+        Retrieves an object containing the most important configuration values
+        of the registry. This contains the docker and traefik URIs.
       operationId: configurationInfo
       responses:
         '200':
@@ -41,51 +43,52 @@ paths:
             properties:
               DockerHttpApi:
                 type: string
-                example: "172.0.2.1:9095"
+                example: '172.0.2.1:9095'
               TraefikProxyUri:
                 type: string
-                example: "172.0.2.1:80"
+                example: '172.0.2.1:80'
   /users/authenticate:
     post:
       tags:
         - User Management
       summary: Authenticates a user and returns a valid JWT
-      description: >- 
-        This endpoints validates the username and password that must 
-        be supplied in the Authorization header (using HTTP Basic Authentication).
-        If valid, a JSON Web Token will be generated and returned, that may be used 
-        to authenticate the user for subsequent requests.
+      description: >-
+        This endpoints validates the username and password that must  be
+        supplied in the Authorization header (using HTTP Basic Authentication).
+        If valid, a JSON Web Token will be generated and returned, that may be
+        used  to authenticate the user for subsequent requests.
       operationId: authenticate
       parameters:
         - in: header
           name: Delphi-Authorization
-          description: >-
-            Valid JWT that autenticates the calling entity.
+          description: Valid JWT that autenticates the calling entity.
           type: string
           required: true
         - in: header
           name: Authorization
-          description: >- 
-            HTTP Basic Authentication following the schema 'Basic <User:Password>
-            where the concatination of username and password is Base64-Encoded.
+          description: >-
+            HTTP Basic Authentication following the schema 'Basic
+            <User:Password> where the concatination of username and password is
+            Base64-Encoded.
           type: string
           required: true
       responses:
         '200':
-          description: Supplied data is valid, a JWT is returned
+          description: 'Supplied data is valid, a JWT is returned'
           schema:
             type: string
-            example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c
+            example: >-
+              eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c
         '401':
-          description: Unauthorized, invalid username / password supplied.
+          description: 'Unauthorized, invalid username / password supplied.'
   /users/add:
     post:
       tags:
         - User Management
       summary: Adds a new users for the registry
       description: >-
-        Adds a new user that is passed in the requests entity. The id of the user
-        will be returned.
+        Adds a new user that is passed in the requests entity. The id of the
+        user will be returned.
       operationId: addUser
       parameters:
         - in: body
@@ -113,13 +116,70 @@ paths:
                   - Component
       responses:
         '200':
-          description: OK, user has been added, id is returned
+          description: 'OK, user has been added, id is returned'
           schema:
             type: integer
             format: int64
             example: 42
         '400':
-          description: Bad request, name already exists
+          description: 'Bad request, name already exists'
+  /users:
+    get:
+      tags:
+        - User Management
+      summary: Gets a list of all registered users
+      description: >-
+        Returns a list of all users registered at the registry. Requires caller to have admin privileges.
+      operationId: allUsers
+      responses:
+        '200':
+          description: "OK, list of users is being returned"
+          schema:
+            type: array
+            items:
+              $ref: '#/definitions/User'
+  /users/{Id}:
+    get:
+      tags:
+        - User Management
+      summary: Gets the user with the specified id
+      description: >-
+        Returns the user with the specified id, if that id is present at the registry.
+      operationId: retrieveUser
+      parameters:
+        - in: path
+          name: Id
+          required: true
+          description: Id of the user to retrieve
+          type: integer
+          format: int64
+      responses:
+        '200':
+          description: "OK, user is being returned"
+          schema:
+            $ref: '#/definitions/User'
+        '404':
+          description: "Id not found"
+  /users/{Id}/remove:
+    post:
+      tags:
+        - User Management
+      summary: Removes the user with the specified id
+      description: >-
+        Removes the user with the specified id, if that id is present at the registry.
+      operationId: removeUser
+      parameters:
+        - in: path
+          name: Id
+          required: true
+          description: Id of the user to remove
+          type: integer
+          format: int64
+      responses:
+        '200':
+          description: "OK, user has been removed"
+        '404':
+          description: "Id not found"
   /instances/register:
     post:
       tags:
@@ -657,13 +717,6 @@ paths:
           required: true
           type: integer
           format: int64
-        - in: body
-          name: ErrorLog
-          description: An optional string explaining the failure
-          required: false
-          schema:
-            type: string
-            example: Something went wrong..
       responses:
         '200':
           description: Report successfully processed.
@@ -893,6 +946,24 @@ paths:
         '500':
           description: 'Internal server error, unknown operation result DESCRIPTION'
 definitions:
+  User:
+    type: object
+    required:
+      - userName
+      - secret
+      - userType
+    properties:
+      id:
+        type: integer
+        format: int64
+      userName:
+        type: string
+        example: Ben
+      userType:
+        type: string
+        enum:
+          - User
+          - Admin
   InstanceLink:
     type: object
     required:

@@ -33,9 +33,9 @@ import org.scalatest.{Matchers, WordSpec}
 import pdi.jwt.{Jwt, JwtAlgorithm, JwtClaim}
 import spray.json._
 
-import scala.concurrent.Await
-import scala.concurrent.duration.Duration
 import scala.util.{Failure, Success, Try}
+
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.DelphiUserEnums.DelphiUserType
 
 
 class ServerTest
@@ -43,6 +43,7 @@ class ServerTest
     with Matchers
     with ScalatestRouteTest
     with InstanceJsonSupport
+    with UserJsonSupport
     with EventJsonSupport {
 
   private val configuration: Configuration = new Configuration()
@@ -61,12 +62,25 @@ class ServerTest
   //Invalid Json syntax: missing quotation mark
   private val invalidJsonInstance = validJsonInstance.replace(""""name":"ValidInstance",""", """"name":Invalid", """)
 
-
+  private val validJsonDelphiUser = DelphiUser(id = None,
+                                              userName = "validUser" , secret = Some("validUser"),
+                                              userType = DelphiUserType.Admin).toJson(authDelphiUserFormat
+                                              ).toString
+  private val invalidTypedJsonDelphiUser = validJsonDelphiUser.replace(""""userType":"User",""", """"userType":"Component",""")
+  private val invalidJsonDelphiUser = validJsonDelphiUser.replace(""""userType":"User",""", "")
+  private val sameUsernameJsonDelphiUser = validJsonDelphiUser.replace(""""userName":"validUser",""", """"userName":"admin",""")
+  private val delphiAuthorizationToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiU2FtaSBraGFuIiwidXNlcl9" +
+    "0eXBlIjoiQ29tcG9uZW50In0.VqFWsbsrxDEqNygbx4eIoVEmFnlIvIQX6joPoYM4CZg"
+  private val timeExpiredUserToken = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJleHAiOjE1NTAxNTU2NTAsIm5iZiI6MTU1MDE1NTU5MCwiaWF0IjoxNTUwMTU1NTkwLCJ1c2VyX2lk" +
+    "IjoiYWRtaW4iLCJ1c2VyX3R5cGUiOiJBZG1pbiJ9.oNKAWxMRGekcpbdyvI99ljYTd09pvNtM3R8ZyOf0QKg"
   /**
     * Before all tests: Initialize handler and wait for server binding to be ready.
     */
   override def beforeAll(): Unit = {
     requestHandler.initialize()
+    authDao.initialize()
+    authDao.addUser(DelphiUser(None, "admin" , Some("admin"), DelphiUserType.Admin))
+    authDao.addUser(DelphiUser(None, "user" , Some("user"), DelphiUserType.User))
   }
 
   /**
@@ -74,8 +88,6 @@ class ServerTest
     */
   override def afterAll(): Unit = {
     requestHandler.shutdown()
-    Await.ready(Registry.system.terminate(), Duration.Inf)
-    Await.ready(system.terminate(), Duration.Inf)
   }
 
   "The Server" should {
@@ -97,13 +109,15 @@ class ServerTest
       }
 
       //Wrong JSON syntax
-      Post("/instances/register", HttpEntity(ContentTypes.`application/json`, invalidJsonInstance.stripMargin)) ~> addAuthorization("Component") ~> server.routes ~> check {
+      Post("/instances/register", HttpEntity(ContentTypes.`application/json`, invalidJsonInstance.stripMargin)) ~>
+        addAuthorization("Component") ~> server.routes ~> check {
         assert(status === StatusCodes.BAD_REQUEST)
         responseAs[String].toLowerCase should include("failed to parse json")
       }
 
       //Missing required JSON members
-      Post("/instances/register", HttpEntity(ContentTypes.`application/json`, validJsonInstanceMissingRequiredMember.stripMargin)) ~> addAuthorization("Component") ~> server.routes ~> check {
+      Post("/instances/register", HttpEntity(ContentTypes.`application/json`, validJsonInstanceMissingRequiredMember.stripMargin)) ~>
+        addAuthorization("Component") ~> server.routes ~> check {
         assert(status === StatusCodes.BAD_REQUEST)
         responseAs[String].toLowerCase should include("could not deserialize parameter instance")
       }
@@ -124,6 +138,172 @@ class ServerTest
       Post("/instances/register?InstanceString=25") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.UNAUTHORIZED)
         responseAs[String].toLowerCase should include("not supplied with the request")
+      }
+
+    }
+
+    "authenticate user if a valid user" in {
+      Post("/users/authenticate") ~> addBasicAuth("admin", "admin") ~> addHeader("Delphi-Authorization", delphiAuthorizationToken) ~>  server.routes ~> check {
+        assert(status === StatusCodes.OK)
+      }
+    }
+
+    "not authenticate user if request is invalid" in {
+
+      //wrong password
+      val wrongPasswordException = intercept[Exception] {
+        Post("/users/authenticate") ~> addBasicAuth("admin", "admin123") ~>
+          addHeader("Delphi-Authorization", delphiAuthorizationToken) ~>  server.routes ~> check {
+          assert(status === StatusCodes.BAD_REQUEST)
+        }
+      }
+      wrongPasswordException.getMessage contains "Request was rejected with rejection AuthenticationFailedRejection"
+
+      //wrong delphi token
+      Post("/users/authenticate") ~> addBasicAuth("admin", "admin") ~> addHeader("Delphi-Authorization", "test") ~>  server.routes ~> check {
+        assert(status === StatusCodes.UNAUTHORIZED)
+      }
+
+    }
+
+    "successfully create user when everything is valid" in {
+      Post("/users/add", HttpEntity(ContentTypes.`application/json`, validJsonDelphiUser.stripMargin))~>
+        addAuthorization("Admin") ~> Route.seal(server.routes) ~> check {
+        assert(status === StatusCodes.OK)
+      }
+    }
+
+    "not create user if request is invalid" in {
+      //Required type of user authorization needed to create user
+      Post("/users/add") ~> addAuthorization("User") ~> Route.seal(server.routes) ~> check {
+        assert(status === StatusCodes.UNAUTHORIZED)
+      }
+
+      //should use valid request method
+      Get("/users/add") ~> addAuthorization("Admin") ~> Route.seal(server.routes) ~> check {
+        assert(status === StatusCodes.METHOD_NOT_ALLOWED)
+        responseAs[String] shouldEqual "HTTP method not allowed, supported methods: POST"
+      }
+
+      //user type should be valid
+      Post("/users/add", HttpEntity(ContentTypes.`application/json`, invalidTypedJsonDelphiUser.stripMargin)) ~>
+        addAuthorization("Admin") ~> Route.seal(server.routes) ~> check {
+        assert(status === StatusCodes.BAD_REQUEST)
+      }
+
+      //not all required parameter given
+      Post("/users/add", HttpEntity(ContentTypes.`application/json`, invalidJsonDelphiUser.stripMargin)) ~>
+        addAuthorization("Admin") ~> Route.seal(server.routes) ~> check {
+        assert(status === StatusCodes.BAD_REQUEST)
+      }
+
+      //trying to insert same username
+      Post("/users/add", HttpEntity(ContentTypes.`application/json`, sameUsernameJsonDelphiUser.stripMargin)) ~>
+        addAuthorization("Admin") ~> Route.seal(server.routes) ~> check {
+        assert(status === StatusCodes.BAD_REQUEST)
+      }
+
+      //request with expired token
+      Post("/users/add", HttpEntity(ContentTypes.`application/json`, validJsonDelphiUser.stripMargin))~>
+        addHeader("Authorization", "Bearer " + timeExpiredUserToken) ~>
+        Route.seal(server.routes) ~> check {
+          assert(status === StatusCodes.UNAUTHORIZED)
+      }
+    }
+
+    "successfully remove user when everything is valid" in {
+      authDao.addUser(DelphiUser(None, "user3" , Some("user3"), DelphiUserType.User))
+      Post("/users/3/remove") ~> addAuthorization("Admin") ~> Route.seal(server.routes) ~> check {
+        assert(status === StatusCodes.ACCEPTED)
+      }
+    }
+
+    "not remove user if request is invalid" in {
+      authDao.addUser(DelphiUser(None, "user4" , Some("user4"), DelphiUserType.User))
+      //Required type of user authorization needed to create user
+      Post("/users/4/remove") ~> addAuthorization("User") ~> Route.seal(server.routes) ~> check {
+        assert(status === StatusCodes.UNAUTHORIZED)
+      }
+
+      //should use valid request method
+      Get("/users/4/remove") ~> addAuthorization("Admin") ~> Route.seal(server.routes) ~> check {
+        assert(status === StatusCodes.METHOD_NOT_ALLOWED)
+        responseAs[String] shouldEqual "HTTP method not allowed, supported methods: POST"
+      }
+
+      //user should be valid
+      Post("/users/5/remove", HttpEntity(ContentTypes.`application/json`, invalidTypedJsonDelphiUser.stripMargin)) ~>
+        addAuthorization("Admin") ~> Route.seal(server.routes) ~> check {
+        assert(status === StatusCodes.BAD_REQUEST)
+      }
+
+      //request with expired token
+      Post("/users/4/remove") ~> addHeader("Authorization", "Bearer " + timeExpiredUserToken) ~> Route.seal(server.routes) ~> check {
+        assert(status === StatusCodes.UNAUTHORIZED)
+      }
+    }
+
+    "successfully get user if user exist" in {
+      authDao.addUser(DelphiUser(None, "user3" , Some("user3"), DelphiUserType.User))
+      Get("/users/1") ~> addAuthorization("Admin") ~> Route.seal(server.routes) ~> check {
+        assert(status === StatusCodes.OK)
+      }
+    }
+
+    "not get user if request is invalid" in {
+
+      //Required type of user authorization needed to create user
+      Get("/users/1") ~> addAuthorization("User") ~> Route.seal(server.routes) ~> check {
+        assert(status === StatusCodes.UNAUTHORIZED)
+      }
+
+      //should use valid request method
+      Post("/users/1") ~> addAuthorization("Admin") ~> Route.seal(server.routes) ~> check {
+        assert(status === StatusCodes.METHOD_NOT_ALLOWED)
+        responseAs[String] shouldEqual "HTTP method not allowed, supported methods: GET"
+      }
+
+      //user should be valid
+      Get("/users/5", HttpEntity(ContentTypes.`application/json`, invalidTypedJsonDelphiUser.stripMargin)) ~>
+        addAuthorization("Admin") ~> Route.seal(server.routes) ~> check {
+        assert(status === StatusCodes.NOT_FOUND)
+      }
+
+      //request with expired token
+      Get("/users/1") ~> addHeader("Authorization", "Bearer " + timeExpiredUserToken) ~> Route.seal(server.routes) ~> check {
+        assert(status === StatusCodes.UNAUTHORIZED)
+      }
+    }
+
+    "successfully get all user" in {
+      //Valid get instances with no parameter
+      Get("/users") ~> addAuthorization("Admin") ~> server.routes ~> check {
+        assert(status === StatusCodes.OK)
+        Try(responseAs[String].parseJson.convertTo[List[DelphiUser]](listFormat(authDelphiUserFormat))) match {
+          case Success(listOfUsers) =>
+            listOfUsers.size shouldEqual 5
+            listOfUsers.exists(user => user.userName.equals("admin")) shouldBe true
+          case Failure(ex) =>
+            fail(ex)
+        }
+      }
+    }
+
+    "not get all user if request is invalid" in {
+
+      //Required type of user authorization needed to create user
+      Get("/users") ~> addAuthorization("User") ~> Route.seal(server.routes) ~> check {
+        assert(status === StatusCodes.UNAUTHORIZED)
+      }
+
+      //should use valid request method
+      Post("/users") ~> addAuthorization("Admin") ~> Route.seal(server.routes) ~> check {
+        assert(status === StatusCodes.METHOD_NOT_ALLOWED)
+        responseAs[String] shouldEqual "HTTP method not allowed, supported methods: GET"
+      }
+
+      Get("/users") ~> addHeader("Authorization", "Bearer " + timeExpiredUserToken) ~> Route.seal(server.routes) ~> check {
+        assert(status === StatusCodes.UNAUTHORIZED)
       }
 
     }
@@ -404,7 +584,8 @@ class ServerTest
       val id2 = assertValidRegister(ComponentType.WebApi)
 
 
-      Post(s"/instances/$id1/matchingResult", HttpEntity(ContentTypes.`application/json`, s"""{ "MatchingSuccessful": true, "SenderId" : $id2}""")) ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
+      Post(s"/instances/$id1/matchingResult", HttpEntity(ContentTypes.`application/json`, s"""{ "MatchingSuccessful": true, "SenderId" : $id2}""")) ~>
+        addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.OK)
         responseAs[String] shouldEqual "Matching result true processed."
       }
@@ -418,24 +599,28 @@ class ServerTest
     "not process matching result if method or parameters are invalid" in {
       //Wrong method
 
-      Get(s"/instances/0/matchingResult", HttpEntity(ContentTypes.`application/json`, s"""{ "MatchingSuccessful": true, "SenderId" : 0}""")) ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
+      Get(s"/instances/0/matchingResult", HttpEntity(ContentTypes.`application/json`, s"""{ "MatchingSuccessful": true, "SenderId" : 0}""")) ~>
+        addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.METHOD_NOT_ALLOWED)
         responseAs[String] shouldEqual "HTTP method not allowed, supported methods: POST"
       }
 
       //Invalid IDs - expect 404
-      Post(s"/instances/1/matchingResult", HttpEntity(ContentTypes.`application/json`, s"""{ "MatchingSuccessful": false, "SenderId" : 2}""")) ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
+      Post(s"/instances/1/matchingResult", HttpEntity(ContentTypes.`application/json`, s"""{ "MatchingSuccessful": false, "SenderId" : 2}""")) ~>
+        addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.NOT_FOUND)
       }
 
       //Wrong user type
-      Post(s"/instances/1/matchingResult", HttpEntity(ContentTypes.`application/json`, s"""{ "MatchingSuccessful": false, "SenderId" : 2}""")) ~> addAuthorization("User") ~> Route.seal(server.routes) ~> check {
+      Post(s"/instances/1/matchingResult", HttpEntity(ContentTypes.`application/json`, s"""{ "MatchingSuccessful": false, "SenderId" : 2}""")) ~>
+        addAuthorization("User") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.UNAUTHORIZED)
         responseAs[String] shouldEqual "The supplied authentication is invalid"
       }
 
       //No authorization
-      Post(s"/instances/1/matchingResult", HttpEntity(ContentTypes.`application/json`, s"""{ "MatchingSuccessful": false, "SenderId" : 2}""")) ~> Route.seal(server.routes) ~> check {
+      Post(s"/instances/1/matchingResult", HttpEntity(ContentTypes.`application/json`, s"""{ "MatchingSuccessful": false, "SenderId" : 2}""")) ~>
+        Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.UNAUTHORIZED)
         responseAs[String].toLowerCase should include("not supplied with the request")
       }
@@ -611,7 +796,8 @@ class ServerTest
 
     //Valid POST /instances/{id}/label
     "add a generic label to an instance is label and id are valid" in {
-      Post("/instances/0/label", HttpEntity(ContentTypes.`application/json`, """{ "Label": "Private"}""")) ~> addAuthorization("Admin") ~> server.routes ~> check {
+      Post("/instances/0/label", HttpEntity(ContentTypes.`application/json`, """{ "Label": "Private"}""")) ~> addAuthorization("Admin") ~>
+        server.routes ~> check {
         assert(status === StatusCodes.OK)
         responseAs[String] shouldEqual "Successfully added label"
       }
@@ -619,25 +805,29 @@ class ServerTest
     //Invalid POST /instances/{id}/label
     "fail to add label if id is invalid or label too long" in {
       //Unknown id - expect 404
-      Post("/instances/45/label", HttpEntity(ContentTypes.`application/json`, """{ "Label": "Private"}""")) ~> addAuthorization("Admin") ~> server.routes ~> check {
+      Post("/instances/45/label", HttpEntity(ContentTypes.`application/json`, """{ "Label": "Private"}""")) ~> addAuthorization("Admin") ~>
+        server.routes ~> check {
         assert(status === StatusCodes.NOT_FOUND)
         responseAs[String] shouldEqual "Cannot add label, id 45 not found."
       }
       //Label out of bounds - expect 400
       val tooLongLabel = "VeryVeryExtraLongLabelThatDoesNotWorkWhileAddingLabel"
       val jsonStr = tooLongLabel.toJson
-      Post("/instances/0/label", HttpEntity(ContentTypes.`application/json`, s"""{ "Label": $jsonStr}""")) ~> addAuthorization("Admin") ~> server.routes ~> check {
+      Post("/instances/0/label", HttpEntity(ContentTypes.`application/json`, s"""{ "Label": $jsonStr}""")) ~> addAuthorization("Admin") ~>
+        server.routes ~> check {
         assert(status === StatusCodes.BAD_REQUEST)
         responseAs[String].toLowerCase should include("exceeds character limit")
       }
       //Wrong user type
-      Post("/instances/0/label", HttpEntity(ContentTypes.`application/json`, """{ "Label": "Private"}""")) ~> addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
+      Post("/instances/0/label", HttpEntity(ContentTypes.`application/json`, """{ "Label": "Private"}""")) ~> addAuthorization("Component") ~>
+        Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.UNAUTHORIZED)
         responseAs[String] shouldEqual "The supplied authentication is invalid"
       }
 
       //Wrong user type
-      Post("/instances/0/label", HttpEntity(ContentTypes.`application/json`, """{ "Label": "Private"}""")) ~> addAuthorization("User") ~> Route.seal(server.routes) ~> check {
+      Post("/instances/0/label", HttpEntity(ContentTypes.`application/json`, """{ "Label": "Private"}""")) ~> addAuthorization("User") ~>
+        Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.UNAUTHORIZED)
         responseAs[String] shouldEqual "The supplied authentication is invalid"
       }
@@ -652,13 +842,15 @@ class ServerTest
     /** Minimal tests for docker operations **/
 
     "fail to deploy if component type is invalid" in {
-      Post("/instances/deploy", HttpEntity(ContentTypes.`application/json`, """{"ComponentType": "Car"}""")) ~> addAuthorization("Admin") ~> server.routes ~> check {
+      Post("/instances/deploy", HttpEntity(ContentTypes.`application/json`, """{"ComponentType": "Car"}""")) ~> addAuthorization("Admin") ~>
+        server.routes ~> check {
         status shouldEqual StatusCodes.BAD_REQUEST
         responseAs[String].toLowerCase should include("could not deserialize")
       }
 
       //Wrong user type
-      Post("/instances/deploy", HttpEntity(ContentTypes.`application/json`, """{"ComponentType": "Crawler"}""")) ~> addAuthorization("User") ~> server.routes ~> check {
+      Post("/instances/deploy", HttpEntity(ContentTypes.`application/json`, """{"ComponentType": "Crawler"}""")) ~> addAuthorization("User") ~>
+        server.routes ~> check {
         rejection.isInstanceOf[AuthenticationFailedRejection] shouldBe true
       }
 
@@ -702,7 +894,8 @@ class ServerTest
         responseAs[String].toLowerCase should include("not found")
       }
 
-      Post("/instances/42/assignInstance", HttpEntity(ContentTypes.`application/json`, """{ "AssignedInstanceId": 43}""")) ~> addAuthorization("Admin") ~> server.routes ~> check {
+      Post("/instances/42/assignInstance", HttpEntity(ContentTypes.`application/json`, """{ "AssignedInstanceId": 43}""")) ~>
+        addAuthorization("Admin") ~> server.routes ~> check {
         status shouldEqual StatusCodes.NOT_FOUND
         responseAs[String].toLowerCase should include("not found")
       }
@@ -765,7 +958,7 @@ class ServerTest
 
     "Requests" should {
       "throttle when limit reached" in {
-        for (i <- 1 to configuration.maxIndividualIpReq) {
+        for (_ <- 1 to configuration.maxIndividualIpReq) {
           Get(s"/instances/0/linksTo") ~> server.routes ~> check {}
         }
 
@@ -812,12 +1005,13 @@ class ServerTest
       .issuedNow
       .expiresIn(5)
       .startsNow
-      .+("user_id", "Server Unit Test")
-      .+("user_type", userType)
+      . + ("user_id", "Server Unit Test")
+      . + ("user_type", userType)
 
     Jwt.encode(claim, configuration.jwtSecretKey, JwtAlgorithm.HS256)
   }
 
   private def addAuthorization(userType: String): HttpRequest => HttpRequest = addHeader(Authorization.oauth2(generateValidTestToken(userType)))
 
+  private def addBasicAuth(username: String, password: String): HttpRequest => HttpRequest = addHeader(Authorization.basic(username, password))
 }

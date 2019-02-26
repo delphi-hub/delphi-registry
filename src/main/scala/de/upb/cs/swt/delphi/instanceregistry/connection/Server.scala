@@ -1,3 +1,18 @@
+// Copyright (C) 2018 The Delphi Team.
+// See the LICENCE file distributed with this work for additional
+// information regarding copyright ownership.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 package de.upb.cs.swt.delphi.instanceregistry.connection
 
 import akka.actor.ActorSystem
@@ -43,10 +58,12 @@ class Server(handler: RequestHandler) extends HttpApp
     }
   }
 
+  // scalastyle:off method.length
+
   //Routes that map http endpoints to methods in this object
   def apiRoutes: server.Route =
 
-  /** **************BASIC OPERATIONS ****************/
+  /****************BASIC OPERATIONS ****************/
     pathPrefix("instances") {
       pathEnd {
         fetchInstancesOfType()
@@ -133,6 +150,9 @@ class Server(handler: RequestHandler) extends HttpApp
         }
     } ~
     pathPrefix("users") {
+      pathEnd {
+        allUsers()
+      } ~
       path("add") {
         entity(as[String]) {
           jsonString => addUser(jsonString)
@@ -140,6 +160,14 @@ class Server(handler: RequestHandler) extends HttpApp
       } ~
       path("authenticate") {
         authenticate()
+      } ~
+      pathPrefix(LongNumber) { Id =>
+        pathEnd {
+          retrieveUser(Id)
+        } ~
+        path("remove") {
+          removeUser(Id)
+        }
       }
     } ~
     path("events") {
@@ -149,7 +177,7 @@ class Server(handler: RequestHandler) extends HttpApp
       configurationInfo()
     }
 
-
+  //scalastyle:on method.length
 
   /**
     * Registers a new instance at the registry. This endpoint is intended for instances that are not running inside
@@ -193,8 +221,8 @@ class Server(handler: RequestHandler) extends HttpApp
   }
 
   /**
-    * Removes an instance. The id of the instance that is calling deregister must be passed as an query argument named
-    * 'Id' (so the call is /deregister?Id=42). This endpoint is intended for instances that are not running inside
+    * Removes an instance. The id of the instance that is calling deregister must be passed as an path argument named
+    * 'Id' (so the call is /instances/42/deregister). This endpoint is intended for instances that are not running inside
     * a docker container, as the respective instance will be permanently deleted from the registry.
     *
     * @return Server route that either maps to a 200 OK response if successful, or to the respective error codes.
@@ -245,11 +273,11 @@ class Server(handler: RequestHandler) extends HttpApp
 
         if (compType != null) {
           complete {
-            handler.getAllInstancesOfType(compType)
+            handler.getAllInstancesOfType(Some(compType))
           }
         } else if (compTypeStr == noValue) {
           complete {
-            handler.getAllInstancesType().toList
+            handler.getAllInstancesOfType(None).toList
           }
         }
         else {
@@ -262,7 +290,7 @@ class Server(handler: RequestHandler) extends HttpApp
 
   /**
     * Returns the number of instances for the specified ComponentType. The ComponentType must be passed as an query
-    * argument named 'ComponentType' (so the call is /numberOfInstances?ComponentType=Crawler).
+    * argument named 'ComponentType' (so the call is /instances/count?ComponentType=Crawler).
     *
     * @return Server route that either maps to a 200 OK response containing the number of instance, or the resp. error codes.
     */
@@ -279,11 +307,11 @@ class Server(handler: RequestHandler) extends HttpApp
 
         if (compType != null) {
           complete {
-            handler.getNumberOfInstances(compType).toString()
+            handler.getNumberOfInstances(Some(compType)).toString()
           }
         } else if (compTypeStr == noValue) {
           complete {
-            handler.getAllInstancesCount().toString()
+            handler.getNumberOfInstances(None).toString()
           }
         }
         else {
@@ -295,8 +323,7 @@ class Server(handler: RequestHandler) extends HttpApp
   }
 
   /**
-    * Returns an instance with the specified id. Id is passed as query argument named 'Id' (so the resulting call is
-    * /instance?Id=42)
+    * Returns an instance with the specified id. Id is passed as path argument  (so the resulting call is /instances/42)
     *
     * @return Server route that either maps to 200 OK and the respective instance as entity, or 404.
     */
@@ -320,14 +347,14 @@ class Server(handler: RequestHandler) extends HttpApp
 
   /**
     * Returns an instance of the specified ComponentType that can be used to resolve dependencies. The ComponentType must
-    * be passed as an query argument named 'ComponentType' (so the call is /matchingInstance?ComponentType=Crawler).
+    * be passed as an query argument named 'ComponentType' (so the call is /instances/42/matchingInstance?ComponentType=ElasticSearch).
     *
     * @return Server route that either maps to 200 OK response containing the instance, or the resp. error codes.
     */
-  def matchingInstance(id: Long): server.Route = parameters('ComponentType.as[String]) { (compTypeString) =>
+  def matchingInstance(id: Long): server.Route = parameters('ComponentType.as[String]) { compTypeString =>
     authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.Component)) { token =>
       get {
-        log.debug(s"GET instance/$id/matchingInstance?ComponentType=$compTypeString has been called")
+        log.debug(s"GET instances/$id/matchingInstance?ComponentType=$compTypeString has been called")
 
         val compType: ComponentType = ComponentType.values.find(v => v.toString == compTypeString).orNull
         log.debug(s"Looking for instance of type $compType ...")
@@ -368,8 +395,9 @@ class Server(handler: RequestHandler) extends HttpApp
   }
 
   /**
-    * Applies a matching result to the instance with the specified id. The matching result and id are passed as query
-    * parameters named 'Id' and 'MatchingSuccessful' (so the call is /matchingResult?Id=42&MatchingSuccessful=True).
+    * Applies a matching result to the instance with the specified id. The id of the affected instance is specified in the path.
+    * The matching result and the id of the instance sending the result are passed in the body of the request,
+    * named 'SenderId' and 'MatchingSuccessful' (so the call is /instances/42/matchingResult).
     *
     * @return Server route that either maps to 200 OK or to the respective error codes
     */
@@ -411,14 +439,14 @@ class Server(handler: RequestHandler) extends HttpApp
 
   /**
     * Returns a list of registry events that are associated to the instance with the specified id. The id is passed as
-    * query argument named 'Id' (so the resulting call is /eventList?Id=42).
+    * path argument (so the resulting call is /instances/42/eventList).
     *
     * @return Server route mapping to either 200 OK and the list of event, or the resp. error codes.
     */
   def eventList(id: Long): server.Route = {
     authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.User)) { token =>
       get {
-        log.debug(s"GET instances/$id//eventList has been called")
+        log.debug(s"GET instances/$id/eventList has been called")
 
         handler.getEventList(id) match {
           case Success(list) => complete {
@@ -451,8 +479,8 @@ class Server(handler: RequestHandler) extends HttpApp
 
   /**
     * Deploys a new container of the specified type. Also adds the resulting instance to the database. The mandatory
-    * parameter 'ComponentType' is passed as a query argument. The optional parameter 'InstanceName' may also be passed as
-    * query argument (so the resulting call may be /deploy?ComponentType=Crawler&InstanceName=MyCrawler).
+    * parameter 'ComponentType' is passed in the body of the request, as well as the optional parameter 'InstanceName'
+    * (so the resulting call is /instances/deploy).
     *
     * @return Server route that either maps to 202 ACCEPTED and the generated id of the instance, or the resp. error codes.
     */
@@ -500,8 +528,8 @@ class Server(handler: RequestHandler) extends HttpApp
   }
 
   /**
-    * Called to report that the instance with the specified id was started successfully. The Id is passed as query
-    * parameter named 'Id' (so the resulting call is /reportStart?Id=42)
+    * Called to report that the instance with the specified id was started successfully. The Id is passed as path
+    * parameter (so the resulting call is /instances/42/reportStart)
     *
     * @return Server route that either maps to 200 OK or the respective error codes
     */
@@ -533,8 +561,8 @@ class Server(handler: RequestHandler) extends HttpApp
   }
 
   /**
-    * Called to report that the instance with the specified id was stopped successfully. The Id is passed as query
-    * parameter named 'Id' (so the resulting call is /reportStop?Id=42)
+    * Called to report that the instance with the specified id was stopped successfully. The Id is passed as path parameter
+    * (so the resulting call is /instances/42/reportStop)
     *
     * @return Server route that either maps to 200 OK or the respective error codes
     */
@@ -566,21 +594,18 @@ class Server(handler: RequestHandler) extends HttpApp
   }
 
   /**
-    * Called to report that the instance with the specified id encountered a failure. The Id is passed as query
-    * parameter named 'Id' (so the resulting call is /reportFailure?Id=42)
+    * Called to report that the instance with the specified id encountered a failure. The Id is passed as path parameter
+    * (so the resulting call is /instances/42/reportFailure)
     *
     * @return Server route that either maps to 200 OK or the respective error codes
     */
-  def reportFailure(id: Long): server.Route = parameters('ErrorLog.as[String].?) { (errorLog) =>
+  def reportFailure(id: Long): server.Route =  {
     authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.Component)) { token =>
       post {
-        if (errorLog.isEmpty) {
-          log.debug(s"POST /instances/$id/reportFailure has been called")
-        } else {
-          log.debug(s"POST /instances/$id/reportFailure&ErrorLog=${errorLog.get} has been called")
-        }
 
-        handler.handleReportFailure(id, errorLog) match {
+        log.debug(s"POST /instances/$id/reportFailure has been called")
+
+        handler.handleReportFailure(id) match {
           case handler.OperationResult.IdUnknown =>
             log.warning(s"Cannot report failure for id $id, that id was not found.")
             complete {
@@ -606,7 +631,7 @@ class Server(handler: RequestHandler) extends HttpApp
 
   /**
     * Called to pause the instance with the specified id. The associated docker container is paused. The Id is passed
-    * as a query argument named 'Id' (so the resulting call is /pause?Id=42).
+    * as a path parameter (so the resulting call is /instances/42/pause).
     *
     * @return Server route that either maps to 202 ACCEPTED or the expected error codes.
     */
@@ -645,7 +670,7 @@ class Server(handler: RequestHandler) extends HttpApp
 
   /**
     * Called to resume the instance with the specified id. The associated docker container is resumed. The Id is passed
-    * as a query argument named 'Id' (so the resulting call is /resume?Id=42).
+    * as a path parameter (so the resulting call is /instances/42/resume).
     *
     * @return Server route that either maps to 202 ACCEPTED or the expected error codes.
     */
@@ -684,7 +709,7 @@ class Server(handler: RequestHandler) extends HttpApp
 
   /**
     * Called to stop the instance with the specified id. The associated docker container is stopped. The Id is passed
-    * as a query argument named 'Id' (so the resulting call is /stop?Id=42).
+    * as a path parameter (so the resulting call is /instances/42/stop).
     *
     * @return Server route that either maps to 202 ACCEPTED or the expected error codes.
     */
@@ -723,7 +748,7 @@ class Server(handler: RequestHandler) extends HttpApp
 
   /**
     * Called to start the instance with the specified id. The associated docker container is started. The Id is passed
-    * as a query argument named 'Id' (so the resulting call is /start?Id=42).
+    * as a path parameter (so the resulting call is /instances/42/start).
     *
     * @return Server route that either maps to 202 ACCEPTED or the expected error codes.
     */
@@ -762,7 +787,7 @@ class Server(handler: RequestHandler) extends HttpApp
 
   /**
     * Called to delete the instance with the specified id as well as the associated docker container. The Id is passed
-    * as a query argument named 'Id' (so the resulting call is /delete?Id=42).
+    * as a path parameter (so the resulting call is /instances/42/delete).
     *
     * @return Server route that either maps to 202 ACCEPTED or the respective error codes.
     */
@@ -804,9 +829,10 @@ class Server(handler: RequestHandler) extends HttpApp
   }
 
   /**
-    * Called to assign a new instance dependency to the instance with the specified id. Both the ids of the instance and
-    * the specified dependency are passed as query arguments named 'Id' and 'assignedInstanceId' resp. (so the resulting
-    * call is /assignInstance?Id=42&assignedInstanceId=43). Will update the dependency in DB and than restart the container.
+    * Called to assign a new instance dependency to the instance with the specified id. The id of the instance which's dependency is
+    * going to be updated is passed as path parameter. The Id of the newly assigned dependency is passed in the body of the request
+    * and named "AssignedInstanceId". The resulting call is /instances/42/assignInstance. Will update dependency and restart container.
+
     *
     * @return Server route that either maps to 202 ACCEPTED or the respective error codes
     */
@@ -856,8 +882,8 @@ class Server(handler: RequestHandler) extends HttpApp
   }
 
   /**
-    * Called to get a list of links from the instance with the specified id. The id is passed as query argument named
-    * 'Id' (so the resulting call is /linksFrom?Id=42).
+    * Called to get a list of links from the instance with the specified id. The id is passed as path parameter
+    * (so the resulting call is /instances/42/linksFrom).
     *
     * @return Server route that either maps to 200 OK (and the list of links as content), or the respective error code.
     */
@@ -882,8 +908,8 @@ class Server(handler: RequestHandler) extends HttpApp
   }
 
   /**
-    * Called to get a list of links to the instance with the specified id. The id is passed as query argument named
-    * 'Id' (so the resulting call is /linksTo?Id=42).
+    * Called to get a list of links to the instance with the specified id. The id is passed as path parameter
+    * (so the resulting call is /instances/42/linksTo).
     *
     * @return Server route that either maps to 200 OK (and the list of links as content), or the respective error code.
     */
@@ -926,8 +952,8 @@ class Server(handler: RequestHandler) extends HttpApp
   }
 
   /**
-    * Called to add a generic label to the instance with the specified id. The Id and label are passed as query arguments
-    * named 'Id' and 'Label', resp. (so the resulting call is /addLabel?Id=42&Label=private)
+    * Called to add a generic label to the instance with the specified id. The id of the instance is passed as path parameter,
+    * the label is part of the request's body and named "Label". The resulting call is /instances/42/label.
     *
     * @return Server route that either maps to 200 OK or the respective error codes.
     */
@@ -965,9 +991,11 @@ class Server(handler: RequestHandler) extends HttpApp
     }
   }
 
+  // scalastyle:off cyclomatic.complexity
   /**
-    * Called to run a command in a  docker container. The Id an Command is the required parameter there are other optional parameter can be passed
-    * a query with required parameter Command and Id (so the resulting call is /command?Id=42&Command=ls).
+    * Called to run a command in a  docker container. The Id is passed as path parameter,
+    * The required parameter "Command" and optional "Privileged" and "User" are part of the request's body.
+    * (so the resulting call is /instances/42/command).
     *
     * @return Server route that either maps to 200 Ok or the respective error codes.
     */
@@ -988,7 +1016,7 @@ class Server(handler: RequestHandler) extends HttpApp
 
         Try(json.fields("Command").toString.replace("\"", "")) match {
           case Success(command) =>
-            handler.handleCommand(id, command, None, None, None, None, privileged, None, user) match {
+            handler.handleCommand(id, command, privileged, user) match {
               case handler.OperationResult.IdUnknown =>
                 log.warning(s"Cannot run command $command to $id, id not found.")
                 complete {
@@ -1017,6 +1045,7 @@ class Server(handler: RequestHandler) extends HttpApp
       }
     }
   }
+  // scalastyle:on cyclomatic.complexity
 
   def retrieveLogs(id: Long): server.Route = parameters('StdErr.as[Boolean].?) { stdErrOption =>
     authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
@@ -1107,10 +1136,10 @@ class Server(handler: RequestHandler) extends HttpApp
       Flow[Message]
         .map {
           case TextMessage.Strict(msg: String) => msg
-          case _ => println("Ignored non-text message.")
+          case _ => log.info("Ignored non-text message.")
         }
         .via(
-          Flow.fromSinkAndSource(Sink.foreach(println), Source.fromPublisher(handler.eventPublisher)
+          Flow.fromSinkAndSource(Sink.foreach(x => log.debug(x.toString)), Source.fromPublisher(handler.eventPublisher)
             .map(event => event.toJson(eventFormat).toString))
         )
         .map { msg: String => TextMessage.Strict(msg + "\n") }
@@ -1125,6 +1154,10 @@ class Server(handler: RequestHandler) extends HttpApp
     }
   }
 
+  /**
+    * Authenticate a user with Basic Authorization header and Delphi-Authorization header.
+    * @return
+    */
   def authenticate() : server.Route = {
     post
     {
@@ -1132,11 +1165,8 @@ class Server(handler: RequestHandler) extends HttpApp
         log.info(s"Requested with Delphi-Authorization token $token")
         if(handler.authProvider.isValidDelphiToken(token)){
           log.info(s"valid delphi authorization token")
-          authenticateBasic(realm = "secure", handler.authProvider.authenticateBasicJWT) {
-            case userName =>
+          authenticateBasic(realm = "secure", handler.authProvider.authenticateBasicJWT) { userName =>
               complete(handler.authProvider.generateJwt(userName))
-            case _ =>
-              complete{HttpResponse(StatusCodes.InternalServerError, entity = s"Internal server error, unknown operation result")}
           }
         } else {
           complete{HttpResponse(StatusCodes.Unauthorized, entity = s"Not valid Delphi-authorization")}
@@ -1146,28 +1176,113 @@ class Server(handler: RequestHandler) extends HttpApp
     }
   }
 
+  /**
+    * Registers a new user at the registry.
+    *
+    * @param UserString Json object describing the user
+    * @return
+    */
   def addUser(UserString: String): server.Route = Route.seal{
 
     authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
 
       post {
         log.debug(s"POST /users/add has been called, parameter is: $UserString")
-
         try {
-          val paramInstance: DelphiUser = UserString.parseJson.convertTo[DelphiUser](AuthDelphiUserFormat)
+          val paramInstance: DelphiUser = UserString.parseJson.convertTo[DelphiUser](authDelphiUserFormat)
           handler.handleAddUser(paramInstance) match {
-            case Success(id) =>
+            case Success(userId) =>
               complete {
-                id.toString
+                userId.toString
               }
             case Failure(ex) =>
-              log.error(ex, "Failed to handle registration of instance.")
+              log.error(ex, "Failed to handle create user request.")
               complete(HttpResponse(StatusCodes.BadRequest, entity = "Username already taken."))
           }
         } catch {
           case dx: DeserializationException =>
             log.error(dx, "Deserialization exception")
-            complete(HttpResponse(StatusCodes.BadRequest, entity = s"Could not deserialize parameter instance with message ${dx.getMessage}."))
+            complete(HttpResponse(StatusCodes.BadRequest, entity = s"Could not deserialize parameter delphi user with message ${dx.getMessage}."))
+          case px: ParsingException =>
+            log.error(px, "Failed to parse JSON while registering")
+            complete(HttpResponse(StatusCodes.BadRequest, entity = s"Failed to parse JSON entity with message ${px.getMessage}"))
+          case x: Exception =>
+            log.error(x, "Uncaught exception while deserializing.")
+            complete(HttpResponse(StatusCodes.InternalServerError, entity = "An internal server error occurred."))
+        }
+      }
+    }
+  }
+
+  /**
+    * Return the list of all user (so the resulting call is
+    * * /users)
+    *
+    * @return
+    */
+  def allUsers(): server.Route = Route.seal{
+    authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
+      get {
+        log.info("kutta")
+        log.info(handler.getAllUsers().toString())
+        complete {
+          handler.getAllUsers().toList
+        }
+      }
+    }
+  }
+
+  /**
+    * Returns an user with the specified id. Id is passed as query argument named 'Id' (so the resulting call is
+    * /users/42)
+    *
+    * @param id id of the user to retrieve
+    * @return
+    */
+  def retrieveUser(id: Long): server.Route = Route.seal{
+    authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
+      get {
+        log.debug(s"GET /users/$id has been called")
+
+        val user = handler.getUser(id)
+
+        if (user.isDefined) {
+          complete(user.get.toJson(authDelphiUserFormat))
+        } else {
+          complete {
+            HttpResponse(StatusCodes.NotFound, entity = s"User id was not found on the server.")
+          }
+        }
+      }
+    }
+  }
+
+  /**
+    * Remove an user with the specified id. Id is passed as query argument named 'Id' (so the resulting call is
+    * /users/remove/42)
+    *
+    * @param id id of the user to remove
+    * @return
+    */
+  def removeUser(id: Long): server.Route = Route.seal{
+
+    authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
+
+      post {
+        log.debug(s"POST /users/remove/$id has been called")
+        try {
+
+          handler.handleRemoveUser(id) match {
+            case Success(_) =>
+              complete(HttpResponse(StatusCodes.Accepted, entity = "user successfully removed."))
+            case Failure(ex) =>
+              log.error(ex, "Failed to handle remove user.")
+              complete(HttpResponse(StatusCodes.BadRequest, entity = "User id does not exist."))
+          }
+        } catch {
+          case dx: DeserializationException =>
+            log.error(dx, "Deserialization exception")
+            complete(HttpResponse(StatusCodes.BadRequest, entity = s"Could not deserialize parameter delphi user with message ${dx.getMessage}."))
           case px: ParsingException =>
             log.error(px, "Failed to parse JSON while registering")
             complete(HttpResponse(StatusCodes.BadRequest, entity = s"Failed to parse JSON entity with message ${px.getMessage}"))

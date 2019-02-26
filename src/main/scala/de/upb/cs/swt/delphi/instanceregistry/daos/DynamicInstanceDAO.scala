@@ -1,3 +1,18 @@
+// Copyright (C) 2018 The Delphi Team.
+// See the LICENCE file distributed with this work for additional
+// information regarding copyright ownership.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 package de.upb.cs.swt.delphi.instanceregistry.daos
 
 import java.io.{File, IOException, PrintWriter}
@@ -227,17 +242,18 @@ class DynamicInstanceDAO (configuration : Configuration) extends InstanceDAO wit
   override def addLink(link: InstanceLink) : Try[Unit] = {
     if(hasInstance(link.idFrom) && hasInstance(link.idTo)){
 
+      //If new link is in state 'Assigned': Set any link that previously was assigned to 'outdated'
+      //IMPORTANT: Only works bc every component has exactly one dependency!
+      if(link.linkState == LinkState.Assigned){
+        for (prevLink <- getLinksFrom(link.idFrom, Some(LinkState.Assigned))){
+          updateLink(InstanceLink(prevLink.idFrom, prevLink.idTo, LinkState.Outdated))
+        }
+      }
+
       if(getLinksFrom(link.idFrom).exists(l => l.idTo == link.idTo)){
         //There already is a link between the two instances. Update it instead of adding a new one
         updateLink(link)
       } else {
-        //If new link is in state 'Assigned': Set any link that previously was assigned to 'outdated'
-        //IMPORTANT: Only works bc every component has exactly one dependency!
-        if(link.linkState == LinkState.Assigned){
-          for (prevLink <- getLinksFrom(link.idFrom, Some(LinkState.Assigned))){
-            updateLink(InstanceLink(prevLink.idFrom, prevLink.idTo, LinkState.Outdated))
-          }
-        }
         instanceLinks.add(link)
       }
       Success()
@@ -252,8 +268,8 @@ class DynamicInstanceDAO (configuration : Configuration) extends InstanceDAO wit
     if(linksMatching.nonEmpty){
       for(l <- linksMatching){
         instanceLinks.remove(l)
-        instanceLinks.add(link)
       }
+      instanceLinks.add(link)
       Success()
     } else {
       Failure(new RuntimeException(s"Cannot update link $link, this link is not present in the dao."))

@@ -18,6 +18,35 @@ The Delphi registry is a server that provides access to all information and oper
 * Starting / Stopping / Pausing / Resuming / Deleting instances deployed on the docker host
 * Re-Assigning dependencies to instances (e.g. assigning a certain ElasticSearch instance to a Crawler)
 
+## Quick Setup (Linux)
+Potentially there two different machines involved in the registry setup, the Docker host machine (*Docker Host*) and the machine the registry is hosted at (*Registry Host*). However, you can also use the same machine for hosting both applications.
+
+On the *Docker Host*, execute the following steps:
+
+1) Clone this repository to your machine
+2) Execute the setup script ```Setup/Delphi_install.sh```
+3) Deploy [ElasticSearch](https://www.elastic.co/de/products/elasticsearch) by executing ```docker run -p 9200:9200 -p 9300:9300 -e "discovery.type=single-node" docker.elastic.co/elasticsearch/elasticsearch:6.6.0```
+4) Expose your Docker HTTP api on port 9095
+    * Execute ```sudo nano /lib/systemd/system/docker.service```
+    * Change the line that starts with ```ExecStart``` to look like this: ```ExecStart=/usr/bin/dockerd -H fd:// -H=tcp://0.0.0.0:9095```
+    * Save your changes and execute ```systemctl daemon-reload``` and ```sudo service docker restart```
+5) Note down the IP address of your machine in the LAN ( execute ```ifconfig``` )
+
+
+On the *Registry Host*, execute the following steps:
+
+1) Clone this repository to your local machine
+2) Note down the IP address of your machine in the LAN ( execute ```ifconfig``` )
+3) Edit the configuration file located at ```src/main/scala/de/upb/cs/swt/delphi/instanceregistry/Configuration.scala```
+    * Set ```traefikUri``` to ```http://<DOCKER-HOST-IP-HERE>:80```
+    * Set ```defaultElasticSearchInstanceHost``` to ```http://<DOCKER-HOST-IP-HERE>```
+    * Set ```uriInLocalNetwork``` to ```http://<REGISTRY-HOST-IP-HERE>:8087```
+    * Set ```dockerUri``` to ```http://<DOCKER-HOST-IP-HERE>:9095```
+    * Set ```jwtSecretKey``` to a secret password not known to anybody else
+4) Save your changes. Navigate to the root folder of the repository and execute the application by calling ```sbt run```
+
+The setup of the registry is now complete. You should now be able to connect to the registry component at ```http://<REGISTRY-HOST-IP-HERE>:8087```. You can verify your setup by calling ```curl <REGISTRY-HOST-IP-HERE>:8087/configuration```, which should lead to a ```401 Unauthorized``` response. To find out more about how to authorize yourself, please have look at the **Authorization** section of this document.
+
 ## Requirements
 In order to compile or execute the instance registry, you must have the latest version of the *Scala Build Tool* (SBT) installed. You can get it [here](https://www.scala-sbt.org/).
 
@@ -133,6 +162,8 @@ There are two ways of running the registry application. You can either run the a
 ### Run the registry directly
 If you want to execute the registry directly on your local machine, simply go to the root folder of the repository and execute ```sbt run```. The application will stream all logging output to the terminal. You can terminate any time by pressing *RETURN*.
 ### Run the registry in Docker
+Before creating an Docker image from the registry, make sure that all the network settings in the configuration file are set correctly in regards to the Docker networking infrastructure. Especially the settings ```dockerUri``` and ```uriInLocalNetwork``` are important. On Linux Docker Containers can connect to their host using the default Docker network gateway (```172.17.0.2```), on OSX the host has a defined DNS name (```host.docker.internal```).
+
 For Windows users, to build a docker image containing the registry, go to the root folder of the repository and execute ```sbt docker:publishLocal```. This will build the application, create a docker image named ```delphi-registry:1.0.0-SNAPSHOT```, and register the image at your local docker registry.<br />
 For Linux users, the installation script mentioned in **Requirements** section will create docker image for registry named ```delphi-registry:1.0.0-SNAPSHOT```, and registers the image at your local docker registry.
 
