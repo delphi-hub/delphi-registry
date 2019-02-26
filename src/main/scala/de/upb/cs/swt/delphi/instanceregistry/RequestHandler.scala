@@ -726,7 +726,9 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
       OperationResult.IdUnknown
     } else {
       instanceDao.addLabelFor(id, label) match {
-        case Success(_) => OperationResult.Ok
+        case Success(_) =>
+          fireStateChangedEvent(instanceDao.getInstance(id).get)
+          OperationResult.Ok
         case Failure(_) => OperationResult.InternalError
       }
     }
