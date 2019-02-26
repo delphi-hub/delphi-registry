@@ -36,6 +36,8 @@ import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
 
+
+// scalastyle:off number.of.methods
 class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao: InstanceDAO, connection: DockerConnection) extends AppLogging {
 
 
@@ -122,7 +124,7 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
   }
 
   def getAllInstancesOfType(compType: Option[ComponentType]): List[Instance] = {
-    if(compType.isDefined){
+    if (compType.isDefined) {
       instanceDao.getInstancesOfType(compType.get)
     } else {
       instanceDao.allInstances()
@@ -130,7 +132,7 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
   }
 
   def getNumberOfInstances(compType: Option[ComponentType]): Int = {
-    if(compType.isDefined){
+    if (compType.isDefined) {
       instanceDao.allInstances().count(i => i.componentType == compType.get)
     } else {
       instanceDao.allInstances().length
@@ -242,7 +244,6 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
       OperationResult.IdUnknown
     } else {
       val matchedInstance = instanceDao.getInstance(matchedInstanceId).get
-
       //Update list of matching results
       instanceDao.addMatchingResult(matchedInstanceId, matchingSuccess)
       //Update state of matchedInstance accordingly
@@ -257,18 +258,41 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
 
       //Update link state
       if (!matchingSuccess) {
-        val link = InstanceLink(callerId, matchedInstanceId, LinkState.Failed)
-        instanceDao.updateLink(link) match {
+
+        setActiveLinksToFailed(matchedInstanceId) match {
           case Success(_) =>
-            fireLinkStateChangedEvent(link)
             OperationResult.Ok
-          case Failure(_) => OperationResult.InternalError //Should not happen
+          case Failure(_) =>
+            // Message logged by method
+            OperationResult.InternalError
         }
       } else {
         OperationResult.Ok
       }
-
     }
+  }
+
+
+  def setActiveLinksToFailed(failedInstanceId: Long): Try[Unit] = {
+
+    val linksToFailedInstance = instanceDao.getLinksTo(failedInstanceId)
+    var errors = false
+
+    for (link <- linksToFailedInstance) {
+      //Do not update outdated links
+      if (link.linkState == LinkState.Assigned) {
+        val newLink = InstanceLink(link.idFrom, failedInstanceId, LinkState.Failed)
+        instanceDao.updateLink(newLink) match {
+          case Success(_) =>
+            fireLinkStateChangedEvent(link)
+          case Failure(ex) =>
+            errors = true
+            log.warning(s"There was a failure while updating the link state ${ex.getMessage}")
+        }
+      }
+    }
+
+    if(errors) Failure(new RuntimeException("Link updates unsuccessful")) else Success()
   }
 
   // scalastyle:off method.length
@@ -332,6 +356,7 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
         Failure(ex)
     }
   }
+
   // scalastyle:on method.length
 
   /** *
@@ -569,6 +594,7 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
       OperationResult.InvalidStateForOperation
     }
   }
+
   // scalastyle:on method.length cyclomatic.complexity
 
   /** *
@@ -723,21 +749,21 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
 
       val f: Future[(OperationResult.Value, Option[String])] =
         (dockerActor ? LogsMessage(instance.dockerId.get, stdErrSelected, stream = false)) (configuration.dockerOperationTimeout).map {
-        logVal: Any =>
-          val logResult = logVal.asInstanceOf[Try[String]]
-          logResult match {
-            case Success(logContent) =>
-              (OperationResult.Ok, Some(logContent))
-            case Failure(ex) =>
-              log.warning(s"Failed to get logs from actor, exception: ${ex.getMessage}")
-              (OperationResult.InternalError, None)
-          }
+          logVal: Any =>
+            val logResult = logVal.asInstanceOf[Try[String]]
+            logResult match {
+              case Success(logContent) =>
+                (OperationResult.Ok, Some(logContent))
+              case Failure(ex) =>
+                log.warning(s"Failed to get logs from actor, exception: ${ex.getMessage}")
+                (OperationResult.InternalError, None)
+            }
 
-      }.recover {
-        case ex: Exception =>
-          fireDockerOperationErrorEvent(Some(instance), errorMessage = s"Failed to get logs with message: ${ex.getMessage}")
-          (OperationResult.InternalError, None)
-      }
+        }.recover {
+          case ex: Exception =>
+            fireDockerOperationErrorEvent(Some(instance), errorMessage = s"Failed to get logs with message: ${ex.getMessage}")
+            (OperationResult.InternalError, None)
+        }
       Await.result(f, configuration.dockerOperationTimeout.duration)
     }
   }
@@ -752,21 +778,21 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
 
       val f: Future[(OperationResult.Value, Option[Publisher[Message]])] =
         (dockerActor ? LogsMessage(instance.dockerId.get, stdErrSelected, stream = true)) (configuration.dockerOperationTimeout).map {
-        publisherVal: Any =>
-          val publisherResult = publisherVal.asInstanceOf[Try[Publisher[Message]]]
-          publisherResult match {
-            case Success(publisher) =>
-              (OperationResult.Ok, Some(publisher))
-            case Failure(ex) =>
-              log.warning(s"Failed to stream logs from actor, exception: ${ex.getMessage}")
-              (OperationResult.InternalError, None)
-          }
+          publisherVal: Any =>
+            val publisherResult = publisherVal.asInstanceOf[Try[Publisher[Message]]]
+            publisherResult match {
+              case Success(publisher) =>
+                (OperationResult.Ok, Some(publisher))
+              case Failure(ex) =>
+                log.warning(s"Failed to stream logs from actor, exception: ${ex.getMessage}")
+                (OperationResult.InternalError, None)
+            }
 
-      }.recover {
-        case ex: Exception =>
-          fireDockerOperationErrorEvent(Some(instance), errorMessage = s"Failed to stream logs with message: ${ex.getMessage}")
-          (OperationResult.InternalError, None)
-      }
+        }.recover {
+          case ex: Exception =>
+            fireDockerOperationErrorEvent(Some(instance), errorMessage = s"Failed to stream logs with message: ${ex.getMessage}")
+            (OperationResult.InternalError, None)
+        }
       Await.result(f, configuration.dockerOperationTimeout.duration)
     }
   }
@@ -839,6 +865,7 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
         }
     }
   }
+
   // scalastyle:on method.length cyclomatic.complexity
 
   /**
@@ -925,12 +952,12 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
     * Handles a call to /command. container id and command must be present,
     * Will run the command into the container with provide parameters
     *
-    * @param id           container id the command will run on
-    * @param command      the command to run
-    *                     Format is a single character [a-Z] or ctrl-<@value> where <v@alue> is one of: a-z, @, [, , or _
-    * @param privileged   runs the process with extended privileges
-    * @param user         A string value specifying the user, and optionally, group to run the process inside the container,
-    *                     Format is one of: "user", "user:group", "uid", or "uid:gid".
+    * @param id         container id the command will run on
+    * @param command    the command to run
+    *                   Format is a single character [a-Z] or ctrl-<@value> where <v@alue> is one of: a-z, @, [, , or _
+    * @param privileged runs the process with extended privileges
+    * @param user       A string value specifying the user, and optionally, group to run the process inside the container,
+    *                   Format is one of: "user", "user:group", "uid", or "uid:gid".
     * @return
     */
   def handleCommand(id: Long, command: String, privileged: Option[Boolean], user: Option[String]): OperationResult.Value = {
@@ -1081,6 +1108,7 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
     instanceDao.addEventFor(link.idFrom, event)
     instanceDao.addEventFor(link.idTo, event)
   }
+
 
   private def countConsecutivePositiveMatchingResults(id: Long): Int = {
     if (!instanceDao.hasInstance(id) || instanceDao.getMatchingResultsFor(id).get.isEmpty) {
