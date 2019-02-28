@@ -145,6 +145,8 @@ class ServerTest
     "authenticate user if a valid user" in {
       Post("/users/authenticate") ~> addBasicAuth("admin", "admin") ~> addHeader("Delphi-Authorization", delphiAuthorizationToken) ~>  server.routes ~> check {
         assert(status === StatusCodes.OK)
+        responseAs[String] should include("token")
+        responseAs[String] should include("refreshToken")
       }
     }
 

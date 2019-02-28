@@ -40,6 +40,7 @@ import scala.util.{Failure, Success, Try}
 class Server(handler: RequestHandler) extends HttpApp
   with InstanceJsonSupport
   with UserJsonSupport
+  with UserTokenJsonSupport
   with EventJsonSupport
   with InstanceLinkJsonSupport
   with ConfigurationInfoJsonSupport
@@ -1166,7 +1167,7 @@ class Server(handler: RequestHandler) extends HttpApp
         if(handler.authProvider.isValidDelphiToken(token)){
           log.info(s"valid delphi authorization token")
           authenticateBasic(realm = "secure", handler.authProvider.authenticateBasicJWT) { userName =>
-              complete(handler.authProvider.generateJwt(userName))
+             complete(handler.authProvider.generateJwt(userName).toJson)
           }
         } else {
           complete{HttpResponse(StatusCodes.Unauthorized, entity = s"Not valid Delphi-authorization")}

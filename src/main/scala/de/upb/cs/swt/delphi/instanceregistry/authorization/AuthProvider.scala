@@ -17,11 +17,13 @@ package de.upb.cs.swt.delphi.instanceregistry.authorization
 
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
+
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.DateTime
 import akka.http.scaladsl.server.directives.Credentials
 import de.upb.cs.swt.delphi.instanceregistry.authorization.AccessTokenEnums.UserType
 import de.upb.cs.swt.delphi.instanceregistry.daos.AuthDAO
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.UserToken
 import pdi.jwt.{Jwt, JwtAlgorithm, JwtClaim}
 import de.upb.cs.swt.delphi.instanceregistry.{AppLogging, Registry}
 import spray.json._
@@ -76,8 +78,9 @@ class AuthProvider(authDAO: AuthDAO) extends AppLogging {
     }
   }
 
-  def generateJwt(userName: String): String = {
+  def generateJwt(userName: String): UserToken = {
     val validFor: Long = Registry.configuration.authenticationValidFor
+    val refreshTokenValidFor: Long = Registry.configuration.refreshTokenValidFor
     val user = authDAO.getUserWithUsername(userName)
 
     val claim = JwtClaim()
@@ -87,8 +90,17 @@ class AuthProvider(authDAO: AuthDAO) extends AppLogging {
       . + ("user_id", user.get.userName)
       . + ("user_type", user.get.userType)
 
+    val refreshClaim = JwtClaim()
+      .issuedNow
+      .expiresIn(refreshTokenValidFor * 60)
+      .startsNow
+      . + ("user_id", user.get.userName)
+
     val secretKey = Registry.configuration.jwtSecretKey
-    Jwt.encode(claim, secretKey, JwtAlgorithm.HS256)
+    val token = Jwt.encode(claim, secretKey, JwtAlgorithm.HS256)
+    val refreshToken = Jwt.encode(refreshClaim, secretKey, JwtAlgorithm.HS256)
+
+    UserToken(token, refreshToken)
   }
 
   def authenticateOAuth(credentials: Credentials) : Option[AccessToken] = {
