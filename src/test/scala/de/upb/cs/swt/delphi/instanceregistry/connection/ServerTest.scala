@@ -44,6 +44,7 @@ class ServerTest
     with ScalatestRouteTest
     with InstanceJsonSupport
     with UserJsonSupport
+    with UserTokenJsonSupport
     with EventJsonSupport {
 
   private val configuration: Configuration = new Configuration()
@@ -166,6 +167,35 @@ class ServerTest
         assert(status === StatusCodes.UNAUTHORIZED)
       }
 
+    }
+
+    "generate new token if refreshToken is valid" in {
+      Post("/users/authenticate") ~> addBasicAuth("admin", "admin") ~> addHeader("Delphi-Authorization", delphiAuthorizationToken) ~>  server.routes ~> check {
+        Try(responseAs[String].parseJson.convertTo[UserToken](authUserToken)) match {
+          case Success(userToken) => {
+            Post("/users/refreshToken") ~> addHeader(Authorization.oauth2(userToken.refreshToken)) ~> server.routes ~> check {
+              assert(status === StatusCodes.OK)
+              responseAs[String] should include("token")
+              responseAs[String] should include("refreshToken")
+            }
+          }
+          case Failure(ex) =>
+            fail(ex)
+        }
+      }
+    }
+
+    "not generate new token if refresh token is not valid" in {
+      val demoToken = "demoToken"
+      Post("/users/refreshToken") ~> addHeader(Authorization.oauth2(demoToken)) ~> server.routes ~> check {
+        assert(status === StatusCodes.UNAUTHORIZED)
+      }
+
+      val expiredToken = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJleHAiOjE1NTEzODQ4OTYsIm5iZiI6MTU1MTM4N" +
+        "DgzNiwiaWF0IjoxNTUxMzg0ODM2LCJ1c2VyX2lkIjowfQ.Z0CNbJzZBaC65_qADLuyDpXLK7GDI0jYTIjO_QSNNag"
+      Post("/users/refreshToken") ~> addHeader(Authorization.oauth2(expiredToken)) ~> server.routes ~> check {
+        assert(status === StatusCodes.UNAUTHORIZED)
+      }
     }
 
     "successfully create user when everything is valid" in {

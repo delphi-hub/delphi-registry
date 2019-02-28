@@ -23,7 +23,7 @@ import akka.http.scaladsl.model.DateTime
 import akka.http.scaladsl.server.directives.Credentials
 import de.upb.cs.swt.delphi.instanceregistry.authorization.AccessTokenEnums.UserType
 import de.upb.cs.swt.delphi.instanceregistry.daos.AuthDAO
-import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.UserToken
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.{DelphiUser, UserToken}
 import pdi.jwt.{Jwt, JwtAlgorithm, JwtClaim}
 import de.upb.cs.swt.delphi.instanceregistry.{AppLogging, Registry}
 import spray.json._
@@ -79,22 +79,30 @@ class AuthProvider(authDAO: AuthDAO) extends AppLogging {
   }
 
   def generateJwt(userName: String): UserToken = {
+    val user = authDAO.getUserWithUsername(userName)
+    getUserToken(user.get)
+  }
+
+  def generateJwtByUserId(userId: Long): UserToken ={
+    val user = authDAO.getUserWithId(userId)
+    getUserToken(user.get)
+  }
+
+  def getUserToken(user: DelphiUser): UserToken ={
     val validFor: Long = Registry.configuration.authenticationValidFor
     val refreshTokenValidFor: Long = Registry.configuration.refreshTokenValidFor
-    val user = authDAO.getUserWithUsername(userName)
-
     val claim = JwtClaim()
       .issuedNow
       .expiresIn(validFor * 60)
       .startsNow
-      . + ("user_id", user.get.userName)
-      . + ("user_type", user.get.userType)
+      . + ("user_id", user.id.get)
+      . + ("user_type", user.userType)
 
     val refreshClaim = JwtClaim()
       .issuedNow
       .expiresIn(refreshTokenValidFor * 60)
       .startsNow
-      . + ("user_id", user.get.userName)
+      . + ("user_id", user.id.get)
 
     val secretKey = Registry.configuration.jwtSecretKey
     val token = Jwt.encode(claim, secretKey, JwtAlgorithm.HS256)
@@ -127,6 +135,30 @@ class AuthProvider(authDAO: AuthDAO) extends AppLogging {
     }
   }
 
+  def checkRefreshToken(credentials: Credentials) : Option[Number] = {
+    credentials match {
+      case _ @ Credentials.Provided(tokenString) =>
+        log.debug(s"Validation authorization for token $tokenString")
+        Jwt.decodeRawAll(tokenString, Registry.configuration.jwtSecretKey, Seq(JwtAlgorithm.HS256)) match {
+          case Success((_, payload, _)) =>
+            parseRefreshTokenPayload(payload) match {
+              case Success(userId) =>
+                log.info(s"Successfully parsed token")
+                Some(userId)
+              case Failure(ex) =>
+                log.error(ex, s"mm Failed to parse token with message ${ex.getMessage}")
+                None
+            }
+          case Failure(ex) =>
+            log.warning(s"Failed to validate jwt token with message ${ex.getMessage}")
+            None
+        }
+      case _ =>
+        log.warning("Authorization not possible, no credentials provided.")
+        None
+    }
+  }
+
   def authenticateOAuthRequire(credentials: Credentials, userType: UserType = UserType.Admin) : Option[AccessToken] = {
     authenticateOAuth(credentials) match {
       case Some(token) =>
@@ -136,6 +168,13 @@ class AuthProvider(authDAO: AuthDAO) extends AppLogging {
           log.warning(s"Rejecting token because required user type $userType is not present")
           None
         }
+      case _ => None
+    }
+  }
+
+  def refrestTokenRequire(credentials: Credentials, userType: UserType = UserType.Admin) : Option[Number] = {
+    checkRefreshToken(credentials) match {
+      case userId => userId
       case _ => None
     }
   }
@@ -174,6 +213,14 @@ class AuthProvider(authDAO: AuthDAO) extends AppLogging {
       val user_type = json.fields("user_type").asInstanceOf[JsString].value
 
       (user_id, user_type)
+    }
+  }
+
+  private def parseRefreshTokenPayload(jwtPayload: String): Try[Number]  = {
+    Try[Number] {
+      val json = jwtPayload.parseJson.asJsObject
+      val user_id = json.fields("user_id").asInstanceOf[JsNumber].value
+      user_id
     }
   }
 
