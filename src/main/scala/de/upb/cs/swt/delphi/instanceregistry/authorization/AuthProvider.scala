@@ -95,7 +95,7 @@ class AuthProvider(authDAO: AuthDAO) extends AppLogging {
       .issuedNow
       .expiresIn(validFor * 60)
       .startsNow
-      . + ("user_id", user.id.get)
+      . + ("user_id", user.id.get.toString)
       . + ("user_type", user.userType)
 
     val refreshClaim = JwtClaim()
@@ -172,13 +172,6 @@ class AuthProvider(authDAO: AuthDAO) extends AppLogging {
     }
   }
 
-  def refrestTokenRequire(credentials: Credentials, userType: UserType = UserType.Admin) : Option[Number] = {
-    checkRefreshToken(credentials) match {
-      case userId => userId
-      case _ => None
-    }
-  }
-
   private def parsePayload(jwtPayload: String) : Try[AccessToken] = {
     Try[AccessToken] {
       val json = jwtPayload.parseJson.asJsObject
@@ -208,19 +201,18 @@ class AuthProvider(authDAO: AuthDAO) extends AppLogging {
   private def parseDelphiTokenPayload(jwtPayload: String) : Try[(String, String)] = {
     Try[(String, String)] {
       val json = jwtPayload.parseJson.asJsObject
+      val userId = json.fields("user_id").asInstanceOf[JsString].value
+      val userType = json.fields("user_type").asInstanceOf[JsString].value
 
-      val user_id = json.fields("user_id").asInstanceOf[JsString].value
-      val user_type = json.fields("user_type").asInstanceOf[JsString].value
-
-      (user_id, user_type)
+      (userId, userType)
     }
   }
 
   private def parseRefreshTokenPayload(jwtPayload: String): Try[Number]  = {
     Try[Number] {
       val json = jwtPayload.parseJson.asJsObject
-      val user_id = json.fields("user_id").asInstanceOf[JsNumber].value
-      user_id
+      val userId = json.fields("user_id").asInstanceOf[JsNumber].value
+      userId
     }
   }
 

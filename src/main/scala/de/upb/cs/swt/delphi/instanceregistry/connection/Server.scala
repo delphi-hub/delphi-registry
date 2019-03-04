@@ -1305,7 +1305,7 @@ class Server(handler: RequestHandler) extends HttpApp
     */
   def refreshToken(): server.Route = Route.seal{
     post {
-      authenticateOAuth2[Number]("Secure Site", handler.authProvider.refrestTokenRequire(_, userType = UserType.Admin)) { userId =>
+      authenticateOAuth2[Number]("Secure Site", handler.authProvider.checkRefreshToken(_)) { userId =>
         complete(handler.authProvider.generateJwtByUserId(userId.longValue()).toJson)
       }
     }
