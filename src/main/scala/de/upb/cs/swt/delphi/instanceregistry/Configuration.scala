@@ -75,6 +75,9 @@ class Configuration( ) {
   //Authentication valid for the time
   val authenticationValidFor = 30 //minutes
 
+  //Refresh token is valid for the time
+  val refreshTokenValidFor = 1440 //minutes
+
   //Request Limiter
   val maxTotalNoRequest: Int = 2000
   val maxIndividualIpReq: Int = 200

@@ -17,11 +17,13 @@ package de.upb.cs.swt.delphi.instanceregistry.authorization
 
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
+
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.DateTime
 import akka.http.scaladsl.server.directives.Credentials
 import de.upb.cs.swt.delphi.instanceregistry.authorization.AccessTokenEnums.UserType
 import de.upb.cs.swt.delphi.instanceregistry.daos.AuthDAO
+import de.upb.cs.swt.delphi.instanceregistry.io.swagger.client.model.{DelphiUser, UserToken}
 import pdi.jwt.{Jwt, JwtAlgorithm, JwtClaim}
 import de.upb.cs.swt.delphi.instanceregistry.{AppLogging, Registry}
 import spray.json._
@@ -76,19 +78,37 @@ class AuthProvider(authDAO: AuthDAO) extends AppLogging {
     }
   }
 
-  def generateJwt(userName: String): String = {
-    val validFor: Long = Registry.configuration.authenticationValidFor
+  def generateJwt(userName: String): UserToken = {
     val user = authDAO.getUserWithUsername(userName)
+    getUserToken(user.get)
+  }
 
+  def generateJwtByUserId(userId: Long): UserToken ={
+    val user = authDAO.getUserWithId(userId)
+    getUserToken(user.get)
+  }
+
+  def getUserToken(user: DelphiUser): UserToken ={
+    val validFor: Long = Registry.configuration.authenticationValidFor
+    val refreshTokenValidFor: Long = Registry.configuration.refreshTokenValidFor
     val claim = JwtClaim()
       .issuedNow
       .expiresIn(validFor * 60)
       .startsNow
-      . + ("user_id", user.get.userName)
-      . + ("user_type", user.get.userType)
+      . + ("user_id", user.id.get.toString)
+      . + ("user_type", user.userType)
+
+    val refreshClaim = JwtClaim()
+      .issuedNow
+      .expiresIn(refreshTokenValidFor * 60)
+      .startsNow
+      . + ("user_id", user.id.get)
 
     val secretKey = Registry.configuration.jwtSecretKey
-    Jwt.encode(claim, secretKey, JwtAlgorithm.HS256)
+    val token = Jwt.encode(claim, secretKey, JwtAlgorithm.HS256)
+    val refreshToken = Jwt.encode(refreshClaim, secretKey, JwtAlgorithm.HS256)
+
+    UserToken(token, refreshToken)
   }
 
   def authenticateOAuth(credentials: Credentials) : Option[AccessToken] = {
@@ -103,6 +123,30 @@ class AuthProvider(authDAO: AuthDAO) extends AppLogging {
                 Some(token)
               case Failure(ex) =>
                 log.error(ex, s"Failed to parse token with message ${ex.getMessage}")
+                None
+            }
+          case Failure(ex) =>
+            log.warning(s"Failed to validate jwt token with message ${ex.getMessage}")
+            None
+        }
+      case _ =>
+        log.warning("Authorization not possible, no credentials provided.")
+        None
+    }
+  }
+
+  def checkRefreshToken(credentials: Credentials) : Option[Number] = {
+    credentials match {
+      case _ @ Credentials.Provided(tokenString) =>
+        log.debug(s"Validation authorization for token $tokenString")
+        Jwt.decodeRawAll(tokenString, Registry.configuration.jwtSecretKey, Seq(JwtAlgorithm.HS256)) match {
+          case Success((_, payload, _)) =>
+            parseRefreshTokenPayload(payload) match {
+              case Success(userId) =>
+                log.info(s"Successfully parsed token")
+                Some(userId)
+              case Failure(ex) =>
+                log.error(ex, s"mm Failed to parse token with message ${ex.getMessage}")
                 None
             }
           case Failure(ex) =>
@@ -157,11 +201,18 @@ class AuthProvider(authDAO: AuthDAO) extends AppLogging {
   private def parseDelphiTokenPayload(jwtPayload: String) : Try[(String, String)] = {
     Try[(String, String)] {
       val json = jwtPayload.parseJson.asJsObject
+      val userId = json.fields("user_id").asInstanceOf[JsString].value
+      val userType = json.fields("user_type").asInstanceOf[JsString].value
 
-      val user_id = json.fields("user_id").asInstanceOf[JsString].value
-      val user_type = json.fields("user_type").asInstanceOf[JsString].value
+      (userId, userType)
+    }
+  }
 
-      (user_id, user_type)
+  private def parseRefreshTokenPayload(jwtPayload: String): Try[Number]  = {
+    Try[Number] {
+      val json = jwtPayload.parseJson.asJsObject
+      val userId = json.fields("user_id").asInstanceOf[JsNumber].value
+      userId
     }
   }
 

@@ -15,6 +15,8 @@
 // limitations under the License.
 package de.upb.cs.swt.delphi.instanceregistry.connection
 
+import java.security.AuthProvider
+
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.ws.{Message, TextMessage}
 import akka.http.scaladsl.model.{HttpResponse, StatusCodes}
@@ -40,6 +42,7 @@ import scala.util.{Failure, Success, Try}
 class Server(handler: RequestHandler) extends HttpApp
   with InstanceJsonSupport
   with UserJsonSupport
+  with UserTokenJsonSupport
   with EventJsonSupport
   with InstanceLinkJsonSupport
   with ConfigurationInfoJsonSupport
@@ -160,6 +163,9 @@ class Server(handler: RequestHandler) extends HttpApp
       } ~
       path("authenticate") {
         authenticate()
+      } ~
+      path("refreshToken") {
+        refreshToken()
       } ~
       pathPrefix(LongNumber) { Id =>
         pathEnd {
@@ -1166,7 +1172,7 @@ class Server(handler: RequestHandler) extends HttpApp
         if(handler.authProvider.isValidDelphiToken(token)){
           log.info(s"valid delphi authorization token")
           authenticateBasic(realm = "secure", handler.authProvider.authenticateBasicJWT) { userName =>
-              complete(handler.authProvider.generateJwt(userName))
+             complete(handler.authProvider.generateJwt(userName).toJson)
           }
         } else {
           complete{HttpResponse(StatusCodes.Unauthorized, entity = s"Not valid Delphi-authorization")}
@@ -1223,7 +1229,6 @@ class Server(handler: RequestHandler) extends HttpApp
   def allUsers(): server.Route = Route.seal{
     authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
       get {
-        log.info("kutta")
         log.info(handler.getAllUsers().toString())
         complete {
           handler.getAllUsers().toList
@@ -1290,6 +1295,18 @@ class Server(handler: RequestHandler) extends HttpApp
             log.error(x, "Uncaught exception while deserializing.")
             complete(HttpResponse(StatusCodes.InternalServerError, entity = "An internal server error occurred."))
         }
+      }
+    }
+  }
+
+  /**
+    * Generete token with refresh token. Refresh token is passed by authorization header
+    * @return
+    */
+  def refreshToken(): server.Route = Route.seal{
+    post {
+      authenticateOAuth2[Number]("Secure Site", handler.authProvider.checkRefreshToken(_)) { userId =>
+        complete(handler.authProvider.generateJwtByUserId(userId.longValue()).toJson)
       }
     }
   }
