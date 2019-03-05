@@ -95,7 +95,7 @@ class AuthProvider(authDAO: AuthDAO) extends AppLogging {
       .issuedNow
       .expiresIn(validFor * 60)
       .startsNow
-      . + ("user_id", user.id.toString)
+      . + ("user_id", user.id.get.toString)
       . + ("user_type", user.userType)
 
     val refreshClaim = JwtClaim()
