@@ -181,6 +181,26 @@ class DynamicInstanceDAOTest extends FlatSpec with Matchers with BeforeAndAfterE
     assert(dao.getLinksFrom(0, Some(LinkState.Assigned)).head.idTo == 2)
   }
 
+  it must "be able to add label to instance" in {
+    val addLabel = dao.addLabelFor(2, "test3")
+    assert(addLabel.isSuccess)
+    val instance = dao.getInstance(2)
+    assert(instance.get.labels.size == 1)
+  }
+
+  it must "be able to remove label to instance if it exist" in {
+    dao.addLabelFor(2, "test3")
+    val removeLabel = dao.removeLabelFor(2, "test3")
+    assert(removeLabel.isSuccess)
+    val instance = dao.getInstance(2)
+    assert(instance.get.labels.isEmpty)
+  }
+
+  it must "fail to remove label to instance if label not exist" in {
+    val removeLabel = dao.removeLabelFor(2, "test1")
+    assert(removeLabel.isFailure)
+  }
+
   override protected def afterEach() : Unit = {
     dao.removeAll()
     dao.deleteRecoveryFile()

@@ -171,6 +171,27 @@ class DatabaseInstanceDAOTest extends FlatSpec with Matchers with BeforeAndAfter
     assert(dao.getLinksFrom(1, Some(LinkState.Assigned)).head.idTo == 3)
   }
 
+  it must "be able to add label to instance" in {
+    val addLabel = dao.addLabelFor(2, "test3")
+    assert(addLabel.isSuccess)
+    val instance = dao.getInstance(2)
+    Console.print("xxx " + instance.get.labels)
+    assert(instance.get.labels.size == 2)
+  }
+
+  it must "be able to remove label to instance if it exist" in {
+    dao.addLabelFor(2, "test3")
+    val removeLabel = dao.removeLabelFor(2, "test3")
+    assert(removeLabel.isSuccess)
+    val instance = dao.getInstance(2)
+    assert(instance.get.labels.size == 1)
+  }
+
+  it must "fail to remove label to instance if label not exist" in {
+    val removeLabel = dao.removeLabelFor(2, "test1")
+    assert(removeLabel.isFailure)
+  }
+
   it must "remove instances that are present in the DAO" in {
     for(i <- 1 to 3){
       assert(dao.removeInstance(i).isSuccess)
