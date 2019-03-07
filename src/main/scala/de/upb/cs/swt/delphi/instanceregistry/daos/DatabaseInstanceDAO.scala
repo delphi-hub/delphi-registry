@@ -254,6 +254,28 @@ class DatabaseInstanceDAO (configuration : Configuration) extends InstanceDAO wi
     }
   }
 
+  override def removeLabelFor(id: Long, label: String): Try[Unit] = {
+    if(hasInstance(id)){
+      val instance = getInstance(id).get
+      if(instance.labels.exists(l => l.equalsIgnoreCase(label))){
+        val labelList = instance.labels.filter(_ != label)
+        val query = for { single <- instances if single.id === instance.id } yield single.labels
+        val updateAction = query.update(getListAsString(labelList))
+        Await.result(db.run(updateAction), Duration.Inf).toString
+        Success()
+
+      } else {
+        val msg = s"Label $label is not present for the instance."
+        log.warning(msg)
+        Failure(new RuntimeException(msg))
+      }
+    } else {
+      val msg = s"Instance with id $id not present."
+      log.warning(msg)
+      Failure(new RuntimeException(msg))
+    }
+  }
+
   override def addEventFor(id: Long, event: RegistryEvent) : Try[Unit] = {
 
     val payload = event.payload.toJson(registryEventPayloadFormat).toString

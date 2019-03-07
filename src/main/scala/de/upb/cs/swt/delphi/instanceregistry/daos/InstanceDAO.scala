@@ -167,4 +167,12 @@ trait InstanceDAO {
     * @return Success if instance is present and label does not exceed character limit, false otherwise.
     */
   def addLabelFor(id: Long, label: String) : Try[Unit]
+
+  /**
+    * Removes a label to the instance with the specified id
+    * @param id Id of the instance
+    * @param label Label to add
+    * @return
+    */
+  def removeLabelFor(id: Long, label: String) : Try[Unit]
 }
