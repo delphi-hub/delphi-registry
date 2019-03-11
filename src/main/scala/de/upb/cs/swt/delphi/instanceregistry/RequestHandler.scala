@@ -140,8 +140,8 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
 
   }
 
-  def getEventList(id: Long): Try[List[RegistryEvent]] = {
-    instanceDao.getEventsFor(id)
+  def getEventList(id: Long, startPage: Long, pageItems: Long, limitItems: Long): Try[List[RegistryEvent]] = {
+    instanceDao.getEventsFor(id, startPage, pageItems, limitItems)
   }
 
   def generateConfigurationInfo(): ConfigurationInfo = {

@@ -456,12 +456,19 @@ class Server(handler: RequestHandler) extends HttpApp
     *
     * @return Server route mapping to either 200 OK and the list of event, or the resp. error codes.
     */
-  def eventList(id: Long): server.Route = {
-    authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.User)) { token =>
+  def eventList(id: Long): server.Route = parameters('StartPage.as[Long].?, 'PageItems.as[Long].?, 'LimitItems.as[Long].?) {
+    (startPageParam, pageItemParam, limitItemParam) =>
+
+    //authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.User)) { token =>
+
       get {
         log.debug(s"GET instances/$id/eventList has been called")
 
-        handler.getEventList(id) match {
+        val startPage = startPageParam.getOrElse(0.toLong)
+        val pageItems = pageItemParam.getOrElse(0.toLong)
+        val limitItems = limitItemParam.getOrElse(0.toLong)
+
+        handler.getEventList(id, startPage.toLong, pageItems.toLong, limitItems.toLong) match {
           case Success(list) => complete {
             list
           }
@@ -470,7 +477,7 @@ class Server(handler: RequestHandler) extends HttpApp
           }
         }
       }
-    }
+    //}
   }
 
   /**

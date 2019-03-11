@@ -262,7 +262,7 @@ class DynamicInstanceDAO (configuration : Configuration) extends InstanceDAO wit
     }
   }
 
-  override def getEventsFor(id: Long) : Try[List[RegistryEvent]] = {
+  override def getEventsFor(id: Long, startPage: Long, pageItems: Long, limitItems: Long) : Try[List[RegistryEvent]] = {
     if(hasInstance(id) && instanceEvents.contains(id)){
       Success(List() ++ instanceEvents(id))
     } else {

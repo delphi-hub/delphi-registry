@@ -128,7 +128,7 @@ trait InstanceDAO {
     * @param id Id of the instance
     * @return List of events if instance is present, Failure otherwise
     */
-  def getEventsFor(id: Long) : Try[List[RegistryEvent]]
+  def getEventsFor(id: Long, startPage: Long, pageItems: Long, limitItems: Long) : Try[List[RegistryEvent]]
 
   /**
     * Adds a new instance link to the dao. Will fail if the ids referenced in the link object are not present.

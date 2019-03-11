@@ -293,12 +293,15 @@ class DatabaseInstanceDAO (configuration : Configuration) extends InstanceDAO wi
   }
 
 
-  override def getEventsFor(id: Long) : Try[List[RegistryEvent]] = {
+  override def getEventsFor(id: Long, startPage: Long, pageItems: Long, limitItems: Long) : Try[List[RegistryEvent]] = {
     if(hasInstance(id) && hasInstanceEvents(id)){
+      val skip = startPage * pageItems
       val eventMapIds = eventMaps.filter(_.instanceId === id).map(_.eventId)
-      val resultAll = Await.result(db.run(instanceEvents.filter(_.id in eventMapIds).result), Duration.Inf)
+      val resultAll = if(limitItems != 0) {Await.result(db.run(instanceEvents.filter(_.id in eventMapIds).drop(skip).take(limitItems).result), Duration.Inf)}
+                      else {Await.result(db.run(instanceEvents.filter(_.id in eventMapIds).drop(skip).result), Duration.Inf)}
       val listAll = List() ++ resultAll.map(result => dataToObjectRegistryEvent(result._2, result._3, result._4))
       Success(listAll)
+
     } else {
       log.warning(s"Cannot get events, id $id not present!")
       Failure(new RuntimeException(s"Cannot get events, id $id not present!"))
