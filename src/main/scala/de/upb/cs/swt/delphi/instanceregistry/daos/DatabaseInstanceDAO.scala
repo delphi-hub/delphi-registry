@@ -298,8 +298,7 @@ class DatabaseInstanceDAO (configuration : Configuration) extends InstanceDAO wi
       val skip = startPage * pageItems
       val take = if(limitItems == 0) configuration.pageLimit else limitItems
       val eventMapIds = eventMaps.filter(_.instanceId === id).map(_.eventId)
-      val resultAll = if(limitItems != 0) {Await.result(db.run(instanceEvents.filter(_.id in eventMapIds).drop(skip).take(take).result), Duration.Inf)}
-                      else {Await.result(db.run(instanceEvents.filter(_.id in eventMapIds).drop(skip).take(take).result), Duration.Inf)}
+      val resultAll = Await.result(db.run(instanceEvents.filter(_.id in eventMapIds).drop(skip).take(take).result), Duration.Inf)
       val listAll = List() ++ resultAll.map(result => dataToObjectRegistryEvent(result._2, result._3, result._4))
       Success(listAll)
 
