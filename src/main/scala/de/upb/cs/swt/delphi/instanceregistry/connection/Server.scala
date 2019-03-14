@@ -459,7 +459,7 @@ class Server(handler: RequestHandler) extends HttpApp
   def eventList(id: Long): server.Route = parameters('StartPage.as[Long].?, 'PageItems.as[Long].?, 'LimitItems.as[Long].?) {
     (startPageParam, pageItemParam, limitItemParam) =>
 
-    //authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.User)) { token =>
+    authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.User)) { token =>
 
       get {
         log.debug(s"GET instances/$id/eventList has been called")
@@ -477,7 +477,7 @@ class Server(handler: RequestHandler) extends HttpApp
           }
         }
       }
-    //}
+    }
   }
 
   /**

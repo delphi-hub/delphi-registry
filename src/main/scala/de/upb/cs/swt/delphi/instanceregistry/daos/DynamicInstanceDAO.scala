@@ -264,7 +264,9 @@ class DynamicInstanceDAO (configuration : Configuration) extends InstanceDAO wit
 
   override def getEventsFor(id: Long, startPage: Long, pageItems: Long, limitItems: Long) : Try[List[RegistryEvent]] = {
     if(hasInstance(id) && instanceEvents.contains(id)){
-      Success(List() ++ instanceEvents(id))
+      val skip = startPage * pageItems
+      val events = if(limitItems == 0){instanceEvents(id).drop(skip.toInt)} else {instanceEvents(id).drop(skip.toInt).take(limitItems.toInt)}
+      Success(List() ++ events)
     } else {
       log.warning(s"Cannot get events, id $id not present!")
       Failure(new RuntimeException(s"Cannot get events, id $id not present!"))

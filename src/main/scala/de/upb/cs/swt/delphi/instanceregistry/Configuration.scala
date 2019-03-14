@@ -51,6 +51,9 @@ class Configuration( ) {
 
   val maxLabelLength: Int = 50
 
+  //default page limit
+  val pageLimit: Int = 100
+
   val dockerOperationTimeout: Timeout = Timeout(20 seconds)
   val dockerUri: String = sys.env.getOrElse("DELPHI_DOCKER_HOST", "http://localhost:9095")
 

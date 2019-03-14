@@ -152,14 +152,15 @@ class DynamicInstanceDAOTest extends FlatSpec with Matchers with BeforeAndAfterE
   }
 
   it must "add events only to instances that have been registered" in {
-    assert(dao.getEventsFor(1).isSuccess)
-    assert(dao.getEventsFor(1).get.isEmpty)
+    assert(dao.getEventsFor(1,0, 0, 0).isSuccess)
+    assert(dao.getEventsFor(1,0, 0, 0).get.isEmpty)
 
     val eventToAdd = RegistryEventFactory.createInstanceAddedEvent(dao.getInstance(1).get)
     assert(dao.addEventFor(-1, eventToAdd).isFailure)
     assert(dao.addEventFor(1, eventToAdd).isSuccess)
-    assert(dao.getEventsFor(1).get.size == 1)
-    assert(dao.getEventsFor(1).get.head == eventToAdd)
+    assert(dao.getEventsFor(1,0, 0, 0).get.size == 1)
+    assert(dao.getEventsFor(1, 1, 1, 0).get.isEmpty)
+    assert(dao.getEventsFor(1, 0, 0, 0).get.head == eventToAdd)
   }
 
   it must "verify the presence of instance ids when a link is added" in {
