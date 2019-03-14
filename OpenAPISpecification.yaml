@@ -590,7 +590,7 @@ paths:
           type: string
       responses:
         '200':
-          description: Label successfully added
+          description: Label successfully deleted
         '400':
           description: 'Bad request, your label exceeded the character limit'
         '404':
