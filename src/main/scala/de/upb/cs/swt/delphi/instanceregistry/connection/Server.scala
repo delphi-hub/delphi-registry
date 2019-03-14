@@ -66,7 +66,7 @@ class Server(handler: RequestHandler) extends HttpApp
   //Routes that map http endpoints to methods in this object
   def apiRoutes: server.Route =
 
-  /** **************BASIC OPERATIONS ****************/
+  /****************BASIC OPERATIONS ****************/
     pathPrefix("instances") {
       pathEnd {
         fetchInstancesOfType()
@@ -159,36 +159,36 @@ class Server(handler: RequestHandler) extends HttpApp
             }
         }
     } ~
-      pathPrefix("users") {
-        pathEnd {
-          allUsers()
-        } ~
-          path("add") {
-            entity(as[String]) {
-              jsonString => addUser(jsonString)
-            }
-          } ~
-          path("authenticate") {
-            authenticate()
-          } ~
-          path("refreshToken") {
-            refreshToken()
-          } ~
-          pathPrefix(LongNumber) { Id =>
-            pathEnd {
-              retrieveUser(Id)
-            } ~
-              path("remove") {
-                removeUser(Id)
-              }
+    pathPrefix("users") {
+      pathEnd {
+        allUsers()
+      } ~
+        path("add") {
+          entity(as[String]) {
+            jsonString => addUser(jsonString)
           }
-      } ~
-      path("events") {
-        streamEvents()
-      } ~
-      path("configuration") {
-        configurationInfo()
-      }
+        } ~
+        path("authenticate") {
+          authenticate()
+        } ~
+        path("refreshToken") {
+          refreshToken()
+        } ~
+        pathPrefix(LongNumber) { Id =>
+          pathEnd {
+            retrieveUser(Id)
+          } ~
+            path("remove") {
+              removeUser(Id)
+            }
+        }
+    } ~
+    path("events") {
+      streamEvents()
+    } ~
+    path("configuration") {
+      configurationInfo()
+    }
 
   //scalastyle:on method.length
 
