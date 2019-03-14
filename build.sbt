@@ -38,6 +38,6 @@ libraryDependencies ++= List(
   "org.slf4j" % "slf4j-nop" % "1.6.4"
 )
 
-libraryDependencies += "com.h2database" % "h2" % "1.4.197"
+libraryDependencies += "com.h2database" % "h2" % "1.4.199"
 
 trapExit := false

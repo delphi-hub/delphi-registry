@@ -177,7 +177,6 @@ class DatabaseInstanceDAOTest extends FlatSpec with Matchers with BeforeAndAfter
     val addLabel = dao.addLabelFor(2, "test3")
     assert(addLabel.isSuccess)
     val instance = dao.getInstance(2)
-    Console.print("xxx " + instance.get.labels)
     assert(instance.get.labels.size == 2)
   }
 
