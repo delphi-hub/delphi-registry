@@ -871,6 +871,22 @@ class ServerTest
 
     }
 
+    "remove a label to an instance if label and id are valid" in {
+      Delete("/instances/0/label/Private") ~> addAuthorization("Admin") ~> Route.seal(server.routes) ~> check {
+        assert(status === StatusCodes.OK)
+      }
+    }
+
+    "fail to remove label if id is invalid or label does not exist" in {
+      Delete("/instances/22/label/Private") ~> addAuthorization("Admin") ~> Route.seal(server.routes) ~> check {
+        assert(status === StatusCodes.NOT_FOUND)
+      }
+
+      Delete("/instances/0/label/test") ~> addAuthorization("Admin") ~> Route.seal(server.routes) ~> check {
+        assert(status === StatusCodes.BAD_REQUEST)
+      }
+    }
+
     /** Minimal tests for docker operations **/
 
     "fail to deploy if component type is invalid" in {

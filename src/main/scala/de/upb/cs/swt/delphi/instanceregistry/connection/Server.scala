@@ -138,9 +138,16 @@ class Server(handler: RequestHandler) extends HttpApp
                 json => assignInstance(Id, json.asJsObject)
               }
             } ~
-            path("label") {
-              entity(as[JsValue]) { json => addLabel(Id, json.asJsObject) }
-            } ~
+            pathPrefix("label") {
+              pathEnd {
+                entity(as[JsValue]) { json => addLabel(Id, json.asJsObject) }
+              }~
+              pathPrefix(Segment) { label : String =>
+                pathEnd {
+                  removeLabel(Id, label)
+                }
+              }
+            }~
             path("logs") {
               retrieveLogs(Id)
             } ~
@@ -156,25 +163,25 @@ class Server(handler: RequestHandler) extends HttpApp
       pathEnd {
         allUsers()
       } ~
-      path("add") {
-        entity(as[String]) {
-          jsonString => addUser(jsonString)
-        }
-      } ~
-      path("authenticate") {
-        authenticate()
-      } ~
-      path("refreshToken") {
-        refreshToken()
-      } ~
-      pathPrefix(LongNumber) { Id =>
-        pathEnd {
-          retrieveUser(Id)
+        path("add") {
+          entity(as[String]) {
+            jsonString => addUser(jsonString)
+          }
         } ~
-        path("remove") {
-          removeUser(Id)
+        path("authenticate") {
+          authenticate()
+        } ~
+        path("refreshToken") {
+          refreshToken()
+        } ~
+        pathPrefix(LongNumber) { Id =>
+          pathEnd {
+            retrieveUser(Id)
+          } ~
+            path("remove") {
+              removeUser(Id)
+            }
         }
-      }
     } ~
     path("events") {
       streamEvents()
@@ -449,12 +456,19 @@ class Server(handler: RequestHandler) extends HttpApp
     *
     * @return Server route mapping to either 200 OK and the list of event, or the resp. error codes.
     */
-  def eventList(id: Long): server.Route = {
+  def eventList(id: Long): server.Route = parameters('StartPage.as[Long].?, 'PageItems.as[Long].?, 'LimitItems.as[Long].?) {
+    (startPageParam, pageItemParam, limitItemParam) =>
+
     authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.User)) { token =>
+
       get {
         log.debug(s"GET instances/$id/eventList has been called")
 
-        handler.getEventList(id) match {
+        val startPage = startPageParam.getOrElse(0.toLong)
+        val pageItems = pageItemParam.getOrElse(0.toLong)
+        val limitItems = limitItemParam.getOrElse(0.toLong)
+
+        handler.getEventList(id, startPage.toLong, pageItems.toLong, limitItems.toLong) match {
           case Success(list) => complete {
             list
           }
@@ -605,7 +619,7 @@ class Server(handler: RequestHandler) extends HttpApp
     *
     * @return Server route that either maps to 200 OK or the respective error codes
     */
-  def reportFailure(id: Long): server.Route =  {
+  def reportFailure(id: Long): server.Route = {
     authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.Component)) { token =>
       post {
 
@@ -838,7 +852,6 @@ class Server(handler: RequestHandler) extends HttpApp
     * Called to assign a new instance dependency to the instance with the specified id. The id of the instance which's dependency is
     * going to be updated is passed as path parameter. The Id of the newly assigned dependency is passed in the body of the request
     * and named "AssignedInstanceId". The resulting call is /instances/42/assignInstance. Will update dependency and restart container.
-
     *
     * @return Server route that either maps to 202 ACCEPTED or the respective error codes
     */
@@ -997,6 +1010,30 @@ class Server(handler: RequestHandler) extends HttpApp
     }
   }
 
+  def removeLabel(id: Long, label: String): server.Route = {
+    authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
+
+      delete {
+        handler.handleRemoveLabel(id, label) match {
+          case handler.OperationResult.IdUnknown =>
+            log.warning(s"Cannot remove label $label to $id, id not found.")
+            complete {
+              HttpResponse(StatusCodes.NotFound, entity = s"Cannot remove label, id $id not found.")
+            }
+          case handler.OperationResult.InternalError =>
+            log.warning(s"Error while remove label $label to $id.")
+            complete {
+              HttpResponse(StatusCodes.BadRequest,
+                entity = s"Unable remove label form instance $id")
+            }
+          case handler.OperationResult.Ok =>
+            log.info(s"Successfully removed label $label from instance with id $id.")
+            complete("Successfully removed label")
+        }
+      }
+    }
+  }
+
   // scalastyle:off cyclomatic.complexity
   /**
     * Called to run a command in a  docker container. The Id is passed as path parameter,
@@ -1051,6 +1088,7 @@ class Server(handler: RequestHandler) extends HttpApp
       }
     }
   }
+
   // scalastyle:on cyclomatic.complexity
 
   def retrieveLogs(id: Long): server.Route = parameters('StdErr.as[Boolean].?) { stdErrOption =>
@@ -1162,20 +1200,22 @@ class Server(handler: RequestHandler) extends HttpApp
 
   /**
     * Authenticate a user with Basic Authorization header and Delphi-Authorization header.
+    *
     * @return
     */
-  def authenticate() : server.Route = {
-    post
-    {
+  def authenticate(): server.Route = {
+    post {
       headerValueByName("Delphi-Authorization") { token =>
         log.info(s"Requested with Delphi-Authorization token $token")
-        if(handler.authProvider.isValidDelphiToken(token)){
+        if (handler.authProvider.isValidDelphiToken(token)) {
           log.info(s"valid delphi authorization token")
           authenticateBasic(realm = "secure", handler.authProvider.authenticateBasicJWT) { userName =>
-             complete(handler.authProvider.generateJwt(userName).toJson)
+            complete(handler.authProvider.generateJwt(userName).toJson)
           }
         } else {
-          complete{HttpResponse(StatusCodes.Unauthorized, entity = s"Not valid Delphi-authorization")}
+          complete {
+            HttpResponse(StatusCodes.Unauthorized, entity = s"Not valid Delphi-authorization")
+          }
         }
 
       }
@@ -1188,7 +1228,7 @@ class Server(handler: RequestHandler) extends HttpApp
     * @param UserString Json object describing the user
     * @return
     */
-  def addUser(UserString: String): server.Route = Route.seal{
+  def addUser(UserString: String): server.Route = Route.seal {
 
     authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
 
@@ -1226,7 +1266,7 @@ class Server(handler: RequestHandler) extends HttpApp
     *
     * @return
     */
-  def allUsers(): server.Route = Route.seal{
+  def allUsers(): server.Route = Route.seal {
     authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
       get {
         log.info(handler.getAllUsers().toString())
@@ -1244,7 +1284,7 @@ class Server(handler: RequestHandler) extends HttpApp
     * @param id id of the user to retrieve
     * @return
     */
-  def retrieveUser(id: Long): server.Route = Route.seal{
+  def retrieveUser(id: Long): server.Route = Route.seal {
     authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
       get {
         log.debug(s"GET /users/$id has been called")
@@ -1269,7 +1309,7 @@ class Server(handler: RequestHandler) extends HttpApp
     * @param id id of the user to remove
     * @return
     */
-  def removeUser(id: Long): server.Route = Route.seal{
+  def removeUser(id: Long): server.Route = Route.seal {
 
     authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
 
@@ -1301,9 +1341,10 @@ class Server(handler: RequestHandler) extends HttpApp
 
   /**
     * Generete token with refresh token. Refresh token is passed by authorization header
+    *
     * @return
     */
-  def refreshToken(): server.Route = Route.seal{
+  def refreshToken(): server.Route = Route.seal {
     post {
       authenticateOAuth2[Number]("Secure Site", handler.authProvider.checkRefreshToken(_)) { userId =>
         complete(handler.authProvider.generateJwtByUserId(userId.longValue()).toJson)

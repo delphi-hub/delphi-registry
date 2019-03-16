@@ -442,6 +442,21 @@ paths:
           required: true
           type: integer
           format: int64
+        - name: StartPage
+          in: query
+          description: Page number
+          type: integer
+          format: int64
+        - name: PageItems
+          in: query
+          description: Number of items in a page
+          type: integer
+          format: int64
+        - name: LimitItems
+          in: query
+          description: Number of item need to provide
+          type: integer
+          format: int64
       responses:
         '200':
           description: List of events for the specified instance
@@ -545,6 +560,37 @@ paths:
       responses:
         '200':
           description: Label successfully added
+        '400':
+          description: 'Bad request, your label exceeded the character limit'
+        '404':
+          description: 'Not found, the id you specified could not be found'
+
+  '/instances/{Id}/label/{Label}':
+    delete:
+      tags:
+        - Basic Operations
+      consumes:
+        - application/json
+      summary: Removes a label from the instance with the specified id
+      description: >-
+        This command will remove the specified label from the instance with the
+        specified id.
+      operationId: removeLabel
+      parameters:
+        - name: Id
+          in: path
+          description: Id of the instance
+          required: true
+          type: integer
+          format: int64
+        - name: Label
+          in: path
+          description: Label that need to be deleted
+          required: true
+          type: string
+      responses:
+        '200':
+          description: Label successfully deleted
         '400':
           description: 'Bad request, your label exceeded the character limit'
         '404':

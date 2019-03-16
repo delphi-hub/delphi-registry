@@ -140,8 +140,8 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
 
   }
 
-  def getEventList(id: Long): Try[List[RegistryEvent]] = {
-    instanceDao.getEventsFor(id)
+  def getEventList(id: Long, startPage: Long, pageItems: Long, limitItems: Long): Try[List[RegistryEvent]] = {
+    instanceDao.getEventsFor(id, startPage, pageItems, limitItems)
   }
 
   def generateConfigurationInfo(): ConfigurationInfo = {
@@ -726,6 +726,25 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
       OperationResult.IdUnknown
     } else {
       instanceDao.addLabelFor(id, label) match {
+        case Success(_) =>
+          fireStateChangedEvent(instanceDao.getInstance(id).get)
+          OperationResult.Ok
+        case Failure(_) => OperationResult.InternalError
+      }
+    }
+  }
+
+  /**
+    * Remove label to instance with specified id
+    * @param id Instance id
+    * @param label Label to add
+    * @return
+    */
+  def handleRemoveLabel(id: Long, label: String): OperationResult.Value = {
+    if (!instanceDao.hasInstance(id)) {
+      OperationResult.IdUnknown
+    } else {
+      instanceDao.removeLabelFor(id, label) match {
         case Success(_) =>
           fireStateChangedEvent(instanceDao.getInstance(id).get)
           OperationResult.Ok
