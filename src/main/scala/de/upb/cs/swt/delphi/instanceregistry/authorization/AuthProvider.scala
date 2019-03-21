@@ -146,7 +146,7 @@ class AuthProvider(authDAO: AuthDAO) extends AppLogging {
                 log.info(s"Successfully parsed token")
                 Some(userId)
               case Failure(ex) =>
-                log.error(ex, s"mm Failed to parse token with message ${ex.getMessage}")
+                log.error(ex, s"Failed to parse token with message ${ex.getMessage}")
                 None
             }
           case Failure(ex) =>

@@ -140,7 +140,6 @@ class ServerTest
         assert(status === StatusCodes.UNAUTHORIZED)
         responseAs[String].toLowerCase should include("not supplied with the request")
       }
-
     }
 
     "authenticate user if a valid user" in {
@@ -164,6 +163,12 @@ class ServerTest
 
       //wrong delphi token
       Post("/users/authenticate") ~> addBasicAuth("admin", "admin") ~> addHeader("Delphi-Authorization", "test") ~>  server.routes ~> check {
+        assert(status === StatusCodes.UNAUTHORIZED)
+      }
+
+      //not provided all the parameter for basic auth
+      Post("/users/authenticate") ~> addHeader("Authorization", "Basic") ~> addHeader("Delphi-Authorization", "test") ~>
+        server.routes ~> check {
         assert(status === StatusCodes.UNAUTHORIZED)
       }
 
@@ -655,6 +660,12 @@ class ServerTest
         Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.UNAUTHORIZED)
         responseAs[String].toLowerCase should include("not supplied with the request")
+      }
+
+      Post(s"/instances/1/matchingResult", HttpEntity(ContentTypes.`application/json`, s"""{ "MatchingSuccessful": "''false'", "SenderId" : 2}""")) ~>
+        addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
+        assert(status === StatusCodes.BAD_REQUEST)
+        responseAs[String] shouldEqual "Wrong data format supplied."
       }
     }
 
