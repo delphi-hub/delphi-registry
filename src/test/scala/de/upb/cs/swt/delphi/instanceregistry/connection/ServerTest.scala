@@ -68,7 +68,8 @@ class ServerTest
                                               userType = DelphiUserType.Admin).toJson(authDelphiUserFormat
                                               ).toString
   private val invalidTypedJsonDelphiUser = validJsonDelphiUser.replace(""""userType":"User",""", """"userType":"Component",""")
-  private val invalidJsonDelphiUser = validJsonDelphiUser.replace(""""userType":"User",""", "")
+  private val invalidJsonUser = validJsonDelphiUser.replace(""""userName":"validUser",""", """"userName":Invalid", """)
+  private val invalidJsonDelphiUserMissingParameter = validJsonDelphiUser.replace(""""userName":"validUser",""", "")
   private val sameUsernameJsonDelphiUser = validJsonDelphiUser.replace(""""userName":"validUser",""", """"userName":"admin",""")
   private val delphiAuthorizationToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiU2FtaSBraGFuIiwidXNlcl9" +
     "0eXBlIjoiQ29tcG9uZW50In0.VqFWsbsrxDEqNygbx4eIoVEmFnlIvIQX6joPoYM4CZg"
@@ -222,6 +223,13 @@ class ServerTest
         responseAs[String] shouldEqual "HTTP method not allowed, supported methods: POST"
       }
 
+      //Missing required JSON members
+      Post("/users/add", HttpEntity(ContentTypes.`application/json`, invalidJsonUser.stripMargin)) ~>
+        addAuthorization("Admin") ~> Route.seal(server.routes) ~> check {
+        assert(status === StatusCodes.BAD_REQUEST)
+        responseAs[String].toLowerCase should include("failed to parse json")
+      }
+
       //user type should be valid
       Post("/users/add", HttpEntity(ContentTypes.`application/json`, invalidTypedJsonDelphiUser.stripMargin)) ~>
         addAuthorization("Admin") ~> Route.seal(server.routes) ~> check {
@@ -229,7 +237,7 @@ class ServerTest
       }
 
       //not all required parameter given
-      Post("/users/add", HttpEntity(ContentTypes.`application/json`, invalidJsonDelphiUser.stripMargin)) ~>
+      Post("/users/add", HttpEntity(ContentTypes.`application/json`, invalidJsonDelphiUserMissingParameter.stripMargin)) ~>
         addAuthorization("Admin") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.BAD_REQUEST)
       }
