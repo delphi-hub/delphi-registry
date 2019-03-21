@@ -565,8 +565,8 @@ paths:
         '404':
           description: 'Not found, the id you specified could not be found'
 
-  '/instances/{Id}/label/{Label}':
-    delete:
+  '/instances/{Id}/label/{Label}/delete':
+    post:
       tags:
         - Basic Operations
       consumes:
