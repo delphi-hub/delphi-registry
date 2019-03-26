@@ -18,7 +18,11 @@ The Delphi registry is a server that provides access to all information and oper
 * Starting / Stopping / Pausing / Resuming / Deleting instances deployed on the docker host
 * Re-Assigning dependencies to instances (e.g. assigning a certain ElasticSearch instance to a Crawler)
 
-## Quick Setup (Linux)
+# Easy Guide
+* [Quick Setup (Linux)](#quick-setup-linux)
+
+# Quick Setup (Linux)
+
 Potentially there two different machines involved in the registry setup, the Docker host machine (*Docker Host*) and the machine the registry is hosted at (*Registry Host*). However, you can also use the same machine for hosting both applications.
 
 On the *Docker Host*, execute the following steps:
