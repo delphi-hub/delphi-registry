@@ -18,13 +18,17 @@ The Delphi registry is a server that provides access to all information and oper
 * Starting / Stopping / Pausing / Resuming / Deleting instances deployed on the docker host
 * Re-Assigning dependencies to instances (e.g. assigning a certain ElasticSearch instance to a Crawler)
 
-# Easy Guide
+# Easy Installation Guide
 * [Quick Setup (Linux)](#quick-setup-linux)
 * [Requirements](#requirements)
    * [Windows](#windows)
    * [Linux](#linux)
    * [Configuration of Traefik](#configuration-of-traefik)
  * [Adapt the configuration file](#adapt-the-configuration-file)
+ * [Docker Configuration](#docker-configuration)
+   * [Docker configuration for Linux](#docker-configuration-for-linux)
+   * [Docker configuration for OSX](#docker-configuration-for-osx)
+
 # Quick Setup (Linux)
 
 Potentially there two different machines involved in the registry setup, the Docker host machine (*Docker Host*) and the machine the registry is hosted at (*Registry Host*). However, you can also use the same machine for hosting both applications.
@@ -135,7 +139,7 @@ Before you can start the application, you have to make sure your configuration f
 ## Docker configuration
 By default, Docker is expected to be reachable at ```http://localhost:9095``` (see configuration attribute ```defaultDockerUri``` above), but you can override this setting by specifying the docker host URI in the environment variable *DELPHI_DOCKER_HOST*. You can also change the port that your Docker HTTP service is hosted on by executing the steps below on the Docker host machine.
 
-### Linux
+### Docker configuration for Linux
 To change the port to 9095, go to the docker service file:
 
 ```
@@ -155,7 +159,7 @@ systemctl daemon-reload
 sudo service docker restart
 ```
 
-### OSX
+### Docker configuration for OSX
 Docker does not expose it's HTTP api on OSX for security reasons (as described [here](https://github.com/docker/for-mac/issues/770#issuecomment-252560286)), but you can run a docker container to redirect the API calls. To accept calls on your local machine's port 9095, execute:
 
 ```
