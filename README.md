@@ -20,7 +20,10 @@ The Delphi registry is a server that provides access to all information and oper
 
 # Easy Guide
 * [Quick Setup (Linux)](#quick-setup-linux)
-
+* [Requirements](#requirements)
+   * [Windows](#windows)
+   * [Linux](#linux)
+   * [Configuration of Traefik](#configuration-of-traefik)
 # Quick Setup (Linux)
 
 Potentially there two different machines involved in the registry setup, the Docker host machine (*Docker Host*) and the machine the registry is hosted at (*Registry Host*). However, you can also use the same machine for hosting both applications.
@@ -58,14 +61,14 @@ The Delphi registry requires a docker host to deploy containers. The following i
 * The Delphi Crawler ( ```delphi-crawler:1.0.0-SNAPSHOT``` )
 * The Delphi WebApi ( ```delphi-webapi:1.0.0-SNAPSHOT``` )
 * The Delphi WebApp ( ```delphi-webapp:1.0.0-SNAPSHOT``` )
-
+### Windows  
 For Windows users, to obtain these images, checkout the respective repositories ([here](https://github.com/delphi-hub/delphi-crawler), [here](https://github.com/delphi-hub/delphi-webapi) and [here](https://github.com/delphi-hub/delphi-webapp)) and execute the command 
 
 ```
 sbt docker:publishLocal
 ```
 inside their root directory. This will build the docker images and register them directly at the local docker registry. <br /> 
-
+### Linux  
 For Linux users, checkout Delphi Registry repository and execute the command
 
 ```
@@ -73,7 +76,7 @@ sudo bash ./Delphi_install.sh
 ``` 
 inside the ```/Setup``` directory. This installation script will create the required repositories, build the docker images, and register them directly at the local docker registry.
 The registry requires an initial instance of ElasticSearch to be running.
-
+### Configuration of Traefik  
 To allow access to Delphi components deployed via Docker, the registry supports the reverse-proxy [Traefik](https://traefik.io/). While it is running, it will automatically detected containers deployed by the registry, and provide access to them using the host specified in each instances' ```Host``` attribute.
 Windows users can install Traefik (using Docker) based on [this tutorial](https://docs.traefik.io/#the-traefik-quickstart-using-docker). For Linux users, Traefik will be installed and started by the installation script mentioned above.
 
