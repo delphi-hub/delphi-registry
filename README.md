@@ -24,6 +24,7 @@ The Delphi registry is a server that provides access to all information and oper
    * [Windows](#windows)
    * [Linux](#linux)
    * [Configuration of Traefik](#configuration-of-traefik)
+ * [Adapt the configuration file](#adapt-the-configuration-file)
 # Quick Setup (Linux)
 
 Potentially there two different machines involved in the registry setup, the Docker host machine (*Docker Host*) and the machine the registry is hosted at (*Registry Host*). However, you can also use the same machine for hosting both applications.
