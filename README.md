@@ -20,6 +20,8 @@ The Delphi registry is a server that provides access to all information and oper
 
 # Easy Installation Guide
 * [Quick Setup (Linux)](#quick-setup-linux)
+   * [Docker Host Setup](#docker-host-setup)
+   * [Registry Host Setup](#registry-host-setup)
 * [Requirements](#requirements)
    * [Windows](#windows)
    * [Linux](#linux)
@@ -31,11 +33,13 @@ The Delphi registry is a server that provides access to all information and oper
  * [Running Registry application](#running-registry-application)
    * [Run the registry directly](#run-the-registry-directly)
    * [Run the registry in Docker](#run-the-registry-in-docker)
+ * [Authorization](#authorization)
 
 # Quick Setup (Linux)
 
 Potentially there two different machines involved in the registry setup, the Docker host machine (*Docker Host*) and the machine the registry is hosted at (*Registry Host*). However, you can also use the same machine for hosting both applications.
 
+## Docker Host Setup
 On the *Docker Host*, execute the following steps:
 
 1) Clone this repository to your machine
@@ -47,7 +51,7 @@ On the *Docker Host*, execute the following steps:
     * Save your changes and execute ```systemctl daemon-reload``` and ```sudo service docker restart```
 5) Note down the IP address of your machine in the LAN ( execute ```ifconfig``` )
 
-
+## Registry Host Setup
 On the *Registry Host*, execute the following steps:
 
 1) Clone this repository to your local machine
