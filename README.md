@@ -28,6 +28,9 @@ The Delphi registry is a server that provides access to all information and oper
  * [Docker Configuration](#docker-configuration)
    * [Docker configuration for Linux](#docker-configuration-for-linux)
    * [Docker configuration for OSX](#docker-configuration-for-osx)
+ * [Running Registry application](#running-registry-application)
+   * [Run the registry directly](#run-the-registry-directly)
+   * [Run the registry in Docker](#run-the-registry-in-docker)
 
 # Quick Setup (Linux)
 
@@ -166,7 +169,7 @@ Docker does not expose it's HTTP api on OSX for security reasons (as described [
 docker run -d -v /var/run/docker.sock:/var/run/docker.sock -p 127.0.0.1:9095:1234 bobrik/socat TCP-LISTEN:1234,fork UNIX-CONNECT:/var/run/docker.sock
 ```
 
-## Run the application
+## Running Registry application
 There are two ways of running the registry application. You can either run the application directly, or build a docker image defined by the *build.sbt* file, and run a container based on this image. Either way, you have to set the correct configuration values before starting the application (see section **Adapt the configuration file** above for more information). Make sure the Docker images of all Delphi components are present at the host's registry, as described in the **Requirements** section.
 
 **Note:** For OSX you have to set Java's ```prefereIPv4Stack``` option to ```true``` before executing any of the steps below. In order to do so, execute ```export _JAVA_OPTIONS="-Djava.net.preferIPv4Stack=true"``` in the terminal before calling ```sbt```.
