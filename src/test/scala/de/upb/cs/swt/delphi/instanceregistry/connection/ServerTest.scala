@@ -270,6 +270,11 @@ class ServerTest
         assert(status === StatusCodes.UNAUTHORIZED)
       }
 
+      //Users cannot delete themselves
+      Post("/users/4/remove") ~> addAuthorization("Admin", "4") ~> Route.seal(server.routes) ~> check {
+        assert(status === StatusCodes.BAD_REQUEST)
+      }
+
       //should use valid request method
       Get("/users/4/remove") ~> addAuthorization("Admin") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.METHOD_NOT_ALLOWED)
@@ -1067,18 +1072,19 @@ class ServerTest
     }
   }
 
-  private def generateValidTestToken(userType: String): String = {
+  private def generateValidTestToken(userType: String, id: String = "Server Unit Test"): String = {
     val claim = JwtClaim()
       .issuedNow
       .expiresIn(5)
       .startsNow
-      . + ("user_id", "Server Unit Test")
+      . + ("user_id", id)
       . + ("user_type", userType)
 
     Jwt.encode(claim, configuration.jwtSecretKey, JwtAlgorithm.HS256)
   }
 
-  private def addAuthorization(userType: String): HttpRequest => HttpRequest = addHeader(Authorization.oauth2(generateValidTestToken(userType)))
+  private def addAuthorization(userType: String, id: String = "Server Unit Test"): HttpRequest => HttpRequest =
+    addHeader(Authorization.oauth2(generateValidTestToken(userType, id)))
 
   private def addBasicAuth(username: String, password: String): HttpRequest => HttpRequest = addHeader(Authorization.basic(username, password))
 }
