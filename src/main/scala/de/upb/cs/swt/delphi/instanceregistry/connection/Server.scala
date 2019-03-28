@@ -143,7 +143,7 @@ class Server(handler: RequestHandler) extends HttpApp
                 entity(as[JsValue]) { json => addLabel(Id, json.asJsObject) }
               }~
               pathPrefix(Segment) { label : String =>
-                pathEnd {
+                path("delete") {
                   removeLabel(Id, label)
                 }
               }
@@ -1013,7 +1013,7 @@ class Server(handler: RequestHandler) extends HttpApp
   def removeLabel(id: Long, label: String): server.Route = {
     authenticateOAuth2[AccessToken]("Secure Site", handler.authProvider.authenticateOAuthRequire(_, userType = UserType.Admin)) { token =>
 
-      delete {
+      post {
         handler.handleRemoveLabel(id, label) match {
           case handler.OperationResult.IdUnknown =>
             log.warning(s"Cannot remove label $label to $id, id not found.")
