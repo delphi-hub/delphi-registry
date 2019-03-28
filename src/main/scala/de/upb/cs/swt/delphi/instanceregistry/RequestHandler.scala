@@ -354,7 +354,8 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
           }
         }
         catch {
-          case ex: Exception => log.warning(s"Exception occured with message: $ex")
+          case ex: Exception =>
+            log.warning(s"Exception occured with message: $ex")
             instanceDao.removeInstance(id)
             fireDockerOperationErrorEvent(None, s"Deploy failed with message: ${ex.getMessage}")
             Failure(new RuntimeException(s"Failed to deploy container, docker host not reachable (${ex.getMessage})."))
