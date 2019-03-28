@@ -292,7 +292,7 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
       }
     }
 
-    if(errors) Failure(new RuntimeException("Link updates unsuccessful")) else Success()
+    if (errors) Failure(new RuntimeException("Link updates unsuccessful")) else Success()
   }
 
   // scalastyle:off method.length
@@ -315,42 +315,50 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
         implicit val timeout: Timeout = configuration.dockerOperationTimeout
 
         val future: Future[Any] = dockerActor ? DeployMessage(componentType, id)
-        val deployResult = Await.result(future, timeout.duration).asInstanceOf[Try[(String, String, Int, String)]]
+        try {
+          val deployResult = Await.result(future, timeout.duration).asInstanceOf[Try[(String, String, Int, String)]]
+          deployResult match {
+            case Failure(ex) =>
+              log.warning(s"Failed to deploy container, docker host not reachable. Message ${ex.getMessage}")
+              instanceDao.removeInstance(id)
+              fireDockerOperationErrorEvent(None, s"Deploy failed with message: ${ex.getMessage}")
+              Failure(new RuntimeException(s"Failed to deploy container, docker host not reachable (${ex.getMessage})."))
+            case Success((dockerId, host, port, traefikHost)) =>
+              log.info(s"Deployed new $componentType container with docker id: $dockerId, host: $host, port: $port and Traefik host: $traefikHost.")
 
-        deployResult match {
-          case Failure(ex) =>
-            log.warning(s"Failed to deploy container, docker host not reachable. Message ${ex.getMessage}")
+              val traefikConfig = TraefikConfiguration(traefikHost, configuration.traefikUri)
+
+              val newInstance = Instance(Some(id),
+                host,
+                port,
+                name.getOrElse(s"Generic $componentType"),
+                componentType,
+                Some(dockerId),
+                InstanceState.Deploying,
+                List.empty[String],
+                List.empty[InstanceLink],
+                List.empty[InstanceLink],
+                Some(traefikConfig)
+              )
+
+              instanceDao.updateInstance(newInstance) match {
+                case Success(_) =>
+                  log.info("Instance successfully registered.")
+                  fireInstanceAddedEvent(newInstance)
+                  fireNumbersChangedEvent(newInstance.componentType)
+                  Success(id)
+                case Failure(x) =>
+                  log.warning(s"Failed to register. Exception: $x")
+                  Failure(x)
+              }
+          }
+        }
+        catch {
+          case ex: Exception =>
+            log.warning(s"Exception occured with message: $ex")
             instanceDao.removeInstance(id)
             fireDockerOperationErrorEvent(None, s"Deploy failed with message: ${ex.getMessage}")
             Failure(new RuntimeException(s"Failed to deploy container, docker host not reachable (${ex.getMessage})."))
-          case Success((dockerId, host, port, traefikHost)) =>
-            log.info(s"Deployed new $componentType container with docker id: $dockerId, host: $host, port: $port and Traefik host: $traefikHost.")
-
-            val traefikConfig = TraefikConfiguration(traefikHost, configuration.traefikUri)
-
-            val newInstance = Instance(Some(id),
-              host,
-              port,
-              name.getOrElse(s"Generic $componentType"),
-              componentType,
-              Some(dockerId),
-              InstanceState.Deploying,
-              List.empty[String],
-              List.empty[InstanceLink],
-              List.empty[InstanceLink],
-              Some(traefikConfig)
-            )
-
-            instanceDao.updateInstance(newInstance) match {
-              case Success(_) =>
-                log.info("Instance successfully registered.")
-                fireInstanceAddedEvent(newInstance)
-                fireNumbersChangedEvent(newInstance.componentType)
-                Success(id)
-              case Failure(x) =>
-                log.warning(s"Failed to register. Exception: $x")
-                Failure(x)
-            }
         }
       case Failure(ex) =>
         Failure(ex)
