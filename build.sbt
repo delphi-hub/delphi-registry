@@ -7,9 +7,9 @@ scalaVersion := "2.12.4"
 
 
 val akkaVersion = "2.5.14"
-libraryDependencies += "com.typesafe.akka" %% "akka-http" % "10.0.11"
+libraryDependencies += "com.typesafe.akka" %% "akka-http" % "10.0.14"
 libraryDependencies += "com.typesafe.akka" %% "akka-stream" % akkaVersion
-libraryDependencies += "com.typesafe.akka" %% "akka-http-spray-json" % "10.1.1"
+libraryDependencies += "com.typesafe.akka" %% "akka-http-spray-json" % "10.1.5"
 
 libraryDependencies += "io.spray" %%  "spray-json" % "1.3.3"
 
@@ -34,7 +34,7 @@ libraryDependencies ++= List(
   "com.typesafe.slick" %% "slick" % "3.2.3",
   "com.typesafe.slick" %% "slick-hikaricp" % "3.2.3",
   "com.typesafe.slick" %% "slick-codegen" % "3.2.3",
-  "mysql" % "mysql-connector-java" % "5.1.34",
+  "mysql" % "mysql-connector-java" % "5.1.47",
   "org.slf4j" % "slf4j-nop" % "1.6.4"
 )
 
