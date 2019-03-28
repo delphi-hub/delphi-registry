@@ -1315,14 +1315,20 @@ class Server(handler: RequestHandler) extends HttpApp
 
       post {
         log.debug(s"POST /users/remove/$id has been called")
+
         try {
 
-          handler.handleRemoveUser(id) match {
-            case Success(_) =>
-              complete(HttpResponse(StatusCodes.Accepted, entity = "user successfully removed."))
-            case Failure(ex) =>
-              log.error(ex, "Failed to handle remove user.")
-              complete(HttpResponse(StatusCodes.BadRequest, entity = "User id does not exist."))
+          val callingUserId = Try(token.userId.toLong).getOrElse(-1)
+          if(callingUserId == id){
+              complete{HttpResponse(StatusCodes.BadRequest, entity = "Users cannot delete themselves.")}
+          } else {
+            handler.handleRemoveUser(id) match {
+               case Success(_) =>
+                 complete(HttpResponse(StatusCodes.Accepted, entity = "user successfully removed."))
+               case Failure(ex) =>
+                 log.error(ex, "Failed to handle remove user.")
+                 complete(HttpResponse(StatusCodes.BadRequest, entity = "User id does not exist."))
+            }
           }
         } catch {
           case dx: DeserializationException =>
