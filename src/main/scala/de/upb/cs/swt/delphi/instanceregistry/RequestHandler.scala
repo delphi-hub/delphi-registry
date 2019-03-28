@@ -316,7 +316,6 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
 
         val future: Future[Any] = dockerActor ? DeployMessage(componentType, id)
         try {
-
           val deployResult = Await.result(future, timeout.duration).asInstanceOf[Try[(String, String, Int, String)]]
           deployResult match {
             case Failure(ex) =>
@@ -355,13 +354,13 @@ class RequestHandler(configuration: Configuration, authDao: AuthDAO, instanceDao
           }
         }
         catch {
-          case ex: Exception => log.warning(s"Exception occured with the messege: $ex")
-            Failure(ex)
+          case ex: Exception => log.warning(s"Exception occured with message: $ex")
+            instanceDao.removeInstance(id)
+            fireDockerOperationErrorEvent(None, s"Deploy failed with message: ${ex.getMessage}")
+            Failure(new RuntimeException(s"Failed to deploy container, docker host not reachable (${ex.getMessage})."))
         }
       case Failure(ex) =>
         Failure(ex)
-
-
     }
   }
 
