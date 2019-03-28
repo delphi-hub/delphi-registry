@@ -1064,7 +1064,8 @@ class ServerTest
     Jwt.encode(claim, configuration.jwtSecretKey, JwtAlgorithm.HS256)
   }
 
-  private def addAuthorization(userType: String, id: String = "Server Unit Test"): HttpRequest => HttpRequest = addHeader(Authorization.oauth2(generateValidTestToken(userType, id)))
+  private def addAuthorization(userType: String, id: String = "Server Unit Test"): HttpRequest => HttpRequest =
+    addHeader(Authorization.oauth2(generateValidTestToken(userType, id)))
 
   private def addBasicAuth(username: String, password: String): HttpRequest => HttpRequest = addHeader(Authorization.basic(username, password))
 }
