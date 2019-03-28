@@ -128,7 +128,7 @@ trait InstanceDAO {
     * @param id Id of the instance
     * @return List of events if instance is present, Failure otherwise
     */
-  def getEventsFor(id: Long) : Try[List[RegistryEvent]]
+  def getEventsFor(id: Long, startPage: Long, pageItems: Long, limitItems: Long) : Try[List[RegistryEvent]]
 
   /**
     * Adds a new instance link to the dao. Will fail if the ids referenced in the link object are not present.
@@ -167,4 +167,12 @@ trait InstanceDAO {
     * @return Success if instance is present and label does not exceed character limit, false otherwise.
     */
   def addLabelFor(id: Long, label: String) : Try[Unit]
+
+  /**
+    * Removes a label to the instance with the specified id
+    * @param id Id of the instance
+    * @param label Label to add
+    * @return
+    */
+  def removeLabelFor(id: Long, label: String) : Try[Unit]
 }

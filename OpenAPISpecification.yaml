@@ -74,13 +74,32 @@ paths:
           required: true
       responses:
         '200':
-          description: 'Supplied data is valid, a JWT is returned'
+          description: 'Supplied data is valid, a Token object is returned'
           schema:
-            type: string
-            example: >-
-              eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c
+            $ref: '#/definitions/Token'
         '401':
           description: 'Unauthorized, invalid username / password supplied.'
+  /users/refreshToken:
+    post:
+      tags:
+        - User Management
+      summary: Generate a new token with refresh token
+      description: >-
+        This endpoints returns a new token and refresh token with the provide refresh token. It ensures that the user do not need to login frequently if the token got expired, system can generate new token with the refresh token. Refresh token will be valid for more time then normal token.
+      operationId: refreshToken
+      parameters:
+        - in: header
+          name: Authorization
+          description: Valid JWT refresh token.
+          type: string
+          required: true
+      responses:
+        '200':
+          description: 'Supplied data is valid, a Token object is returned'
+          schema:
+            $ref: '#/definitions/Token'
+        '401':
+          description: 'The supplied authentication is invalid'
   /users/add:
     post:
       tags:
@@ -217,7 +236,7 @@ paths:
       summary: Get all instances of the specified type
       description: >-
         This command retrieves a list of all instances that are registered at
-        the registry and that have the specified type. If no type is specified, 
+        the registry and that have the specified type. If no type is specified,
         all instances are being returned.
       operationId: instanceOfType
       parameters:
@@ -423,6 +442,21 @@ paths:
           required: true
           type: integer
           format: int64
+        - name: StartPage
+          in: query
+          description: Page number
+          type: integer
+          format: int64
+        - name: PageItems
+          in: query
+          description: Number of items in a page
+          type: integer
+          format: int64
+        - name: LimitItems
+          in: query
+          description: Number of item need to provide
+          type: integer
+          format: int64
       responses:
         '200':
           description: List of events for the specified instance
@@ -526,6 +560,37 @@ paths:
       responses:
         '200':
           description: Label successfully added
+        '400':
+          description: 'Bad request, your label exceeded the character limit'
+        '404':
+          description: 'Not found, the id you specified could not be found'
+
+  '/instances/{Id}/label/{Label}/delete':
+    post:
+      tags:
+        - Basic Operations
+      consumes:
+        - application/json
+      summary: Removes a label from the instance with the specified id
+      description: >-
+        This command will remove the specified label from the instance with the
+        specified id.
+      operationId: removeLabel
+      parameters:
+        - name: Id
+          in: path
+          description: Id of the instance
+          required: true
+          type: integer
+          format: int64
+        - name: Label
+          in: path
+          description: Label that need to be deleted
+          required: true
+          type: string
+      responses:
+        '200':
+          description: Label successfully deleted
         '400':
           description: 'Bad request, your label exceeded the character limit'
         '404':
@@ -676,7 +741,7 @@ paths:
         This command informs the registry about an instance that was stopped
         manually, meaning not via calling /stop on the instance registry. This
         is only applicable to instances running inside a docker container, as
-        non-container instances would deregister themselves when stopped. 
+        non-container instances would deregister themselves when stopped.
       operationId: reportStop
       parameters:
         - name: Id
@@ -875,7 +940,7 @@ paths:
       description: >-
         This command assignes a new dependency to the instance with the
         specified id. Internally, this will stop the instance, assign the new
-        dependency and start the instance again. This is why this is only 
+        dependency and start the instance again. This is why this is only
         applicable to docker instances.
       operationId: assignInstance
       parameters:
@@ -964,6 +1029,15 @@ definitions:
         enum:
           - User
           - Admin
+  Token:
+    type: object
+    properties:
+      token:
+        type: string
+        example: 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJleHAiOjE1NTEzODY2MzYsIm5iZiI6MTU1MTM4NDgzNiwiaWF0IjoxNTUxMzg0ODM2LCJ1c2VyX2lkIjowLCJ1c2VyX3R5cGUiOiJBZG1pbiJ9.McqRRbGbRzzAhMlhlCtBVHopsIOb_flTrJu7LBVi4J8'
+      refreshToken:
+        type: string
+        example: 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJleHAiOjE1NTEzODQ4OTYsIm5iZiI6MTU1MTM4NDgzNiwiaWF0IjoxNTUxMzg0ODM2LCJ1c2VyX2lkIjowfQ.Z0CNbJzZBaC65_qADLuyDpXLK7GDI0jYTIjO_QSNNag'
   InstanceLink:
     type: object
     required:

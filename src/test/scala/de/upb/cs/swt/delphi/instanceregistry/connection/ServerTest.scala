@@ -44,6 +44,7 @@ class ServerTest
     with ScalatestRouteTest
     with InstanceJsonSupport
     with UserJsonSupport
+    with UserTokenJsonSupport
     with EventJsonSupport {
 
   private val configuration: Configuration = new Configuration()
@@ -67,7 +68,8 @@ class ServerTest
                                               userType = DelphiUserType.Admin).toJson(authDelphiUserFormat
                                               ).toString
   private val invalidTypedJsonDelphiUser = validJsonDelphiUser.replace(""""userType":"User",""", """"userType":"Component",""")
-  private val invalidJsonDelphiUser = validJsonDelphiUser.replace(""""userType":"User",""", "")
+  private val invalidJsonUser = validJsonDelphiUser.replace(""""userName":"validUser",""", """"userName":Invalid", """)
+  private val invalidJsonDelphiUserMissingParameter = validJsonDelphiUser.replace(""""userName":"validUser",""", "")
   private val sameUsernameJsonDelphiUser = validJsonDelphiUser.replace(""""userName":"validUser",""", """"userName":"admin",""")
   private val delphiAuthorizationToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiU2FtaSBraGFuIiwidXNlcl9" +
     "0eXBlIjoiQ29tcG9uZW50In0.VqFWsbsrxDEqNygbx4eIoVEmFnlIvIQX6joPoYM4CZg"
@@ -139,12 +141,13 @@ class ServerTest
         assert(status === StatusCodes.UNAUTHORIZED)
         responseAs[String].toLowerCase should include("not supplied with the request")
       }
-
     }
 
     "authenticate user if a valid user" in {
       Post("/users/authenticate") ~> addBasicAuth("admin", "admin") ~> addHeader("Delphi-Authorization", delphiAuthorizationToken) ~>  server.routes ~> check {
         assert(status === StatusCodes.OK)
+        responseAs[String] should include("token")
+        responseAs[String] should include("refreshToken")
       }
     }
 
@@ -164,6 +167,41 @@ class ServerTest
         assert(status === StatusCodes.UNAUTHORIZED)
       }
 
+      //not provided all the parameter for basic auth
+      Post("/users/authenticate") ~> addHeader("Authorization", "Basic") ~> addHeader("Delphi-Authorization", "test") ~>
+        server.routes ~> check {
+        assert(status === StatusCodes.UNAUTHORIZED)
+      }
+
+    }
+
+    "generate new token if refreshToken is valid" in {
+      Post("/users/authenticate") ~> addBasicAuth("admin", "admin") ~> addHeader("Delphi-Authorization", delphiAuthorizationToken) ~>  server.routes ~> check {
+        Try(responseAs[String].parseJson.convertTo[UserToken](authUserToken)) match {
+          case Success(userToken) => {
+            Post("/users/refreshToken") ~> addHeader(Authorization.oauth2(userToken.refreshToken)) ~> server.routes ~> check {
+              assert(status === StatusCodes.OK)
+              responseAs[String] should include("token")
+              responseAs[String] should include("refreshToken")
+            }
+          }
+          case Failure(ex) =>
+            fail(ex)
+        }
+      }
+    }
+
+    "not generate new token if refresh token is not valid" in {
+      val demoToken = "demoToken"
+      Post("/users/refreshToken") ~> addHeader(Authorization.oauth2(demoToken)) ~> server.routes ~> check {
+        assert(status === StatusCodes.UNAUTHORIZED)
+      }
+
+      val expiredToken = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJleHAiOjE1NTEzODQ4OTYsIm5iZiI6MTU1MTM4N" +
+        "DgzNiwiaWF0IjoxNTUxMzg0ODM2LCJ1c2VyX2lkIjowfQ.Z0CNbJzZBaC65_qADLuyDpXLK7GDI0jYTIjO_QSNNag"
+      Post("/users/refreshToken") ~> addHeader(Authorization.oauth2(expiredToken)) ~> server.routes ~> check {
+        assert(status === StatusCodes.UNAUTHORIZED)
+      }
     }
 
     "successfully create user when everything is valid" in {
@@ -185,6 +223,13 @@ class ServerTest
         responseAs[String] shouldEqual "HTTP method not allowed, supported methods: POST"
       }
 
+      //Missing required JSON members
+      Post("/users/add", HttpEntity(ContentTypes.`application/json`, invalidJsonUser.stripMargin)) ~>
+        addAuthorization("Admin") ~> Route.seal(server.routes) ~> check {
+        assert(status === StatusCodes.BAD_REQUEST)
+        responseAs[String].toLowerCase should include("failed to parse json")
+      }
+
       //user type should be valid
       Post("/users/add", HttpEntity(ContentTypes.`application/json`, invalidTypedJsonDelphiUser.stripMargin)) ~>
         addAuthorization("Admin") ~> Route.seal(server.routes) ~> check {
@@ -192,7 +237,7 @@ class ServerTest
       }
 
       //not all required parameter given
-      Post("/users/add", HttpEntity(ContentTypes.`application/json`, invalidJsonDelphiUser.stripMargin)) ~>
+      Post("/users/add", HttpEntity(ContentTypes.`application/json`, invalidJsonDelphiUserMissingParameter.stripMargin)) ~>
         addAuthorization("Admin") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.BAD_REQUEST)
       }
@@ -223,6 +268,11 @@ class ServerTest
       //Required type of user authorization needed to create user
       Post("/users/4/remove") ~> addAuthorization("User") ~> Route.seal(server.routes) ~> check {
         assert(status === StatusCodes.UNAUTHORIZED)
+      }
+
+      //Users cannot delete themselves
+      Post("/users/4/remove") ~> addAuthorization("Admin", "4") ~> Route.seal(server.routes) ~> check {
+        assert(status === StatusCodes.BAD_REQUEST)
       }
 
       //should use valid request method
@@ -624,6 +674,12 @@ class ServerTest
         assert(status === StatusCodes.UNAUTHORIZED)
         responseAs[String].toLowerCase should include("not supplied with the request")
       }
+
+      Post(s"/instances/1/matchingResult", HttpEntity(ContentTypes.`application/json`, s"""{ "MatchingSuccessful": "''false'", "SenderId" : 2}""")) ~>
+        addAuthorization("Component") ~> Route.seal(server.routes) ~> check {
+        assert(status === StatusCodes.BAD_REQUEST)
+        responseAs[String] shouldEqual "Wrong data format supplied."
+      }
     }
 
     //Valid GET /eventList
@@ -839,6 +895,22 @@ class ServerTest
 
     }
 
+    "remove a label to an instance if label and id are valid" in {
+      Post("/instances/0/label/Private/delete") ~> addAuthorization("Admin") ~> Route.seal(server.routes) ~> check {
+        assert(status === StatusCodes.OK)
+      }
+    }
+
+    "fail to remove label if id is invalid or label does not exist" in {
+      Post("/instances/22/label/Private/delete") ~> addAuthorization("Admin") ~> Route.seal(server.routes) ~> check {
+        assert(status === StatusCodes.NOT_FOUND)
+      }
+
+      Post("/instances/0/label/test/delete") ~> addAuthorization("Admin") ~> Route.seal(server.routes) ~> check {
+        assert(status === StatusCodes.BAD_REQUEST)
+      }
+    }
+
     /** Minimal tests for docker operations **/
 
     "fail to deploy if component type is invalid" in {
@@ -1000,18 +1072,19 @@ class ServerTest
     }
   }
 
-  private def generateValidTestToken(userType: String): String = {
+  private def generateValidTestToken(userType: String, id: String = "Server Unit Test"): String = {
     val claim = JwtClaim()
       .issuedNow
       .expiresIn(5)
       .startsNow
-      . + ("user_id", "Server Unit Test")
+      . + ("user_id", id)
       . + ("user_type", userType)
 
     Jwt.encode(claim, configuration.jwtSecretKey, JwtAlgorithm.HS256)
   }
 
-  private def addAuthorization(userType: String): HttpRequest => HttpRequest = addHeader(Authorization.oauth2(generateValidTestToken(userType)))
+  private def addAuthorization(userType: String, id: String = "Server Unit Test"): HttpRequest => HttpRequest =
+    addHeader(Authorization.oauth2(generateValidTestToken(userType, id)))
 
   private def addBasicAuth(username: String, password: String): HttpRequest => HttpRequest = addHeader(Authorization.basic(username, password))
 }

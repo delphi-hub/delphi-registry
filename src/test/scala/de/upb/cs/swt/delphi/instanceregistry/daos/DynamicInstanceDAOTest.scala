@@ -152,14 +152,15 @@ class DynamicInstanceDAOTest extends FlatSpec with Matchers with BeforeAndAfterE
   }
 
   it must "add events only to instances that have been registered" in {
-    assert(dao.getEventsFor(1).isSuccess)
-    assert(dao.getEventsFor(1).get.isEmpty)
+    assert(dao.getEventsFor(1,0, 0, 0).isSuccess)
+    assert(dao.getEventsFor(1,0, 0, 0).get.isEmpty)
 
     val eventToAdd = RegistryEventFactory.createInstanceAddedEvent(dao.getInstance(1).get)
     assert(dao.addEventFor(-1, eventToAdd).isFailure)
     assert(dao.addEventFor(1, eventToAdd).isSuccess)
-    assert(dao.getEventsFor(1).get.size == 1)
-    assert(dao.getEventsFor(1).get.head == eventToAdd)
+    assert(dao.getEventsFor(1,0, 0, 0).get.size == 1)
+    assert(dao.getEventsFor(1, 1, 1, 0).get.isEmpty)
+    assert(dao.getEventsFor(1, 0, 0, 0).get.head == eventToAdd)
   }
 
   it must "verify the presence of instance ids when a link is added" in {
@@ -179,6 +180,26 @@ class DynamicInstanceDAOTest extends FlatSpec with Matchers with BeforeAndAfterE
 
     assert(dao.getLinksFrom(0, Some(LinkState.Assigned)).size == 1)
     assert(dao.getLinksFrom(0, Some(LinkState.Assigned)).head.idTo == 2)
+  }
+
+  it must "be able to add label to instance" in {
+    val addLabel = dao.addLabelFor(2, "test3")
+    assert(addLabel.isSuccess)
+    val instance = dao.getInstance(2)
+    assert(instance.get.labels.size == 1)
+  }
+
+  it must "be able to remove label to instance if it exist" in {
+    dao.addLabelFor(2, "test3")
+    val removeLabel = dao.removeLabelFor(2, "test3")
+    assert(removeLabel.isSuccess)
+    val instance = dao.getInstance(2)
+    assert(instance.get.labels.isEmpty)
+  }
+
+  it must "fail to remove label to instance if label not exist" in {
+    val removeLabel = dao.removeLabelFor(2, "test1")
+    assert(removeLabel.isFailure)
   }
 
   override protected def afterEach() : Unit = {

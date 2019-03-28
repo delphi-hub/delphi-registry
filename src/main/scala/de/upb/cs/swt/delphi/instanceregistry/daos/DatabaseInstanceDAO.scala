@@ -254,6 +254,28 @@ class DatabaseInstanceDAO (configuration : Configuration) extends InstanceDAO wi
     }
   }
 
+  override def removeLabelFor(id: Long, label: String): Try[Unit] = {
+    if(hasInstance(id)){
+      val instance = getInstance(id).get
+      if(instance.labels.exists(l => l.equalsIgnoreCase(label))){
+        val labelList = instance.labels.filter(_ != label)
+        val query = for { single <- instances if single.id === instance.id } yield single.labels
+        val updateAction = query.update(getListAsString(labelList))
+        Await.result(db.run(updateAction), Duration.Inf).toString
+        Success()
+
+      } else {
+        val msg = s"Label $label is not present for the instance."
+        log.warning(msg)
+        Failure(new RuntimeException(msg))
+      }
+    } else {
+      val msg = s"Instance with id $id not present."
+      log.warning(msg)
+      Failure(new RuntimeException(msg))
+    }
+  }
+
   override def addEventFor(id: Long, event: RegistryEvent) : Try[Unit] = {
 
     val payload = event.payload.toJson(registryEventPayloadFormat).toString
@@ -271,12 +293,15 @@ class DatabaseInstanceDAO (configuration : Configuration) extends InstanceDAO wi
   }
 
 
-  override def getEventsFor(id: Long) : Try[List[RegistryEvent]] = {
+  override def getEventsFor(id: Long, startPage: Long, pageItems: Long, limitItems: Long) : Try[List[RegistryEvent]] = {
     if(hasInstance(id) && hasInstanceEvents(id)){
+      val skip = startPage * pageItems
+      val take = if(limitItems == 0) configuration.pageLimit else limitItems
       val eventMapIds = eventMaps.filter(_.instanceId === id).map(_.eventId)
-      val resultAll = Await.result(db.run(instanceEvents.filter(_.id in eventMapIds).result), Duration.Inf)
+      val resultAll = Await.result(db.run(instanceEvents.filter(_.id in eventMapIds).drop(skip).take(take).result), Duration.Inf)
       val listAll = List() ++ resultAll.map(result => dataToObjectRegistryEvent(result._2, result._3, result._4))
       Success(listAll)
+
     } else {
       log.warning(s"Cannot get events, id $id not present!")
       Failure(new RuntimeException(s"Cannot get events, id $id not present!"))

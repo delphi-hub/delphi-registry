@@ -51,6 +51,9 @@ class Configuration( ) {
 
   val maxLabelLength: Int = 50
 
+  //default page limit
+  val pageLimit: Int = 100
+
   val dockerOperationTimeout: Timeout = Timeout(20 seconds)
   val dockerUri: String = sys.env.getOrElse("DELPHI_DOCKER_HOST", "http://localhost:9095")
 
@@ -74,6 +77,9 @@ class Configuration( ) {
 
   //Authentication valid for the time
   val authenticationValidFor = 30 //minutes
+
+  //Refresh token is valid for the time
+  val refreshTokenValidFor = 1440 //minutes
 
   //Request Limiter
   val maxTotalNoRequest: Int = 2000

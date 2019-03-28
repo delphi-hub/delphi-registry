@@ -18,9 +18,28 @@ The Delphi registry is a server that provides access to all information and oper
 * Starting / Stopping / Pausing / Resuming / Deleting instances deployed on the docker host
 * Re-Assigning dependencies to instances (e.g. assigning a certain ElasticSearch instance to a Crawler)
 
-## Quick Setup (Linux)
+# Easy Installation Guide
+* [Quick Setup (Linux)](#quick-setup-linux)
+   * [Docker Host Setup](#docker-host-setup)
+   * [Registry Host Setup](#registry-host-setup)
+* [Requirements](#requirements)
+   * [Windows](#windows)
+   * [Linux](#linux)
+   * [Configuration of Traefik](#configuration-of-traefik)
+ * [Adapt the configuration file](#adapt-the-configuration-file)
+ * [Docker Configuration](#docker-configuration)
+   * [Docker configuration for Linux](#docker-configuration-for-linux)
+   * [Docker configuration for OSX](#docker-configuration-for-osx)
+ * [Running Registry application](#running-registry-application)
+   * [Run the registry directly](#run-the-registry-directly)
+   * [Run the registry in Docker](#run-the-registry-in-docker)
+ * [Authorization](#authorization)
+
+# Quick Setup (Linux)
+
 Potentially there two different machines involved in the registry setup, the Docker host machine (*Docker Host*) and the machine the registry is hosted at (*Registry Host*). However, you can also use the same machine for hosting both applications.
 
+## Docker Host Setup
 On the *Docker Host*, execute the following steps:
 
 1) Clone this repository to your machine
@@ -32,7 +51,7 @@ On the *Docker Host*, execute the following steps:
     * Save your changes and execute ```systemctl daemon-reload``` and ```sudo service docker restart```
 5) Note down the IP address of your machine in the LAN ( execute ```ifconfig``` )
 
-
+## Registry Host Setup
 On the *Registry Host*, execute the following steps:
 
 1) Clone this repository to your local machine
@@ -54,14 +73,14 @@ The Delphi registry requires a docker host to deploy containers. The following i
 * The Delphi Crawler ( ```delphi-crawler:1.0.0-SNAPSHOT``` )
 * The Delphi WebApi ( ```delphi-webapi:1.0.0-SNAPSHOT``` )
 * The Delphi WebApp ( ```delphi-webapp:1.0.0-SNAPSHOT``` )
-
+### Windows  
 For Windows users, to obtain these images, checkout the respective repositories ([here](https://github.com/delphi-hub/delphi-crawler), [here](https://github.com/delphi-hub/delphi-webapi) and [here](https://github.com/delphi-hub/delphi-webapp)) and execute the command 
 
 ```
 sbt docker:publishLocal
 ```
 inside their root directory. This will build the docker images and register them directly at the local docker registry. <br /> 
-
+### Linux  
 For Linux users, checkout Delphi Registry repository and execute the command
 
 ```
@@ -69,7 +88,7 @@ sudo bash ./Delphi_install.sh
 ``` 
 inside the ```/Setup``` directory. This installation script will create the required repositories, build the docker images, and register them directly at the local docker registry.
 The registry requires an initial instance of ElasticSearch to be running.
-
+### Configuration of Traefik  
 To allow access to Delphi components deployed via Docker, the registry supports the reverse-proxy [Traefik](https://traefik.io/). While it is running, it will automatically detected containers deployed by the registry, and provide access to them using the host specified in each instances' ```Host``` attribute.
 Windows users can install Traefik (using Docker) based on [this tutorial](https://docs.traefik.io/#the-traefik-quickstart-using-docker). For Linux users, Traefik will be installed and started by the installation script mentioned above.
 
@@ -127,7 +146,7 @@ Before you can start the application, you have to make sure your configuration f
 ## Docker configuration
 By default, Docker is expected to be reachable at ```http://localhost:9095``` (see configuration attribute ```defaultDockerUri``` above), but you can override this setting by specifying the docker host URI in the environment variable *DELPHI_DOCKER_HOST*. You can also change the port that your Docker HTTP service is hosted on by executing the steps below on the Docker host machine.
 
-### Linux
+### Docker configuration for Linux
 To change the port to 9095, go to the docker service file:
 
 ```
@@ -147,14 +166,14 @@ systemctl daemon-reload
 sudo service docker restart
 ```
 
-### OSX
+### Docker configuration for OSX
 Docker does not expose it's HTTP api on OSX for security reasons (as described [here](https://github.com/docker/for-mac/issues/770#issuecomment-252560286)), but you can run a docker container to redirect the API calls. To accept calls on your local machine's port 9095, execute:
 
 ```
 docker run -d -v /var/run/docker.sock:/var/run/docker.sock -p 127.0.0.1:9095:1234 bobrik/socat TCP-LISTEN:1234,fork UNIX-CONNECT:/var/run/docker.sock
 ```
 
-## Run the application
+## Running Registry application
 There are two ways of running the registry application. You can either run the application directly, or build a docker image defined by the *build.sbt* file, and run a container based on this image. Either way, you have to set the correct configuration values before starting the application (see section **Adapt the configuration file** above for more information). Make sure the Docker images of all Delphi components are present at the host's registry, as described in the **Requirements** section.
 
 **Note:** For OSX you have to set Java's ```prefereIPv4Stack``` option to ```true``` before executing any of the steps below. In order to do so, execute ```export _JAVA_OPTIONS="-Djava.net.preferIPv4Stack=true"``` in the terminal before calling ```sbt```.

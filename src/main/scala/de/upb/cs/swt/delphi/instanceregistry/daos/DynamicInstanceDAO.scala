@@ -221,6 +221,38 @@ class DynamicInstanceDAO (configuration : Configuration) extends InstanceDAO wit
     }
   }
 
+  override def removeLabelFor(id: Long, label: String): Try[Unit] = {
+    if(hasInstance(id)){
+      val instance = getInstance(id).get
+      if(instance.labels.exists(l => l.equalsIgnoreCase(label))){
+        val labelList = instance.labels.filter(_ != label)
+        val newInstance = Instance(instance.id,
+          instance.host,
+          instance.portNumber,
+          instance.name,
+          instance.componentType,
+          instance.dockerId,
+          instance.instanceState,
+          labelList,
+          instance.linksTo,
+          instance.linksFrom,
+          instance.traefikConfiguration)
+        instances filter {i => i.id == instance.id} map instances.remove
+        instances.add(newInstance)
+        Success()
+
+      } else {
+        val msg = s"Label $label is not present for the instance."
+        log.warning(msg)
+        Failure(new RuntimeException(msg))
+      }
+    } else {
+      val msg = s"Instance with id $id not present."
+      log.warning(msg)
+      Failure(new RuntimeException(msg))
+    }
+  }
+
   override def addEventFor(id: Long, event: RegistryEvent) : Try[Unit] = {
     if(hasInstance(id)){
       instanceEvents(id) += event
@@ -230,9 +262,11 @@ class DynamicInstanceDAO (configuration : Configuration) extends InstanceDAO wit
     }
   }
 
-  override def getEventsFor(id: Long) : Try[List[RegistryEvent]] = {
+  override def getEventsFor(id: Long, startPage: Long, pageItems: Long, limitItems: Long) : Try[List[RegistryEvent]] = {
     if(hasInstance(id) && instanceEvents.contains(id)){
-      Success(List() ++ instanceEvents(id))
+      val skip = startPage * pageItems
+      val events = if(limitItems == 0){instanceEvents(id).drop(skip.toInt)} else {instanceEvents(id).drop(skip.toInt).take(limitItems.toInt)}
+      Success(List() ++ events)
     } else {
       log.warning(s"Cannot get events, id $id not present!")
       Failure(new RuntimeException(s"Cannot get events, id $id not present!"))
