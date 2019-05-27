@@ -34,7 +34,7 @@ libraryDependencies ++= List(
   "com.typesafe.slick" %% "slick" % "3.2.3",
   "com.typesafe.slick" %% "slick-hikaricp" % "3.2.3",
   "com.typesafe.slick" %% "slick-codegen" % "3.2.3",
-  "mysql" % "mysql-connector-java" % "5.1.47",
+  "mysql" % "mysql-connector-java" % "8.0.16",
   "org.slf4j" % "slf4j-nop" % "1.6.4"
 )
 
