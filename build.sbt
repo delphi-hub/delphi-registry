@@ -6,12 +6,12 @@ version := "1.0.0-SNAPSHOT"
 scalaVersion := "2.12.4"
 
 
-val akkaVersion = "2.5.14"
+val akkaVersion = "2.5.16"
 libraryDependencies += "com.typesafe.akka" %% "akka-http" % "10.0.14"
 libraryDependencies += "com.typesafe.akka" %% "akka-stream" % akkaVersion
 libraryDependencies += "com.typesafe.akka" %% "akka-http-spray-json" % "10.1.5"
 
-libraryDependencies += "io.spray" %%  "spray-json" % "1.3.3"
+libraryDependencies += "io.spray" %%  "spray-json" % "1.3.5"
 
 libraryDependencies += "org.scalatest" %% "scalatest" % "3.0.4" % "test"
 
@@ -38,6 +38,6 @@ libraryDependencies ++= List(
   "org.slf4j" % "slf4j-nop" % "1.6.4"
 )
 
-libraryDependencies += "com.h2database" % "h2" % "1.4.199"
+libraryDependencies += "com.h2database" % "h2" % "1.4.200"
 
 trapExit := false
